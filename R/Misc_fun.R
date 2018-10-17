@@ -6,6 +6,7 @@ logit <- function(p) log(p/(1 - p))
 ilogit <- function(x) 1/(1 + exp(-x))
 ilogitm <- function(x) exp(x)/apply(exp(x), 1, sum)
 
+#' @importFrom stats nlminb
 optimize_TMB_model <- function(obj, control = list(), use_hessian = FALSE, restart = 1) {
   restart <- as.integer(restart)
   if(is.null(obj$env$random) && use_hessian) h <- obj$he else h <- NULL
@@ -13,46 +14,42 @@ optimize_TMB_model <- function(obj, control = list(), use_hessian = FALSE, resta
     low <- rep(-Inf, length(obj$par))
     low[match("U_equilibrium", names(obj$par))] <- 0
     opt <- tryCatch(nlminb(obj$par, obj$fn, obj$gr, h, control = control, lower = low),
-                    error = function(e) as.character(e))
+                    error = as.character)
   } else {
     opt <- tryCatch(nlminb(obj$par, obj$fn, obj$gr, h, control = control),
-                    error = function(e) as.character(e))
+                    error = as.character)
   }
   SD <- get_sdreport(obj, opt)
 
   if((is.character(SD) || !SD$pdHess) && !is.character(opt) && restart > 0) {
     obj$par <- opt$par
-    Recall(obj, control, restart - 1, use_hessian)
+    Recall(obj, control, use_hessian, restart - 1)
   } else {
     res <- list(opt = opt, SD = SD)
     return(res)
   }
 }
 
+#' @importFrom stats optimHess
 get_sdreport <- function(obj, opt) {
   if(is.character(opt)) {
     res <- "nlminb() optimization returned an error. Could not run TMB::sdreport()."
   } else {
     if(is.null(obj$env$random)) h <- obj$he(opt$par) else h <- NULL
     res <- tryCatch(sdreport(obj, par.fixed = opt$par, hessian.fixed = h,
-                             getReportCovariance = FALSE), error = function(e) as.character(e))
+                             getReportCovariance = FALSE), error = as.character)
+    if(!is.character(res) && !is.null(h) && !res$pdHess) {
+      h <- optimHess(opt$par, obj$fn, obj$gr)
+      res <- tryCatch(sdreport(obj, par.fixed = opt$par, hessian.fixed = h,
+                               getReportCovariance = FALSE), error = as.character)
+    }
   }
-  if(inherits(res, "sdreport") && !res$pdHess) {
-    res <- "Estimated covariance matrix was not positive definite."
+
+  if(inherits(res, "sdreport") && res$pdHess && all(is.nan(res$cov.fixed))) {
+    if(is.null(h)) h <- optimHess(opt$par, obj$fn, obj$gr)
+    if(!is.character(try(chol(h), silent = TRUE))) res$cov.fixed <- chol2inv(chol(h))
   }
   return(res)
-}
-
-
-# Start random effects estimation only after the first year in which
-# data from the criterion_vector (e.g. index, CAA) is available
-random_map <- function(criterion_vector) {
-  ind <- which(!is.na(criterion_vector))[1]
-  map <- ifelse(1:length(criterion_vector) <= ind, NA, 1)
-  nrandom <- sum(!is.na(map))
-  map[!is.na(map)] <- 1:nrandom
-  map <- map[2:length(map)]
-  return(factor(map))
 }
 
 # If there are fewer years of CAA/CAL than Year, add NAs to matrix

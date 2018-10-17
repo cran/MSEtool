@@ -10,7 +10,8 @@
 #' @param SR Stock-recruit function (either \code{"BH"} for Beverton-Holt or \code{"Ricker"}).
 #' @param vulnerability Whether estimated vulnerability is \code{"logistic"} or \code{"dome"} (double-normal).
 #' See details for parameterization.
-#' @param CAA_multiplier Numeric for data weighting of catch-at-age matrix. See details.
+#' @param CAA_dist Whether a multinomial or lognormal distribution is used for likelihood of the catch-at-age matrix. See details.
+#' @param CAA_multiplier Numeric for data weighting of catch-at-age matrix if \code{CAA_hist = "multinomial"}. Otherwise ignored. See details.
 #' @param I_type Whether the index surveys population biomass (B; this is the default in the DLMtool operating model),
 #' vulnerable biomass (VB), or spawning stock biomass (SSB).
 #' @param rescale A multiplicative factor that rescales the catch in the assessment model, which
@@ -56,6 +57,9 @@
 #' (by weight/biomass), and catch-at-age matrix (by numbers). Catches are
 #' assumed to be known perfectly (the harvest rate in a given year is the ratio of the observed
 #' catch to the vulnerable biomass at the beginning of the year).
+#' The maximum age in the model is a plus-group.
+#'
+#' By default, steepness is fixed in the model to the value in \code{Data@@steep}.
 #'
 #' The annual sample sizes of the catch-at-age matrix is provided to the model (used in the
 #' likelihood for catch-at-age, assuming a multinomial distribution),
@@ -65,33 +69,44 @@
 #' to that number. If \code{CAA_multiplier <= 1}, then all the annual samples sizes
 #' will be re-scaled by that number. By default, sample sizes are capped at 50.
 #'
-#' Vulnerability can be specified to be either logistic or dome. If logistic, then the model
-#' vector \code{vul_par} is of length 2:
-#' \itemize{
-#' \item \code{vul_par[1]}: \code{a50}, the age of 50\% vulnerability.
-#' \item \code{vul_par[2]}: the age of 95\% vulnerability (a95) as an offset, i.e., \code{a95 = a50 + exp(vul_par[2])}.
-#' }
+#' Alternatively, a lognormal distribution with inverse proportion variance can be used for the catch at age (Punt and Kennedy, 1994, as
+#' cited by Maunder 2011).
 #'
-#' With dome vulnerability, a double normal parameterization is used, where \code{vul_par}
-#' is an estimated vector of length 4:
-#' \itemize{
-#' \item \code{vul_par[1]}: \code{log(sd_asc)}, where sd_asc is the standard deviation of the normal distribution function for the ascending limb
-#' \item \code{vul_par[2]}: \code{mu_asc}, the mean of the normal distribution function for the ascending limb
-#' \item \code{vul_par[3]}: \code{mu_des}, mean of the normal distribution function for the descending limb parameterized as an offset,
-#' i.e., \code{mu_desc = mu_asc + exp(vul_par[3])} to ensure \code{mu_desc > mu_asc}. The vulnerability is 1 for ages between mu_asc and mu_desc.
-#' \item \code{vul_par[4]}: \code{log(sd_des)}, where sd_des is the standard deviation of the normal distribution function for the descending limb.
-#' }
-#'
-#' For \code{start}, a named list of starting values of estimates for:
+#' For \code{start} (optional), a named list of starting values of estimates can be provided for:
 #' \itemize{
 #' \item \code{R0} Virgin recruitment, only for \code{SCA}.
 #' \item \code{h} Steepness, only for \code{SCA}. If not provided, the value in \code{Data@@steep} is used.
 #' \item \code{meanR} Mean recruitment, only for \code{SCA2}.
-#' \item \code{U_equilibrium}. Harvest rate prior to the first year of model, e.g. zero means virgin conditions.
-#' \item \code{vul_par} (length 2 vector for logistic or length 4 for dome, see above).
-#' \item \code{sigma} Standard deviation of index.
+#' \item \code{U_equilibrium} Harvest rate prior to the first year of model, e.g. zero means unfished conditions. Defaults to zero.
+#' \item \code{vul_par} Vulnerability parameters (length 2 vector for logistic or length 4 for dome, see below). Users should provide
+#' estimates of the parameters in normal space, e.g. \code{vul_max} between 0-1, and the function will perform the appropriate transformations for the model.
+#' \item \code{sigma} Standard deviation of index. If not provided, the value based on \code{Data@@CV_Ind} is used.
 #' \item \code{tau} Standard deviation of recruitment deviations. If not provided, the value in \code{Data@@sigmaR} is used.
 #' }
+#'
+#' Vulnerability can be specified to be either logistic or dome. If logistic, then the parameter
+#' vector \code{vul_par} is of length 2:
+#' \itemize{
+#' \item \code{vul_par[1]}: \code{a_95}, the age of 95\% vulnerability, via logit transformation to constrain \code{a_95} to less than 75\%
+#' of the maximum age: \code{a_95 = 0.75 * max_age * plogis(vul_par[1])}.
+#' \item \code{vul_par[2]}: \code{a_50}, the age of 50\% vulnerability as an offset, i.e., \code{a_50 = a_95 - exp(vul_par[2])}.
+#' }
+#' A vague prior for \code{vul_par[2] ~ N(0, sd = 3)} is used to aid convergence, for example, when vulnerability >> 0.5 for the youngest age class.
+#'
+#' With dome vulnerability, a double Gaussian parameterization is used, where \code{vul_par}
+#' is an estimated vector of length 4:
+#' \itemize{
+#' \item \code{vul_par[1]}: \code{a_asc}, the first age of full vulnerability for the ascending limb, via logit transformation
+#' to constrain \code{a_95} to less than 75\% of the maximum age: \code{a_asc = 0.75 * maxage * plogis(vul_par[1])}.
+#' \item \code{vul_par[2]}: \code{a_50}, the age of 50\% vulnerability for the ascending limb as an offset, i.e.,
+#' \code{a_50 = a_asc - exp(vul_par[2])}.
+#' \item \code{vul_par[3]}: \code{a_des}, the last age of full vulnerability (where the descending limb starts) via logit transformation
+#' to constrain between \code{a_asc} and \code{max_age},
+#' i.e., \code{a_des = (max_age - a_asc) * plogis(vul_par[3]) + a_asc}.
+#' \item \code{vul_par[4]}: \code{vul_max}, the vulnerability (in logit space) at the maximum age.
+#' }
+#' Vague priors of \code{vul_par[2] ~ N(0, sd = 3)} and \code{vul_par[3] ~ N(0, 3)} are used to aid convergence,
+#' for example, when vulnerability >> 0.5 for the youngest age class.
 #' @references
 #' Cadigan, N.G. 2016. A state-space stock assessment model for northern cod, including under-reported catches and
 #' variable natural mortality rates. Canadian Journal of Fisheries and Aquatic Science 72:296-308.
@@ -100,6 +115,12 @@
 #' An age-structured model with leading management parameters, incorporating
 #' age-specific selectivity and maturity. Canadian Journal of Fisheries and Aquatic
 #' Science 65:286-296.
+#'
+#' Maunder, M.N. 2011. Review and evaluation of likelihood functions for composition data in
+#' stock-assessment models: Estimating the effective sample size. Fisheries Research 209:311-319.
+#'
+#' Punt, A.E. and Kennedy, R.B. 1997. Population modelling of Tasmanian rock lobster, Jasus edwardsii, resources. Marine and Freshwater
+#' Research 48:967-980.
 #' @examples
 #' \donttest{
 #' res <- SCA(Data = DLMtool::SimulatedData)
@@ -126,14 +147,15 @@
 #' @useDynLib MSEtool
 #' @export
 SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic", "dome"),
-                CAA_multiplier = 50, I_type = c("B", "VB", "SSB"), rescale = "mean1",
-                start = NULL, fix_h = FALSE, fix_U_equilibrium = TRUE, fix_sigma = FALSE, fix_tau = TRUE,
+                CAA_dist = c("multinomial", "lognormal"), CAA_multiplier = 50, I_type = c("B", "VB", "SSB"), rescale = "mean1",
+                start = NULL, fix_h = TRUE, fix_U_equilibrium = TRUE, fix_sigma = FALSE, fix_tau = TRUE,
                 early_dev = c("comp_onegen", "comp", "all"), late_dev = "comp50", integrate = FALSE,
                 silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
-                control = list(iter.max = 5e3, eval.max = 1e4), inner.control = list(), ...) {
+                control = list(iter.max = 2e5, eval.max = 4e5), inner.control = list(), ...) {
   dependencies <- "Data@Cat, Data@Ind, Data@Mort, Data@L50, Data@L95, Data@CAA, Data@vbK, Data@vbLinf, Data@vbt0, Data@wla, Data@wlb, Data@MaxAge"
   dots <- list(...)
   vulnerability <- match.arg(vulnerability)
+  CAA_dist <- match.arg(CAA_dist)
   SR <- match.arg(SR)
   I_type <- match.arg(I_type)
   early_dev <- match.arg(early_dev)
@@ -208,7 +230,7 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
                CAA_hist = t(apply(CAA_hist, 1, function(x) x/sum(x))),
                CAA_n = CAA_n_rescale, n_y = n_y, max_age = max_age, M = M,
                weight = Wa, mat = mat_age, vul_type = vulnerability, I_type = I_type,
-               SR_type = SR, est_early_rec_dev = est_early_rec_dev, est_rec_dev = est_rec_dev)
+               SR_type = SR, CAA_dist = CAA_dist, est_early_rec_dev = est_early_rec_dev, est_rec_dev = est_rec_dev)
 
   # Starting values
   params <- list()
@@ -223,16 +245,36 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
       }
     }
     if(!is.null(start$U_equilibrium) && is.numeric(start$U_equilibrium)) params$U_equilibrium <- start$U_equilibrium
-    if(!is.null(start$vul_par) && is.numeric(start$vul_par)) params$vul_par <- start$vul_par
+    if(!is.null(start$vul_par) && is.numeric(start$vul_par)) {
+      if(start$vul_par[1] > 0.75 * max_age) stop("start$vul_par[1] needs to be greater than 0.75 * Data@MaxAge (see help).")
+      if(vulnerability == "logistic") {
+        if(length(start$vul_par) < 2) stop("Two parameters needed for start$vul_par with logistic vulnerability (see help).")
+        if(start$vul_par[1] <= start$vul_par[2]) stop("start$vul_par[1] needs to be greater than start$vul_par[2] (see help).")
+
+        params$vul_par <- c(logit(start$vul_par[1]/max_age/0.75), log(start$vul_par[1] - start$vul_par[2]))
+      }
+      if(vulnerability == "dome") {
+        if(length(start$vul_par) < 4) stop("Four parameters needed for start$vul_par with dome vulnerability (see help).")
+        if(start$vul_par[1] <= start$vul_par[2]) stop("start$vul_par[1] needs to be greater than start$vul_par[2] (see help).")
+        if(start$vul_par[3] <= start$vul_par[1] || start$vul_par[3] >= max_age) {
+          stop("start$vul_par[3] needs to be between start$vul_par[1] and Data@MaxAge (see help).")
+        }
+        if(start$vul_par[4] <= 0 || start$vul_par[4] >= 1) stop("start$vul_par[4] needs to be between 0-1 (see help).")
+
+        params$vul_par <- c(logit(start$vul_par[1]/max_age/0.75), log(start$vul_par[1] - start$vul_par[2]),
+                            logit(1/(max_age - start$vul_par[1])), logit(start$vul_par[4]))
+      }
+    }
     if(!is.null(start$sigma) && is.numeric(start$sigma)) params$log_sigma <- log(start$sigma)
     if(!is.null(start$tau) && is.numeric(start$tau)) params$log_tau <- log(start$tau)
   }
+
   if(is.null(params$log_R0)) {
     params$log_R0 <- ifelse(is.null(Data@OM$N0[x]), log(mean(data$C_hist)) + 4,
                             log(1.5 * rescale * Data@OM$N0[x] * (1 - exp(-Data@Mort[x]))))
   }
   if(is.null(params$transformed_h)) {
-    h_start <- ifelse(is.na(Data@steep[x]), 0.9, Data@steep[x])
+    h_start <- ifelse(!fix_h && is.na(Data@steep[x]), 0.9, Data@steep[x])
     if(SR == "BH") {
       h_start <- (h_start - 0.2)/0.8
       params$transformed_h <- logit(h_start)
@@ -243,11 +285,21 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
   if(is.null(params$U_equilibrium)) params$U_equilibrium <- 0
   if(is.null(params$vul_par)) {
     CAA_mode <- which.max(colSums(CAA_hist, na.rm = TRUE))
-    if(vulnerability == "logistic") {
-      params$vul_par <- c(CAA_mode-1, log(1)) # 50 and log(95%-offset) vulnerability respectively
-    }
-    if(vulnerability == "dome") {
-      params$vul_par <- c(log(1), CAA_mode, log(0.5), log(5)) # double normal: logsd(ascending), mean(asc), mean(desc)-logoffset, sd(desc)
+    if((is.na(Data@LFC[x]) && is.na(Data@LFS[x])) || (Data@LFC[x] > Linf) || (Data@LFS[x] > Linf)) {
+      if(vulnerability == "logistic") params$vul_par <- c(logit(CAA_mode/max_age/0.75), log(1))
+      if(vulnerability == "dome") {
+        params$vul_par <- c(logit(CAA_mode/max_age/0.75), log(1), logit(1/(max_age - CAA_mode)), logit(0.5))
+      }
+    } else {
+      A5 <- min(iVB(t0, K, Linf, Data@LFC[x]), CAA_mode-1)
+      Afull <- min(iVB(t0, K, Linf, Data@LFS[x]), 0.5 * max_age)
+      A5 <- min(A5, Afull - 0.5)
+      A50_vul <- mean(c(A5, Afull))
+
+      if(vulnerability == "logistic") params$vul_par <- c(logit(Afull/max_age/0.75), log(Afull - A50_vul))
+      if(vulnerability == "dome") {
+        params$vul_par <- c(logit(Afull/max_age/0.75), log(Afull - A50_vul), logit(1/(max_age - Afull)), logit(0.5))
+      }
     }
   }
   if(is.null(params$log_sigma)) {
@@ -286,24 +338,24 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
   random <- NULL
   if(integrate) random <- c("log_early_rec_dev", "log_rec_dev")
 
-  obj <- MakeADFun(data = info$data, parameters = info$params, checkParameterOrder = FALSE,
+  obj <- MakeADFun(data = info$data, parameters = info$params, hessian = TRUE,
                    map = map, random = random, DLL = "MSEtool", inner.control = inner.control, silent = silent)
 
-  # Add starting values for rec-devs and increase R0 start value if too low
-  if(obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0) {
+  # Add starting values for rec-devs and increase R0 start value if U is too high (> 0.975)
+  high_U <- try(obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0, silent = TRUE)
+  if(!is.character(high_U) && high_U) {
     Recruit <- try(Data@Rec[x, ], silent = TRUE)
     if(is.numeric(Recruit) && length(Recruit) == n_y && any(!is.na(Recruit))) {
       log_rec_dev <- log(Recruit/mean(Recruit, na.rm = TRUE))
       log_rec_dev[is.na(est_rec_dev) | is.na(log_rec_dev) | is.infinite(log_rec_dev)] <- 0
       info$params$log_rec_dev <- log_rec_dev
 
-      obj <- MakeADFun(data = info$data, parameters = info$params, checkParameterOrder = FALSE,
+      obj <- MakeADFun(data = info$data, parameters = info$params, hessian = TRUE,
                        map = map, random = random, DLL = "MSEtool", inner.control = inner.control, silent = silent)
     }
-    while(obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0) {
+    while(obj$par["log_R0"] < 30 && obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0) {
       obj$par["log_R0"] <- obj$par["log_R0"] + 1
     }
-    obj$par["log_R0"] <- obj$par["log_R0"] + 1
   }
 
   mod <- optimize_TMB_model(obj, control, opt_hess, n_restart)
@@ -330,7 +382,7 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
   Dev_out <- structure(Dev, names = YearDev)
 
   nll_report <- ifelse(is.character(opt), ifelse(integrate, NA, report$nll), opt$objective)
-  Assessment <- new("Assessment", Model = "SCA", Name = Data@Name, conv = !is.character(SD),
+  Assessment <- new("Assessment", Model = "SCA", Name = Data@Name, conv = !is.character(SD) && SD$pdHess,
                     B0 = report$B0, R0 = report$R0, N0 = report$N0,
                     SSB0 = report$E0, VB0 = report$VB0,
                     h = report$h, U = structure(report$U, names = Year),
@@ -358,7 +410,7 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
                     info = info, obj = obj, opt = opt, SD = SD, TMB_report = report,
                     dependencies = dependencies)
 
-  if(!is.character(opt) && !is.character(SD)) {
+  if(Assessment@conv) {
     ref_pt <- get_MSY(Arec = report$Arec, Brec = report$Brec, M = M, weight = Wa, mat = mat_age, vul = report$vul, SR = SR)
     report <- c(report, ref_pt)
 
@@ -378,12 +430,12 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
     SE_Main2[!is.na(SE_Main2)] <- SE_Main
 
     SE_Dev <- structure(c(rev(SE_Early2), SE_Main2), names = YearDev)
-    SE_Dev[is.na(SE_Dev)] <- 0
 
-    first_non_zero <- which(Dev != 0)[1]
+    first_non_zero <- which(!is.na(SE_Dev))[1]
     if(!is.na(first_non_zero) && first_non_zero > 1) {
       Dev_out <- Dev_out[-c(1:(first_non_zero - 1))]
       SE_Dev <- SE_Dev[-c(1:(first_non_zero - 1))]
+      SE_Dev[is.na(SE_Dev)] <- 0
     }
 
     Assessment@UMSY <- report$UMSY
@@ -395,6 +447,7 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
     Assessment@B_BMSY <- structure(report$B/report$BMSY, names = Yearplusone)
     Assessment@SSB_SSBMSY <- structure(report$E/report$EMSY, names = Yearplusone)
     Assessment@VB_VBMSY <- structure(report$VB/report$VBMSY, names = Yearplusone)
+    Assessment@Dev <- Dev_out
     Assessment@SE_Dev <- SE_Dev
     Assessment@TMB_report <- report
   }
@@ -416,12 +469,12 @@ get_MSY <- function(Arec, Brec, M, weight, mat, vul, SR = c("BH", "Ricker")) {
     EPR <- sum(NPR * mat * weight)
     if(SR == "BH") Req <- (Arec * EPR - 1)/(Brec * EPR)
     if(SR == "Ricker") Req <- log(Arec * EPR)/(Brec * EPR)
-    CPR <- vul * U * NPR
-    Yield <- Req * sum(CPR * weight)
+    YPR <- vul * U * NPR * weight
+    Yield <- Req * sum(YPR)
     return(-1 * Yield)
   }
 
-  opt2 <- optimize(solveMSY, interval = c(-50, 6))
+  opt2 <- optimize(solveMSY, interval = c(logit(0.01), logit(0.99)))
   UMSY <- 1/(1 + exp(-opt2$minimum))
   MSY <- -1 * opt2$objective
   VBMSY <- MSY/UMSY
@@ -473,12 +526,12 @@ get_MSY_opt <- function(x, M, weight, mat, SR = c("BH", "Ricker"), vul_type = c(
     EPR <- sum(NPR * mat * weight)
     if(SR == "BH") Req <- (Arec * EPR - 1)/(Brec * EPR)
     if(SR == "Ricker") Req <- log(Arec * EPR)/(Brec * EPR)
-    CPR <- vul * U * NPR
-    Yield <- Req * sum(CPR * weight)
+    YPR <- vul * U * NPR * weight
+    Yield <- Req * sum(YPR)
     return(-1 * Yield)
   }
 
-  opt2 <- optimize(solveMSY, interval = c(-50, 6))
+  opt2 <- optimize(solveMSY, interval = c(logit(0.01), logit(0.99)))
   UMSY <- ilogit(opt2$minimum)
   MSY <- -1 * as.numeric(opt2$objective)
 

@@ -4,13 +4,14 @@
 #' @useDynLib MSEtool
 #' @export
 SCA2 <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic", "dome"),
-                 CAA_multiplier = 50, I_type = c("B", "VB", "SSB"), rescale = "mean1",
-                 start = NULL, fix_h = FALSE, fix_U_equilibrium = TRUE, fix_sigma = FALSE, fix_tau = TRUE,
+                 CAA_dist = c("multinomial", "lognormal"), CAA_multiplier = 50, I_type = c("B", "VB", "SSB"), rescale = "mean1",
+                 start = NULL, fix_h = TRUE, fix_U_equilibrium = TRUE, fix_sigma = FALSE, fix_tau = TRUE,
                  common_dev = "comp50", integrate = FALSE, silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
-                 control = list(iter.max = 5e3, eval.max = 1e4), inner.control = list(),  ...) {
+                 control = list(iter.max = 2e5, eval.max = 4e5), inner.control = list(),  ...) {
   dependencies <- "Data@Cat, Data@Ind, Data@Mort, Data@L50, Data@L95, Data@CAA, Data@vbK, Data@vbLinf, Data@vbt0, Data@wla, Data@wlb, Data@MaxAge"
   dots <- list(...)
   vulnerability <- match.arg(vulnerability)
+  CAA_dist <- match.arg(CAA_dist)
   SR <- match.arg(SR)
   I_type <- match.arg(I_type)
   if(any(names(dots) == "yind")) {
@@ -51,7 +52,7 @@ SCA2 <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logisti
   if(rescale == "mean1") rescale <- 1/mean(C_hist)
   data <- list(model = "SCA2", C_hist = C_hist * rescale, I_hist = I_hist, CAA_hist = t(apply(CAA_hist, 1, function(x) x/sum(x))),
                CAA_n = CAA_n_rescale, n_y = n_y, max_age = max_age, M = M, weight = Wa, mat = mat_age,
-               vul_type = vulnerability, I_type = I_type, est_early_rec_dev = est_early_rec_dev,
+               vul_type = vulnerability, I_type = I_type, CAA_dist = CAA_dist, est_early_rec_dev = est_early_rec_dev,
                est_rec_dev = est_rec_dev)
 
   # Starting values
@@ -59,19 +60,50 @@ SCA2 <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logisti
   if(!is.null(start)) {
     if(!is.null(start$meanR) && is.numeric(start$meanR)) params$log_meanR <- log(start$meanR)
     if(!is.null(start$U_equilibrium) && is.numeric(start$U_equilibrium)) params$U_equilibrium <- start$U_equilibrium
-    if(!is.null(start$vul_par) && is.numeric(start$vul_par)) params$vul_par <- start$vul_par
+    if(!is.null(start$vul_par) && is.numeric(start$vul_par)) {
+      if(start$vul_par[1] > 0.75 * max_age) stop("start$vul_par[1] needs to be greater than 0.75 * Data@MaxAge (see help).")
+      if(vulnerability == "logistic") {
+        if(length(start$vul_par) < 2) stop("Two parameters needed for start$vul_par with logistic vulnerability (see help).")
+        if(start$vul_par[1] <= start$vul_par[2]) stop("start$vul_par[1] needs to be greater than start$vul_par[2] (see help).")
+
+        params$vul_par <- c(logit(start$vul_par[1]/max_age/0.75), log(start$vul_par[1] - start$vul_par[2]))
+      }
+      if(vulnerability == "dome") {
+        if(length(start$vul_par) < 4) stop("Four parameters needed for start$vul_par with dome vulnerability (see help).")
+        if(start$vul_par[1] <= start$vul_par[2]) stop("start$vul_par[1] needs to be greater than start$vul_par[2] (see help).")
+        if(start$vul_par[3] <= start$vul_par[1] || start$vul_par[3] >= max_age) {
+          stop("start$vul_par[3] needs to be between start$vul_par[1] and Data@MaxAge (see help).")
+        }
+        if(start$vul_par[4] <= 0 || start$vul_par[4] >= 1) stop("start$vul_par[4] needs to be between 0-1 (see help).")
+
+        params$vul_par <- c(logit(start$vul_par[1]/max_age/0.75), log(start$vul_par[1] - start$vul_par[2]),
+                            logit(1/(max_age - start$vul_par[1])), logit(start$vul_par[4]))
+      }
+    }
     if(!is.null(start$sigma) && is.numeric(start$sigma)) params$log_sigma <- log(start$sigma)
     if(!is.null(start$tau) && is.numeric(start$tau)) params$log_tau <- log(start$tau)
   }
+
   if(is.null(params$log_meanR)) params$log_meanR <- log(mean(C_hist * rescale)) + 2
   if(is.null(params$U_equilibrium)) params$U_equilibrium <- 0
   if(is.null(params$vul_par)) {
     CAA_mode <- which.max(colSums(CAA_hist, na.rm = TRUE))
-    if(vulnerability == "logistic") {
-      params$vul_par <- c(CAA_mode-1, log(1)) # 50 and log(95%-offset) vulnerability respectively
-    }
-    if(vulnerability == "dome") {
-      params$vul_par <- c(log(1), CAA_mode, log(0.5), log(5)) # double normal: logsd(ascending), mean(asc), mean(desc)-logoffset, sd(desc)
+    if((is.na(Data@LFC[x]) && is.na(Data@LFS[x])) || (Data@LFC[x] > Linf) || (Data@LFS[x] > Linf)) {
+      if(vulnerability == "logistic") params$vul_par <- c(logit(CAA_mode/max_age/0.75), log(1))
+      if(vulnerability == "dome") {
+        params$vul_par <- c(logit(CAA_mode/max_age/0.75), log(1), logit(1/(max_age - CAA_mode)), logit(0.5))
+      }
+    } else {
+      A5 <- min(iVB(t0, K, Linf, Data@LFC[x]), CAA_mode-1)
+      Afull <- min(iVB(t0, K, Linf, Data@LFS[x]), 0.5 * max_age)
+      A5 <- min(A5, Afull - 0.5)
+      A50_vul <- mean(c(A5, Afull))
+
+      if(vulnerability == "logistic") params$vul_par <- c(logit(Afull/max_age/0.75), log(Afull - A50_vul))
+
+      if(vulnerability == "dome") {
+        params$vul_par <- c(logit(Afull/max_age/0.75), log(Afull - A50_vul), logit(1/(max_age - Afull)), logit(0.5))
+      }
     }
   }
   if(is.null(params$log_sigma)) {
@@ -111,20 +143,20 @@ SCA2 <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logisti
                    map = map, random = random, DLL = "MSEtool", inner.control = inner.control, silent = silent)
 
   # Add starting values for rec-devs and increase R0 start value if too low
-  if(obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0) {
+  high_U <- try(obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0, silent = TRUE)
+  if(!is.character(high_U) && high_U) {
     Recruit <- try(Data@Rec[x, ], silent = TRUE)
     if(is.numeric(Recruit) && length(Recruit) == n_y && any(!is.na(Recruit))) {
       log_rec_dev <- log(Recruit/mean(Recruit, na.rm = TRUE))
       log_rec_dev[is.infinite(log_rec_dev) | is.na(log_rec_dev)] <- 0
       info$params$log_rec_dev <- log_rec_dev
 
-      obj <- MakeADFun(data = info$data, parameters = info$params, checkParameterOrder = FALSE,
+      obj <- MakeADFun(data = info$data, parameters = info$params, hessian = TRUE,
                        map = map, random = random, DLL = "MSEtool", inner.control = inner.control, silent = silent)
     }
-    while(obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0) {
+    while(obj$par["log_meanR"] < 30 && obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0) {
       obj$par["log_meanR"] <- obj$par["log_meanR"] + 1
     }
-    obj$par["log_meanR"] <- obj$par["log_meanR"] + 1
   }
 
   mod <- optimize_TMB_model(obj, control, opt_hess, n_restart)
@@ -151,7 +183,7 @@ SCA2 <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logisti
   Dev <- c(rev(report$log_early_rec_dev), report$log_rec_dev)
 
   nll_report <- ifelse(is.character(opt), ifelse(integrate, NA, report$nll), opt$objective)
-  Assessment <- new("Assessment", Model = "SCA2", Name = Data@Name, conv = !is.character(SD),
+  Assessment <- new("Assessment", Model = "SCA2", Name = Data@Name, conv = !is.character(SD) && SD$pdHess,
                     U = structure(report$U, names = Year),
                     B = structure(report$B, names = Yearplusone),
                     SSB = structure(report$E, names = Yearplusone),
@@ -175,7 +207,7 @@ SCA2 <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logisti
                     dependencies = dependencies)
 
 
-  if(!is.character(opt) && !is.character(SD)) {
+  if(Assessment@conv) {
     info$h <- ifelse(fix_h, Data@steep[x], NA)
     refpt <- get_refpt2(SSB = report$E[1:(length(report$E) - 1)], rec = report$R[2:length(report$R)],
                         SSBPR0 = report$EPR0, NPR0 = report$NPR_virgin, weight = Wa,

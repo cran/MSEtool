@@ -23,9 +23,9 @@ summary_SCA2 <- function(Assessment) {
   derived <- data.frame(Value = Value, Description = Description, stringsAsFactors = FALSE)
   rownames(derived) <- c("h", "R0", "VB0", "SSB0", "MSY", "UMSY", "VBMSY", "SSBMSY")
 
-  if(conv) {
+  if(!is.character(SD)) {
     model_estimates <- summary(SD)[rownames(summary(SD)) != "log_rec_dev" & rownames(summary(SD)) != "log_early_rec_dev", ]
-    model_estimates <- model_estimates[model_estimates[, 2] > 0, ]
+    model_estimates <- model_estimates[is.na(model_estimates[, 2]) || model_estimates[, 2] > 0, ]
     dev_estimates <- cbind(Dev, SE_Dev)
     rownames(dev_estimates) <- paste0("log_rec_dev_", names(Dev))
     model_estimates <- rbind(model_estimates, dev_estimates)
@@ -222,7 +222,7 @@ generate_plots_SCA2 <- function(Assessment, save_figure = FALSE, save_dir = temp
     plot_composition(Year2, Obs_CAA, Fit_CAA, plot_type = 'bubble_residuals', bubble_adj = 35)
     dev.off()
     assess.file.caption <- rbind(assess.file.caption,
-                               c("assess_age_comps_bubble_resids.png", "Age composition bubble plot of residuals (black are negative, white are positive)."))
+                               c("assess_age_comps_bubble_resids.png", "Bubble plot of Pearson residuals for age compositions (black are negative, white are positive)."))
   }
 
   plot_composition(Year2, Obs_CAA, Fit_CAA, N = info$data$CAA_n[ind_valid], plot_type = 'annual')

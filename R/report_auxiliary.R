@@ -543,29 +543,85 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
   }
   N <- round(N, 1)
 
+  obs_prob_all <- obs/rowSums(obs, na.rm = TRUE)
+  if(!is.null(fit)) fit_prob_all <- fit/rowSums(fit, na.rm = TRUE)
+  else fit_prob_all <- NULL
+
   # subset
   #ind <- rowSums(obs, na.rm = TRUE) > 0
   Year <- Year[ind]
-  obs <- obs[ind, ]
-  if(!is.null(fit)) fit <- fit[ind, ]
+  obs <- obs[ind, , drop = FALSE]
+  if(!is.null(fit)) fit <- fit[ind, , drop = FALSE]
   N <- N[ind]
 
   obs_prob <- obs/rowSums(obs, na.rm = TRUE)
   if(!is.null(fit)) fit_prob <- fit/rowSums(fit, na.rm = TRUE)
   else fit_prob <- NULL
 
+  # Bubble plot (obs)
+  if('bubble_data' %in% plot_type) {
+    range_obs <- pretty(obs, n = 6)
+    n1 <- range_obs[2]
+    n2 <- pretty(quantile(obs[obs > 0], na.rm = TRUE, probs = 0.9))[2]
+    if(n2 < n1) n1 <- 0.5 * n2
+    diameter_max <- bubble_adj / n2
+    plot(NULL, NULL, typ = 'n', xlim = range(Year), xlab = "Year",
+         ylim = c(0, max(data_val)), ylab = data_lab)
+    for(i in 1:length(Year)) {
+      for(j in 1:length(data_val)) {
+        points(Year[i], data_val[j], cex = 0.5 * diameter_max * pmin(obs[i, j], n2), pch = 21, bg = "white")
+      }
+    }
+    legend("topleft", legend = c(n1, paste0(">", n2)), pt.cex = 0.5 * diameter_max * c(n1, n2),
+           pt.bg = "white", pch = 21, horiz = TRUE)
+    return(invisible())
+  }
+  # Bubble plot (residuals if applicable)
+  if('bubble_residuals' %in% plot_type) {
+    if(is.null(fit)) stop("No fitted data available.")
+
+    resid <- N * (obs_prob - fit_prob) / sqrt(N * fit_prob)
+    diameter_max <- bubble_adj / pmin(10, max(abs(resid), na.rm = TRUE))
+    plot(NULL, NULL, typ = 'n', xlim = range(Year), xlab = "Year",
+         ylim = c(0, max(data_val)), ylab = data_lab)
+
+    Year_mat <- matrix(Year, ncol = ncol(resid), nrow = nrow(resid))
+    data_mat <- matrix(data_val, ncol = ncol(resid), nrow = nrow(resid), byrow = TRUE)
+    isPositive <- resid > 0
+    points(Year_mat[!isPositive], data_mat[!isPositive], cex = pmin(0.5 * diameter_max * abs(resid[!isPositive]), diameter_max), pch = 21, bg = "grey80")
+    points(Year_mat[isPositive], data_mat[isPositive], cex = pmin(0.5 * diameter_max * resid[isPositive], diameter_max), pch = 21, bg = "white")
+    legend("topleft", legend = c("<-10", "-1", "1", ">10"),
+           pt.cex = c(diameter_max, 0.5 * diameter_max, 0.5 * diameter_max, diameter_max),
+           pt.bg = c("grey80", "grey80", "white", "white"), pch = 21, horiz = TRUE)
+
+    return(invisible())
+  }
+  # Mean length or age over time
+  if('mean' %in% plot_type) {
+    mu <- mupred <- numeric(length = length(Year))
+    for(i in 1:length(mu)) {
+      mu[i] <- weighted.mean(data_val, obs[i, ], na.rm = TRUE)
+      if(!is.null(fit)) mupred[i] <- weighted.mean(data_val, fit[i, ], na.rm = TRUE)
+    }
+    ind2 <- (which(!is.na(mu) & mu > 0)[1]):length(mu)
+    plot(Year[ind2], mu[ind2], xlab = 'Year', ylab = paste0('Mean ', data_type), typ = 'o')
+    if(!is.null(fit)) lines(Year[ind2], mupred[ind2], lwd = fit_linewidth, col = fit_color)
+
+    return(invisible())
+  }
+
   # Annual comps (obs vs. fitted if available)
   if('annual' %in% plot_type) {
 
     par(mfcol = c(4, 4), mar = rep(0, 4), oma = c(5.1, 5.1, 2.1, 2.1))
-    ylim <- c(0, 1.1 * max(obs_prob, fit_prob, na.rm = TRUE))
+    ylim <- c(0, 1.1 * max(obs_prob_all, fit_prob_all, na.rm = TRUE))
     yaxp <- c(0, 1, 4)
     las <- 1
     type <- 'o'
     for(i in 1:length(Year)) {
       obs.vec <- obs_prob[i, ]
 
-      if(i < (length(Year))) {
+      if(i < length(Year)) {
         if(i %% 16 %in% c(1:4)) { # First column
           yaxt <- 's'
 
@@ -611,56 +667,6 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
     }
     return(invisible())
 
-  }
-  # Bubble plot (obs)
-  if('bubble_data' %in% plot_type) {
-    range_obs <- pretty(obs, n = 6)
-    n1 <- range_obs[2]
-    n2 <- pretty(quantile(obs[obs > 0], na.rm = TRUE, probs = 0.9))[2]
-    diameter_max <- bubble_adj / n2
-    plot(NULL, NULL, typ = 'n', xlim = range(Year), xlab = "Year",
-         ylim = c(0, max(data_val)), ylab = data_lab)
-    for(i in 1:length(Year)) {
-      for(j in 1:length(data_val)) {
-        points(Year[i], data_val[j], cex = 0.5 * diameter_max * pmin(obs[i, j], n2), pch = 21, bg = "white")
-      }
-    }
-    legend("topleft", legend = c(n1, paste0(">", n2)), pt.cex = 0.5 * diameter_max * c(n1, n2),
-           pt.bg = "white", pch = 21, horiz = TRUE)
-    return(invisible())
-  }
-  # Bubble plot (residuals if applicable)
-  if('bubble_residuals' %in% plot_type) {
-    if(is.null(fit)) stop("No fitted data available.")
-
-    resid <- N * (obs_prob - fit_prob) / sqrt(N * fit_prob)
-    diameter_max <- bubble_adj / pmin(10, max(abs(resid), na.rm = TRUE))
-    plot(NULL, NULL, typ = 'n', xlim = range(Year), xlab = "Year",
-         ylim = c(0, max(data_val)), ylab = data_lab)
-
-    Year_mat <- matrix(Year, ncol = ncol(resid), nrow = nrow(resid))
-    data_mat <- matrix(data_val, ncol = ncol(resid), nrow = nrow(resid), byrow = TRUE)
-    isPositive <- resid > 0
-    points(Year_mat[!isPositive], data_mat[!isPositive], cex = pmin(0.5 * diameter_max * abs(resid[!isPositive]), diameter_max), pch = 21, bg = "grey80")
-    points(Year_mat[isPositive], data_mat[isPositive], cex = pmin(0.5 * diameter_max * resid[isPositive], diameter_max), pch = 21, bg = "white")
-    legend("topleft", legend = c("<-10", "-1", "1", ">10"),
-           pt.cex = c(diameter_max, 0.5 * diameter_max, 0.5 * diameter_max, diameter_max),
-           pt.bg = c("grey80", "grey80", "white", "white"), pch = 21, horiz = TRUE)
-
-    return(invisible())
-  }
-  # Mean length or age over time
-  if('mean' %in% plot_type) {
-    mu <- mupred <- numeric(length = length(Year))
-    for(i in 1:length(mu)) {
-      mu[i] <- weighted.mean(data_val, obs[i, ], na.rm = TRUE)
-      if(!is.null(fit)) mupred[i] <- weighted.mean(data_val, fit[i, ], na.rm = TRUE)
-    }
-    ind2 <- (which(!is.na(mu) & mu > 0)[1]):length(mu)
-    plot(Year[ind2], mu[ind2], xlab = 'Year', ylab = paste0('Mean ', data_type), typ = 'o')
-    if(!is.null(fit)) lines(Year[ind2], mupred[ind2], lwd = fit_linewidth, col = fit_color)
-
-    return(invisible())
   }
 
   invisible()
@@ -752,13 +758,14 @@ plot_Kobe <- function(biomass, exploit, arrow_size = 0.07, color = TRUE) {
 #' @export plot_SR
 plot_SR <- function(Spawners, expectedR, R0, S0, rec_dev = NULL, trajectory = FALSE,
                     y_zoom = NULL) {
-  if(is.null(rec_dev)) R.max <- 1.1 * max(expectedR)
-  else {
+  if(is.null(rec_dev)) {
+    R.max <- 1.1 * max(expectedR)
+  } else {
     if(is.null(y_zoom)) R.max <- 1.1 * max(rec_dev)
     else R.max <- y_zoom * max(expectedR)
   }
   S.max <- 1.1 * max(c(Spawners, S0))
-  plot(Spawners, expectedR, typ = 'l', xlim = c(0, 1.05 * S.max), ylim = c(0, 1.1 * R.max),
+  plot(Spawners[order(Spawners)], expectedR[order(Spawners)], typ = 'l', xlim = c(0, 1.05 * S.max), ylim = c(0, 1.1 * R.max),
        xlab = 'Spawning Stock Biomass (SSB)', ylab = 'Recruitment')
   if(!trajectory) {
     if(is.null(rec_dev)) points(Spawners, expectedR)

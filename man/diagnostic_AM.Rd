@@ -4,31 +4,24 @@
 \alias{diagnostic_AM}
 \title{diagnostic_AM (diagnostic of Assessments in MSE): Did Assess models converge during MSE?}
 \usage{
-diagnostic_AM(MSE = NULL, DLMenv = DLMtool::DLMenv, MP = NULL,
-  gradient_threshold = 0.1, figure = TRUE)
+diagnostic_AM(MSE, MP = NULL, gradient_threshold = 0.1, figure = TRUE)
 }
 \arguments{
 \item{MSE}{An object of class MSE created by \code{\link[DLMtool]{runMSE}}. If no MSE object
 is available, use argument \code{MP} instead.}
 
-\item{DLMenv}{The name of the environment that contains the Assessment output
-generated during the MSE.}
-
 \item{MP}{A character vector of MPs with assessment models.}
 
-\item{gradient_threshold}{The value of the maximum gradient magnitude below which the
-model is considered to have converged.}
+\item{gradient_threshold}{The maximum magnitude (absolute value) desired for the gradient of the likelihood.}
 
 \item{figure}{Logical, whether a figure will be drawn.}
 }
 \value{
-A matrix with diagnostic information for the assesssment-based MPs. If \code{figure = TRUE},
-a set of figures: traffic light (red/green) plots indicating whether model converged,
-according to \code{convergence} code in list returned by \code{\link[stats]{nlminb}}
-the Hessian matrix is positive-definite, according to \code{pdHess} in
-list returned by \code{\link[TMB]{sdreport}}, and the maximum gradient magnitude is
-below \code{gradient_threshold}. Also includes model runtime, number of optimization iterations, and
-number of function evaluations of the assessment model during each application of the management procedure.
+A matrix with diagnostic performance of assessment models in the MSE. If \code{figure = TRUE},
+a set of figures: traffic light (red/green) plots indicating whether the model converged (defined if a positive-definite
+Hessian matrix was obtained), the optimizer reached pre-specified iteration limits (as passed to \code{\link[stats]{nlminb}}),
+and the maximum gradient of the likelihood in each assessment run. Also includes the number of optimization iterations
+function evaluations reported by \code{\link[stats]{nlminb}} for each application of the assessment model.
 }
 \description{
 Diagnostic check for convergence of Assess models during MSE.
@@ -37,18 +30,12 @@ with argument \code{diagnostic = TRUE}. This function summarizes and plots the d
 }
 \examples{
 \dontrun{
-DD_MSY <- makeMP(DD_TMB, HCR_MSY, diagnostic = "min")
+DD_MSY <- make_MP(DD_TMB, HCR_MSY, diagnostic = "min")
 show(DD_MSY)
-myMSE <- runMSE(DLMtool::testOM, MPs = "DD_MSY")
+
+# Set PPD = TRUE in runMSE function
+myMSE <- runMSE(DLMtool::testOM, MPs = "DD_MSY", PPD = TRUE)
 diagnostic_AM(myMSE)
-
-# If MSE object is not available (e.g. runMSE crashed), use MP argument instead.
-diagnostic_AM(MP = "DD_MSY")
-
-ls(DLMtool::DLMenv) # Assessment output and diagnostics are located here
-
-# Save to disk for future use. File may be very large due to size of DLMenv!
-save(myMSE, DLMenv, file = "DLMenv.RData")
 }
 }
 \seealso{

@@ -159,7 +159,7 @@ DD_TMB <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start
   if(fix_h) map$transformed_h <- factor(NA)
   if(fix_U_equilibrium) map$U_equilibrium <- factor(NA)
 
-  obj <- MakeADFun(data = info$data, parameters = info$params, checkParameterOrder = FALSE,
+  obj <- MakeADFun(data = info$data, parameters = info$params, hessian = TRUE,
                    map = map, DLL = "MSEtool", silent = silent)
 
   mod <- optimize_TMB_model(obj, control, opt_hess, n_restart)
@@ -179,7 +179,7 @@ DD_TMB <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start
   Yearplusk <- c(Year, max(Year) + 1:k)
 
   nll_report <- ifelse(is.character(opt), report$nll, opt$objective)
-  Assessment <- new("Assessment", Model = "DD_TMB", Name = Data@Name, conv = !is.character(SD),
+  Assessment <- new("Assessment", Model = "DD_TMB", Name = Data@Name, conv = !is.character(SD) && SD$pdHess,
                     B0 = report$B0, R0 = report$R0, N0 = report$N0,
                     SSB0 = report$B0, VB0 = report$B0, h = report$h,
                     U = structure(report$U, names = Year),
@@ -200,7 +200,7 @@ DD_TMB <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start
                     info = info, obj = obj, opt = opt,
                     SD = SD, TMB_report = report, dependencies = dependencies)
 
-  if(!is.character(opt) && !is.character(SD)) {
+  if(Assessment@conv) {
     ref_pt <- get_MSY_DD(info$data, report$Arec, report$Brec)
     report <- c(report, ref_pt)
 
@@ -311,8 +311,7 @@ DD_SS <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start 
   if(integrate) random <- "log_rec_dev"
 
   obj <- MakeADFun(data = info$data, parameters = info$params, random = random,
-                   map = map, checkParameterOrder = FALSE,
-                   DLL = "MSEtool", inner.control = inner.control, silent = silent)
+                   map = map, hessian = TRUE, DLL = "MSEtool", inner.control = inner.control, silent = silent)
 
   mod <- optimize_TMB_model(obj, control, opt_hess, n_restart)
   opt <- mod[[1]]
@@ -333,7 +332,7 @@ DD_SS <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start 
   YearDev <- seq(Year[1] + k, max(Year))
 
   nll_report <- ifelse(is.character(opt), ifelse(integrate, NA, report$nll), opt$objective)
-  Assessment <- new("Assessment", Model = "DD_SS", Name = Data@Name, conv = !is.character(SD),
+  Assessment <- new("Assessment", Model = "DD_SS", Name = Data@Name, conv = !is.character(SD) && SD$pdHess,
                     B0 = report$B0, R0 = report$R0, N0 = report$N0,
                     SSB0 = report$B0, VB0 = report$B0, h = report$h,
                     U = structure(report$U, names = Year),
@@ -356,7 +355,7 @@ DD_SS <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start 
                     info = info, obj = obj, opt = opt, SD = SD, TMB_report = report,
                     dependencies = dependencies)
 
-  if(!is.character(opt) && !is.character(SD)) {
+  if(Assessment@conv) {
     ref_pt <- get_MSY_DD(info$data, report$Arec, report$Brec)
     report <- c(report, ref_pt)
 

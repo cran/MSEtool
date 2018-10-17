@@ -128,39 +128,77 @@ Type sum_VBPR(vector<Type> NPR, vector<Type> weight, vector<Type> vul) {
 }
 
 template<class Type>
-vector<Type> calc_logistic_vul(vector<Type> vul_par, int max_age) {
+vector<Type> calc_logistic_vul(vector<Type> vul_par, int max_age, Type &prior) {
   vector<Type> vul(max_age);
-  Type vul_50 = vul_par(0);
-  Type vul_95 = vul_50 + exp(vul_par(1));
+  Type maxage = max_age;
+  Type a_95 = invlogit(vul_par(0)) * 0.75 * maxage;
+  Type a_50 = a_95 - exp(vul_par(1));
+
+  prior -= dnorm(vul_par(1), Type(0), Type(3), true);
 
 	for(int a=0;a<max_age;a++) {
 	  Type aa = a;
 	  aa += 1;
-	  vul(a) = pow(1 + exp(-log(Type(19.0)) * (aa - vul_50)/(vul_95 - vul_50)), -1);
+	  vul(a) = pow(1 + exp(-log(Type(19.0)) * (aa - a_50)/(a_95 - a_50)), -1);
   }
+	Type interim_vmax = max(vul);
+	for(int a=0;a<max_age;a++) vul(a) /= interim_vmax;
+
 	return vul;
 }
 
 template<class Type>
-vector<Type> calc_dome_vul(vector<Type> vul_par, int max_age) {
-  vector<Type> vul(max_age);
-  Type vul_sd_asc = exp(vul_par(0));
-  Type vul_mu_asc = vul_par(1);
-  Type vul_mu_des = vul_mu_asc + exp(vul_par(2));
-  Type vul_sd_des = exp(vul_par(3));
+Type dnorm_vul(Type x, Type mu, Type sd) {
+  Type res = -0.5;
+  res *= pow(x - mu, 2);
+  res /= pow(sd, 2);
+  return exp(res);
+}
 
-  Type denom_asc = dnorm(vul_mu_asc, vul_mu_asc, vul_sd_asc, false);
-  Type denom_des = dnorm(vul_mu_des, vul_mu_des, vul_sd_des, false);
+template<class Type>
+vector<Type> calc_dome_vul(vector<Type> vul_par, int max_age, Type &prior) {
+  vector<Type> vul(max_age);
+
+  Type maxage = max_age;
+  Type a_full = invlogit(vul_par(0)) * 0.75 * maxage;
+  Type a_50 = a_full - exp(vul_par(1));
+  Type a_full2 = invlogit(vul_par(2));
+  a_full2 *= maxage - a_full;
+  a_full2 += a_full;
+  Type vul_max = invlogit(vul_par(3));
+
+  //prior -= dnorm(vul_par(0), Type(0), Type(3), true);
+  prior -= dnorm(vul_par(1), Type(0), Type(3), true);
+  prior -= dnorm(vul_par(2), Type(0), Type(3), true);
+  //prior -= dnorm(vul_par(3), Type(0), Type(3), true);
+
+  Type var_asc = pow(a_50 - a_full, 2);
+  var_asc /= log(Type(4));
+
+  Type var_des = pow(maxage - a_full2, 2);
+  var_des /= -2 * log(vul_max);
+
+  Type sd_asc = pow(var_asc, 0.5);
+  Type sd_des = pow(var_des, 0.5);
 
   for(int a=0;a<max_age;a++) {
     Type aa = a;
-	aa += 1;
-    Type vul_asc = dnorm(aa, vul_mu_asc, vul_sd_asc, false);
-    vul_asc /= denom_asc;
-    Type vul_des = dnorm(aa, vul_mu_des, vul_sd_des, false);
-    vul_des /= denom_des;
+    aa += 1;
+    Type vul_asc = dnorm_vul(aa, a_full, sd_asc);
+    Type vul_des = dnorm_vul(aa, a_full2, sd_des);
 
-    vul(a) = CppAD::CondExpLe(aa, vul_mu_asc, vul_asc, CppAD::CondExpLe(aa, vul_mu_des, Type(1), vul_des));
+    vul(a) = CppAD::CondExpLe(aa, a_full, vul_asc, CppAD::CondExpLe(aa, a_full2, Type(1), vul_des));
   }
+  Type interim_vmax = max(vul);
+  for(int a=0;a<max_age;a++) vul(a) /= interim_vmax;
+
+
   return vul;
+}
+
+template<class Type>
+Type dlnorm_comp(vector<Type> obs, vector<Type> pred) {
+  Type log_lik = 0.;
+  for(int a=0;a<obs.size();a++) log_lik += dnorm(log(obs(a)), log(pred(a)), pow(0.01/pred(a), 0.5), true);
+  return log_lik;
 }

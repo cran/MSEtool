@@ -29,13 +29,18 @@
 #' retrospective_AM(myMSE, sim = 1, MP = "DD_MSY", Hist = myMSE_hist)
 #' }
 #' @seealso \link{diagnostic_AM}
+#' @importFrom gplots rich.colors
 #' @export
 retrospective_AM <- function(MSE, sim = 1, MP, MSE_Hist = NULL, plot_legend = FALSE) {
   old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par))
 
   if(!inherits(MSE, "MSE")) stop("No object of class MSE was provided.")
-  if(length(MSE@Misc) == 0) stop("Nothing found in MSE@Misc. Use an MP created by 'make_MP(diagnostic = 'full')' and set 'runMSE(PPD = TRUE)'.")
+  if(packageVersion("DLMtool") >= 5.3) {
+    if(length(MSE@Misc$Data) == 0) stop("Nothing found in MSE@Misc$Data. Use an MP created by 'make_MP(diagnostic = 'full')' and set 'runMSE(PPD = TRUE)'.")
+  } else {
+    if(length(MSE@Misc) == 0) stop("Nothing found in MSE@Misc. Use an MP created by 'make_MP(diagnostic = 'full')' and set 'runMSE(PPD = TRUE)'.")
+  }
   if(length(sim) > 1 || sim > MSE@nsim) stop(paste0(sim, " should be a number between 1 and ", MSE@nsim, "."))
 
   MPs <- MSE@MPs
@@ -46,14 +51,20 @@ retrospective_AM <- function(MSE, sim = 1, MP, MSE_Hist = NULL, plot_legend = FA
     Misc <- Data@Misc
     all(vapply(Misc, function(y) any(names(y) == "Assessment_report"), logical(1)))
   }
-  has_Assess <- has_Assess_fn(MSE@Misc[[match_ind]])
-  if(!has_Assess) stop("No Assessment objects were found in MSE@Misc for any MP. Use an MP created by 'make_MP(diagnostic = 'full')' and set 'runMSE(PPD = TRUE)'.")
 
-  Assessment_report <- lapply(MSE@Misc[[match_ind]]@Misc, getElement, "Assessment_report")[[sim]]
+  if(packageVersion("DLMtool") >= 5.3) {
+    has_Assess <- has_Assess_fn(MSE@Misc$Data[[match_ind]])
+    if(!has_Assess) stop("No Assessment objects were found in MSE@Misc$Data for any MP. Use an MP created by 'make_MP(diagnostic = 'full')' and set 'runMSE(PPD = TRUE)'.")
+    Assessment_report <- lapply(MSE@Misc$Data[[match_ind]]@Misc, getElement, "Assessment_report")[[sim]]
+  } else {
+    has_Assess <- has_Assess_fn(MSE@Misc[[match_ind]])
+    if(!has_Assess) stop("No Assessment objects were found in MSE@Misc for any MP. Use an MP created by 'make_MP(diagnostic = 'full')' and set 'runMSE(PPD = TRUE)'.")
+    Assessment_report <- lapply(MSE@Misc[[match_ind]]@Misc, getElement, "Assessment_report")[[sim]]
+  }
 
   isSP <- grepl("SP", Assessment_report[[1]]@Model)
 
-  color.vec <- gplots::rich.colors(length(Assessment_report))
+  color.vec <- rich.colors(length(Assessment_report))
   Yr_MSE <- 1:(MSE@nyears + MSE@proyears)
   Assess <- lapply(Assessment_report, slot, "VB")
   End_Assess_Yr <- vapply(Assess, function(x) as.numeric(names(x))[length(x)-1], numeric(1))
@@ -63,6 +74,8 @@ retrospective_AM <- function(MSE, sim = 1, MP, MSE_Hist = NULL, plot_legend = FA
   par(mfcol = c(2, 3), mar = c(5, 4, 1, 1), oma = c(0, 0, 2.5, 0))
   for(i in 1:length(plot_type)) {
     if(plot_type[i] == "SSB_SSBMSY") {
+      ylab <- expression(SSB/SSB[MSY])
+
       Hist <- apply(MSE@SSB_hist, c(1, 3), sum)[sim, ]/MSE@OM$SSBMSY[sim]
       Proj <- MSE@B_BMSY[sim, match_ind, ]
       if(!isSP) {
@@ -72,6 +85,7 @@ retrospective_AM <- function(MSE, sim = 1, MP, MSE_Hist = NULL, plot_legend = FA
       }
     }
     if(plot_type[i] == "F_FMSY") {
+      ylab <- expression(F/F[MSY])
       Hist <- apply(MSE@FM_hist, c(1, 3), max)[sim, ]/MSE@OM$FMSY[sim]
       Proj <- MSE@F_FMSY[sim, match_ind, ]
       Assess <- lapply(Assessment_report, slot, "F_FMSY")
@@ -82,6 +96,7 @@ retrospective_AM <- function(MSE, sim = 1, MP, MSE_Hist = NULL, plot_legend = FA
       }
     }
     if(plot_type[i] == "SSB") {
+      ylab <- "SSB"
       Hist <- apply(MSE@SSB_hist, c(1, 3), sum)[sim, ]
       Proj <- MSE@SSB[sim, match_ind, ]
       if(!isSP) {
@@ -91,6 +106,7 @@ retrospective_AM <- function(MSE, sim = 1, MP, MSE_Hist = NULL, plot_legend = FA
       }
     }
     if(plot_type[i] == "F") {
+      ylab <- "F"
       Hist <- apply(MSE@FM_hist, c(1, 3), max)[sim, ]
       Proj <- MSE@FM[sim, match_ind, ]
       Assess <- lapply(Assessment_report, slot, "FMort")
@@ -100,15 +116,17 @@ retrospective_AM <- function(MSE, sim = 1, MP, MSE_Hist = NULL, plot_legend = FA
       }
     }
     if(plot_type[i] == "SSB_SSB0") {
+      ylab <- expression(SSB/SSB[0])
       Hist <- apply(MSE@SSB_hist, c(1, 3), sum)[sim, ]/MSE@OM$SSB0[sim]
       Proj <- MSE@SSB[sim, match_ind, ]/MSE@OM$SSB0[sim]
-      if(!isSP) {
-        Assess <- lapply(Assessment_report, slot, "SSB_SSB0")
-      } else {
+      if(isSP) {
         Assess <- lapply(Assessment_report, slot, "VB_VB0")
+      } else {
+        Assess <- lapply(Assessment_report, slot, "SSB_SSB0")
       }
     }
     if(plot_type[i] == "VB") {
+      ylab <- "Vulnerable biomass"
       if(!is.null(MSE_Hist)) {
         Hist <- MSE_Hist$TSdata$VB[, sim]
       } else {
@@ -120,6 +138,7 @@ retrospective_AM <- function(MSE, sim = 1, MP, MSE_Hist = NULL, plot_legend = FA
     }
 
     if(plot_type[i] == "Recruit") {
+      ylab <- "Recruitment"
       if(!is.null(MSE_Hist)) {
         Hist <- MSE_Hist$AtAge$Nage[sim, 1, ]
       } else {
@@ -138,7 +157,7 @@ retrospective_AM <- function(MSE, sim = 1, MP, MSE_Hist = NULL, plot_legend = FA
       ylimits <- c(0, 1.1 * max(c(Hist, Proj, do.call(c, Assess[converged_assessments])), na.rm = TRUE))
 
       if(all(!is.na(ylimits))) {
-        plot(Yr_MSE, c(Hist, Proj), xlab = "MSE year", ylab = plot_type[i], xlim = xlimits, ylim = ylimits, lwd = 2, typ = 'l')
+        plot(Yr_MSE, c(Hist, Proj), xlab = "MSE year", ylab = ylab, xlim = xlimits, ylim = ylimits, lwd = 2, typ = 'l')
         for(j in length(Assess):1) {
           if(Assessment_report[[j]]@conv && length(Assess[[j]]) > 0) lines(Assess_Yr[[j]], Assess[[j]], col = color.vec[j])
         }

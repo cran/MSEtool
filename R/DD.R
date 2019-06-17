@@ -12,7 +12,7 @@
 #' @param rescale A multiplicative factor that rescales the catch in the assessment model, which
 #' can improve convergence. By default, \code{"mean1"} scales the catch so that time series mean is 1, otherwise a numeric.
 #' Output is re-converted back to original units.
-#' @param start Optional list of starting values. See details.
+#' @param start Optional list of starting values. Entries can be expressions that are evaluated in the function. See details.
 #' @param fix_h Logical, whether to fix steepness to value in \code{Data@@steep} in the assessment model.
 #' @param fix_U_equilibrium Logical, whether the equilibrium harvest rate prior to the first year of the model is
 #' estimated. If TRUE, U_equilibruim is fixed to value provided in start (if provided), otherwise, equal to zero
@@ -22,7 +22,8 @@
 #' @param fix_tau Logical, the standard deviation of the recruitment deviations is fixed. If \code{TRUE},
 #' tau is fixed to value provided in \code{start} (if provided), otherwise, equal to 1.
 #' @param integrate Logical, whether the likelihood of the model integrates over the likelihood
-#' of the recruitment deviations (thus, treating it as a state-space variable).
+#' of the recruitment deviations (thus, treating it as a random effects/state-space variable).
+#' Otherwise, recruitment deviations are penalized parameters.
 #' @param silent Logical, passed to \code{\link[TMB]{MakeADFun}}, whether TMB
 #' will print trace information during optimization. Used for dignostics for model convergence.
 #' @param opt_hess Logical, whether the hessian function will be passed to \code{\link[stats]{nlminb}} during optimization
@@ -83,7 +84,7 @@
 #' ### Set recruitment variability SD = 0.3 (since fix_tau = TRUE)
 #' res <- DD_SS(Data = Red_snapper, start = list(tau = 0.3))
 #' }
-#' @seealso \link{plot,Assessment,ANY-method} \link{summary,Assessment-method} \link{retrospective} \link{profile_likelihood} \link{make_MP}
+#' @seealso \link{plot.Assessment} \link{summary.Assessment} \link{retrospective} \link{profile} \link{make_MP}
 #' @useDynLib MSEtool
 #' @export
 DD_TMB <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start = NULL, fix_h = FALSE,
@@ -91,6 +92,8 @@ DD_TMB <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start
                    control = list(iter.max = 5e3, eval.max = 1e4), ...) {
   dependencies <- "Data@Cat, Data@Ind, Data@Mort, Data@L50, Data@vbK, Data@vbLinf, Data@vbt0, Data@wla, Data@wlb, Data@MaxAge"
   dots <- list(...)
+  start <- lapply(start, eval, envir = environment())
+
   SR <- match.arg(SR)
   Winf = Data@wla[x] * Data@vbLinf[x]^Data@wlb[x]
   age <- 1:Data@MaxAge
@@ -225,6 +228,8 @@ DD_SS <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start 
                   control = list(iter.max = 5e3, eval.max = 1e4), inner.control = list(), ...) {
   dependencies <- "Data@Cat, Data@Ind, Data@Mort, Data@L50, Data@vbK, Data@vbLinf, Data@vbt0, Data@wla, Data@wlb, Data@MaxAge"
   dots <- list(...)
+  start <- lapply(start, eval, envir = environment())
+
   SR <- match.arg(SR)
   Winf = Data@wla[x] * Data@vbLinf[x]^Data@wlb[x]
   age <- 1:Data@MaxAge
@@ -389,8 +394,10 @@ get_MSY_DD <- function(TMB_data, Arec, Brec) {
     U <- ilogit(x)
     SS <- S0 * (1 - U)
     Spr <- (SS * Alpha/(1 - SS) + wk)/(1 - Rho * SS)
-    if(SR == "BH") Req <- (Arec * Spr * (1 - U) - 1)/(Brec * Spr * (1 - U))
-    if(SR == "Ricker") Req <- log(Arec * Spr * (1 - U))/(Brec * Spr * (1 - U))
+    #if(SR == "BH") Req <- (Arec * Spr * (1 - U) - 1)/(Brec * Spr * (1 - U))
+    #if(SR == "Ricker") Req <- log(Arec * Spr * (1 - U))/(Brec * Spr * (1 - U))
+    if(SR == "BH") Req <- (Arec * Spr - 1)/(Brec * Spr)
+    if(SR == "Ricker") Req <- log(Arec * Spr)/(Brec * Spr)
     Beq <- Spr * Req
     Yield <- U * Beq
     return(-1 * Yield)

@@ -41,7 +41,7 @@ Punt, A. E, Dorn, M. W., and Haltuch, M. A. 2008. Evaluation of threshold manage
 for groundfish off the U.S. West Coast. Fisheries Research 94:251-266.
 }
 \seealso{
-\link{make_MP}
+\link{make_MP} \link{HCR_ramp}
 }
 \author{
 Q. Huynh

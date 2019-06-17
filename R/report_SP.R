@@ -1,392 +1,193 @@
-summary_SP <- function(Assessment) {
-  assign_Assessment_slots()
+summary_SP <- function(Assessment, state_space = FALSE) {
+  assign_Assessment_slots(Assessment)
 
-  current_status <- data.frame(Value = c(U_UMSY[length(U_UMSY)], B_BMSY[length(B_BMSY)],
+  current_status <- data.frame(Value = c(F_FMSY[length(F_FMSY)], B_BMSY[length(B_BMSY)],
                                          B_B0[length(B_B0)]))
-  rownames(current_status) <- c("U/UMSY", "B/BMSY", "B/B0")
+  rownames(current_status) <- c("F/FMSY", "B/BMSY", "B/B0")
 
-  if(length(obj$env$map) == 0) input_parameters <- data.frame()
-  else {
-    Value <- numeric(0)
-    Description <- character(0)
-    rownam <- character(0)
-    if("log_dep" %in% names(obj$env$map)) {
-      Value <- c(Value, TMB_report$dep)
-      Description <- c(Description, "Initial depletion")
-      rownam <- c(rownam, "dep")
-    }
-    if("log_n" %in% names(obj$env$map)) {
-      Value <- c(Value, TMB_report$n)
-      Description <- c(Description, "Production exponent")
-      rownam <- c(rownam, "n")
-    }
+  Value <- numeric(0)
+  Description <- character(0)
+  rownam <- character(0)
+  if("log_dep" %in% names(obj$env$map)) {
+    Value <- c(Value, TMB_report$dep)
+    Description <- c(Description, "Initial depletion")
+    rownam <- c(rownam, "dep")
+  }
+  if("log_n" %in% names(obj$env$map)) {
+    Value <- c(Value, TMB_report$n)
+    Description <- c(Description, "Production exponent")
+    rownam <- c(rownam, "n")
+  }
+  if("log_sigma" %in% names(obj$env$map)) {
+    Value <- c(Value, TMB_report$sigma)
+    Description <- c(Description, "Index SD (log-space)")
+    rownam <- c(rownam, "sigma")
+  }
+  if("log_tau" %in% names(obj$env$map)) {
+    Value <- c(Value, TMB_report$tau)
+    Description <- c(Description, "Biomass deviation SD (log-space)")
+    rownam <- c(rownam, "tau")
+  }
+  if(length(Value) == 0) input_parameters <- data.frame() else {
     input_parameters <- data.frame(Value = Value, Description = Description, stringsAsFactors = FALSE)
     rownames(input_parameters) <- rownam
   }
 
-  derived <- data.frame(Value = c(TMB_report$r, TMB_report$K, TMB_report$BMSY),
+  derived <- data.frame(Value = c(TMB_report$r, TMB_report$K, TMB_report$BMSY, TMB_report$BMSY/TMB_report$K),
                         Description = c("Intrinsic rate of population increase", "Carrying capacity",
-                                        "Biomass at MSY"),
+                                        "Biomass at MSY", "Depletion at MSY"),
                         stringsAsFactors = FALSE)
-  rownames(derived) <- c("r", "K", "BMSY")
+  rownames(derived) <- c("r", "K", "BMSY", "BMSY/B0")
 
   if(!is.character(SD)) {
-    model_estimates <- summary(SD)
-    model_estimates <- model_estimates[is.na(model_estimates[, 2]) || model_estimates[, 2] > 0, ]
+    if(state_space) {
+      if(is.null(obj$env$random)) {
+        model_estimates <- summary(SD)[rownames(summary(SD)) != "log_B_dev", ]
+        dev_estimates <- summary(SD)[rownames(summary(SD)) == "log_B_dev", ]
+      } else {
+        model_estimates <- rbind(summary(SD, "fixed"), summary(SD, "report"))
+        dev_estimates <- summary(SD, "random")
+      }
+      rownames(dev_estimates) <- paste0("log_B_dev_", names(Dev)[Dev != 0])
+      model_estimates <- model_estimates[is.na(model_estimates[, 2]) || model_estimates[, 2] > 0, ]
+      model_estimates <- rbind(model_estimates, dev_estimates)
+
+    } else model_estimates <- summary(SD)
+    model_estimates <- model_estimates[!is.na(model_estimates[, 2]) && model_estimates[, 2] > 0, ]
   } else {
     model_estimates <- SD
   }
 
-  output <- list(model = "Surplus Production", current_status = current_status,
+  model_name <- "Surplus Production"
+  if(state_space) model_name <- paste(model_name, "(State-Space)")
+  output <- list(model = model_name, current_status = current_status,
                  input_parameters = input_parameters, derived_quantities = derived,
                  model_estimates = model_estimates)
   return(output)
-
 }
 
-#' @import grDevices
-#' @importFrom stats qqnorm qqline
-generate_plots_SP <- function(Assessment, save_figure = FALSE, save_dir = tempdir()) {
-  assign_Assessment_slots()
+rmd_SP <- function(Assessment, state_space = FALSE) {
+  if(state_space) {
+    ss <- rmd_summary("Surplus Production (State-Space)")
+  } else ss <- rmd_summary("Surplus Production")
 
-  if(save_figure) {
-    prepare_to_save_figure()
-    index.report <- summary_SP(Assessment)
-    html_report(plot.dir, model = "Surplus Production",
-                current_status = index.report$current_status,
-                derived_quantities = index.report$derived_quantities,
-                model_estimates = index.report$model_estimates,
-                name = Name, report_type = "Index")
+  # Data section
+  data_section <- c(rmd_data_timeseries("Catch", header = "## Data\n"), rmd_data_timeseries("Index"))
+
+  # Assessment
+  #### Pars and Fit
+  assess_fit <- c(rmd_FMSY(header = "## Assessment {.tabset}\n### Estimates and Model Fit\n"), rmd_MSY(),
+                  rmd_F_FMSY_terminal(), rmd_B_BMSY_terminal(), rmd_B_B0_terminal(),
+                  rmd_assess_fit("Index", "index"), rmd_assess_resid("Index"), rmd_assess_qq("Index", "index"),
+                  rmd_assess_fit("Catch", "catch", match = TRUE))
+
+  if(state_space) {
+    assess_fit2 <- c(rmd_residual("Dev", fig.cap = "Time series of biomass deviations.", label = Assessment@Dev_type),
+                     rmd_residual("Dev", "SE_Dev", fig.cap = "Time series of biomass deviations with 95% confidence intervals.",
+                                  label = Assessment@Dev_type, conv_check = TRUE))
+    assess_fit <- c(assess_fit, assess_fit2)
   }
 
-  Year <- info$Year
-  C_hist <- info$data$C_hist
+  #### Time Series
+  ts_output <- c(rmd_F(header = "### Time Series Output\n"), rmd_F_FMSY(FALSE), rmd_B(), rmd_B_BMSY(FALSE),
+                 rmd_B_B0(FALSE), rmd_Kobe("B_BMSY", xlab = "expression(B/B[MSY])", conv_check = FALSE))
 
-  plot_timeseries(Year, C_hist, label = "Catch")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "data_catch.png"))
-    plot_timeseries(Year, C_hist, label = "Catch")
-    dev.off()
-    data.file.caption <- c("data_catch.png", "Catch time series")
-  }
+  productivity <- c(rmd_yield_F("SP", FALSE, header = "### Productivity\n"), rmd_yield_depletion("SP", FALSE), rmd_sp(FALSE))
 
-  #if(!is.na(Data@CV_Cat[1]) && sdconv(1, Data@CV_Cat[1]) > 0.01) {
-  #  plot_timeseries(Year, C_hist, obs_CV = Data@CV_Cat[1], label = "Catch")
-  #  if(save_figure) {
-  #    create_png(filename = file.path(plot.dir, "data_catch_with_CI.png"))
-  #    plot_timeseries(Year, C_hist, obs_CV = Data@CV_Cat[1], label = "Catch")
-  #    dev.off()
-  #    data.file.caption <- rbind(data.file.caption,
-  #                               c("data_catch_with_CI.png", "Catch time series with 95% confidence interval."))
-  #  }
-  #}
-
-  I_hist <- info$data$I_hist
-
-  plot_timeseries(Year, I_hist, label = "Index")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "data_index.png"))
-    plot_timeseries(Year, I_hist, label = "Index")
-    dev.off()
-    data.file.caption <- rbind(data.file.caption,
-                               c("data_index.png", "Index time series."))
-  }
-
-  #if(!is.na(Data@CV_Ind[1]) && sdconv(1, Data@CV_Ind[1]) > 0.01) {
-  #  plot_timeseries(Year, I_hist, obs_CV = Data@CV_Ind[1], label = "Index")
-  #  if(save_figure) {
-  #    create_png(filename = file.path(plot.dir, "data_index_with_CI.png"))
-  #    plot_timeseries(Year, I_hist, obs_CV = Data@CV_Ind[1], label = "Index")
-  #    dev.off()
-  #    data.file.caption <- rbind(data.file.caption,
-  #                               c("data_index_with_CI.png", "Index time series with 95% confidence interval."))
-  #  }
-  #}
-
-  if(save_figure) {
-    html_report(plot.dir, model = "Surplus Production",
-                captions = data.file.caption, name = Name, report_type = "Data")
-  }
-
-  if(conv) {
-    umsy.ind <- names(SD$par.fixed) == "logit_UMSY"
-    logit.umsy <- SD$par.fixed[umsy.ind]
-    logit.umsy.sd <- sqrt(diag(SD$cov.fixed)[umsy.ind])
-
-    plot_betavar(logit.umsy, logit.umsy.sd, is_logit = TRUE, label = expression(hat(U)[MSY]))
-    if(save_figure) {
-      create_png(filename = file.path(plot.dir, "assessment_UMSYestimate.png"))
-      plot_betavar(logit.umsy, logit.umsy.sd, is_logit = TRUE, label = expression(hat(U)[MSY]))
-      dev.off()
-      assess.file.caption <- c("assessment_UMSYestimate.png", "Estimate of UMSY, distribution based on normal approximation of estimated covariance matrix.")
-    }
-
-    msy.ind <- names(SD$par.fixed) == "log_MSY"
-    log.msy <- SD$par.fixed[msy.ind]
-    log.msy.sd <- sqrt(diag(SD$cov.fixed)[msy.ind])
-
-    plot_lognormalvar(log.msy, log.msy.sd, logtransform = TRUE, label = expression(widehat(MSY)))
-    if(save_figure) {
-      create_png(filename = file.path(plot.dir, "assessment_MSYestimate.png"))
-      plot_lognormalvar(log.msy, log.msy.sd, logtransform = TRUE, label = expression(widehat(MSY)))
-      dev.off()
-      assess.file.caption <- rbind(assess.file.caption,
-                                   c("assessment_MSYestimate.png", "Estimate of MSY, distribution based on normal approximation of estimated covariance matrix."))
-    }
-
-    Uy <- names(U_UMSY)[length(U_UMSY)]
-    plot_normalvar(U_UMSY[length(U_UMSY)], SE_U_UMSY_final, label = bquote(U[.(Uy)]/U[MSY]))
-    if(save_figure) {
-      create_png(filename = file.path(plot.dir, "assessment_U_UMSYestimate.png"))
-      plot_normalvar(U_UMSY[length(U_UMSY)], SE_U_UMSY_final, label = bquote(widehat(U[.(Uy)]/U[MSY])))
-      dev.off()
-      assess.file.caption <- rbind(assess.file.caption,
-                                   c("assessment_U_UMSYestimate.png",
-                                     paste0("Estimate of U/UMSY in ", Uy, ", distribution based on
-                                            normal approximation of estimated covariance matrix.")))
-    }
-
-    By <- names(B_BMSY)[length(B_BMSY)]
-    plot_normalvar(B_BMSY[length(B_BMSY)], SE_B_BMSY_final, label = bquote(B[.(By)]/B[MSY]))
-    if(save_figure) {
-      create_png(filename = file.path(plot.dir, "assessment_B_BMSYestimate.png"))
-      plot_normalvar(B_BMSY[length(B_BMSY)], SE_B_BMSY_final, label = bquote(widehat(B[.(By)]/B[MSY])))
-      dev.off()
-      assess.file.caption <- rbind(assess.file.caption,
-                                   c("assessment_B_BMSYestimate.png",
-                                     paste0("Estimate of B/BMSY in ", By, ", distribution based on
-                                            normal approximation of estimated covariance matrix.")))
-    }
-
-    By <- names(B_B0)[length(B_B0)]
-    plot_normalvar(B_B0[length(B_B0)], SE_B_B0_final, label = bquote(B[.(By)]/B[0]))
-    if(save_figure) {
-      create_png(filename = file.path(plot.dir, "assessment_B_B0estimate.png"))
-      plot_normalvar(B_B0[length(B_B0)], SE_B_B0_final, label = bquote(widehat(B[.(By)]/B[0])))
-      dev.off()
-      assess.file.caption <- rbind(assess.file.caption,
-                                   c("assessment_B_B0estimate.png",
-                                     paste0("Estimate of B/B0 in ", By, ", distribution based on
-                                            normal approximation of estimated covariance matrix.")))
-    }
-  }
-
-  plot_timeseries(Year, I_hist, Index, label = "Index")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_index.png"))
-    plot_timeseries(Year, I_hist, Index, label = "Index")
-    dev.off()
-    if(conv) assess.file.caption <- rbind(assess.file.caption,
-                                          c("assessment_index.png", "Observed (black) and predicted (red) index."))
-    else assess.file.caption <- c("assessment_index.png", "Observed (black) and predicted (red) index.")
-  }
-
-  plot_residuals(Year, log(I_hist/Index), label = "log(Index) Residual")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_index_residual.png"))
-    plot_residuals(Year, log(I_hist/Index), label = "log(Index) Residual")
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_index_residual.png", "Index residuals in log-space."))
-  }
-
-  qqnorm(log(I_hist/Index), main = "")
-  qqline(log(I_hist/Index))
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_index_qqplot.png"))
-    qqnorm(log(I_hist/Index), main = "")
-    qqline(log(I_hist/Index))
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_index_qqplot.png", "QQ-plot of index residuals in log-space."))
-  }
-
-  plot_timeseries(as.numeric(names(B)), B, label = "Biomass")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_biomass.png"))
-    plot_timeseries(as.numeric(names(B)), B, label = "Biomass")
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_biomass.png", "Time series of biomass."))
-  }
-
-  plot_timeseries(as.numeric(names(B_BMSY)), B_BMSY, label = expression(B/B[MSY]))
-  abline(h = 1, lty = 2)
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_B_BMSY.png"))
-    plot_timeseries(as.numeric(names(B_BMSY)), B_BMSY, label = expression(B/B[MSY]))
-    abline(h = 1, lty = 2)
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_B_BMSY.png", "Time series of B/BMSY."))
-  }
-
-  plot_timeseries(as.numeric(names(B_B0)), B_B0, label = expression(B/B[0]))
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_B_B0.png"))
-    plot_timeseries(as.numeric(names(B_B0)), B_B0, label = expression(B/B[0]))
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_B_B0.png", "Time series of biomass depletion."))
-  }
-
-  plot_timeseries(as.numeric(names(U)), U, label = "Exploitation rate (U)")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_exploitation.png"))
-    plot_timeseries(as.numeric(names(U)), U, label = "Exploitation rate (U)")
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_exploitation.png", "Time series of exploitation rate."))
-  }
-
-  plot_timeseries(as.numeric(names(U_UMSY)), U_UMSY, label = expression(U/U[MSY]))
-  abline(h = 1, lty = 2)
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_U_UMSY.png"))
-    plot_timeseries(as.numeric(names(U_UMSY)), U_UMSY, label = expression(U/U[MSY]))
-    abline(h = 1, lty = 2)
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_U_UMSY.png", "Time series of U/UMSY."))
-  }
-
-  plot_Kobe(B_BMSY, U_UMSY)
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_Kobe.png"))
-    plot_Kobe(B_BMSY, U_UMSY)
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_Kobe.png", "Kobe plot trajectory of stock."))
-  }
-
-  plot_yield_SP(TMB_report, UMSY, MSY, xaxis = "U")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_yield_curve_U.png"))
-    plot_yield_SP(TMB_report, UMSY, MSY, xaxis = "U")
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_yield_curve_U.png", "Yield plot relative to exploitation."))
-  }
-
-  plot_yield_SP(TMB_report, UMSY, MSY, xaxis = "Depletion")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_yield_curve_B_B0.png"))
-    plot_yield_SP(TMB_report, UMSY, MSY, xaxis = "Depletion")
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_yield_curve_B_B0.png", "Yield plot relative to depletion."))
-  }
-
-  plot_surplus_production(B, B0, C_hist)
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, "assessment_surplus_production.png"))
-    plot_surplus_production(B, B0, C_hist)
-    dev.off()
-    assess.file.caption <- rbind(assess.file.caption,
-                                 c("assessment_surplus_production.png", "Surplus production relative to depletion."))
-  }
-
-  if(save_figure) {
-    html_report(plot.dir, model = "Surplus Production",
-                captions = assess.file.caption, name = Name, report_type = "Assessment")
-    browseURL(file.path(plot.dir, "Assessment.html"))
-  }
-  invisible()
+  return(c(ss, data_section, assess_fit, ts_output, productivity))
 }
 
 
-#' @importFrom reshape2 acast
-profile_likelihood_SP <- function(Assessment, figure = TRUE, save_figure = FALSE,
-                                  save_dir = tempdir(), ...) {
+
+profile_likelihood_SP <- function(Assessment, ...) {
   dots <- list(...)
-  if(!"UMSY" %in% names(dots)) stop("Sequence of UMSY was not found. See help file.")
-  if(!"MSY" %in% names(dots)) stop("Sequence of MSY was not found. See help file.")
-  UMSY <- dots$UMSY
-  MSY <- dots$MSY
+  if(!"FMSY" %in% names(dots) && !"MSY" %in% names(dots)) stop("Sequence of neither FMSY nor MSY was found. See help file.")
+  if(!is.null(dots$FMSY)) FMSY <- dots$FMSY else {
+    FMSY <- Assessment@FMSY
+    profile_par <- "MSY"
+  }
+  if(!is.null(dots$MSY)) MSY <- dots$MSY else {
+    MSY <- Assessment@MSY
+    profile_par <- "FMSY"
+  }
 
   map <- Assessment@obj$env$map
   params <- Assessment@info$params
 
-  profile.grid <- expand.grid(UMSY = UMSY, MSY = MSY)
-  nll <- rep(NA, nrow(profile.grid))
-  for(i in 1:nrow(profile.grid)) {
-    params$logit_UMSY <- logit(profile.grid[i, 1])
-    params$log_MSY <- log(profile.grid[i, 2] * Assessment@info$rescale)
-    if(length(Assessment@obj$par) == 2) {
-      nll[i] <- Assessment@obj$fn(x = c(params$logit_UMSY, params$log_MSY))
-    } else { # More than 2 parameters
-      map$logit_UMSY <- map$log_MSY <- factor(NA)
-      obj2 <- MakeADFun(data = Assessment@info$data, parameters = Assessment@info$params,
-                        map = map, DLL = "MSEtool", silent = TRUE)
+  profile_grid <- expand.grid(FMSY = FMSY, MSY = MSY)
+  joint_profile <- !exists("profile_par")
 
+  profile_fn <- function(i, Assessment, params, map) {
+    params$log_FMSY <- log(profile_grid[i, 1])
+    params$log_MSY <- log(profile_grid[i, 2] * Assessment@info$rescale)
+
+    if(joint_profile && length(Assessment@obj$par) == 2) {
+      nll <- Assessment@obj$fn(x = c(params$log_FMSY, params$log_MSY))
+    } else {
+      if(joint_profile) map$log_MSY <- map$log_FMSY <- factor(NA) else {
+        if(profile_par == "MSY") map$log_MSY <- factor(NA) else map$log_FMSY <- factor(NA)
+      }
+      obj2 <- MakeADFun(data = Assessment@info$data, parameters = params, map = map,
+                        random = Assessment@obj$env$random, DLL = "MSEtool", silent = TRUE)
       opt2 <- optimize_TMB_model(obj2, Assessment@info$control)[[1]]
-      if(!is.character(opt2)) nll[i] <- opt2$objective
+      if(!is.character(opt2)) nll <- opt2$objective else nll <- NA
     }
+    return(nll)
   }
-  profile.grid$nll <- nll - Assessment@opt$objective
-  if(figure) {
-    z.mat <- acast(profile.grid, UMSY ~ MSY, value.var = "nll")
-    contour(x = UMSY, y = MSY, z = z.mat, xlab = expression(U[MSY]), ylab = "MSY",
-            nlevels = 20)
+  nll <- vapply(1:nrow(profile_grid), profile_fn, numeric(1), Assessment = Assessment, params = params, map = map) - Assessment@opt$objective
+  profile_grid$nll <- nll
 
-    UMSY.MLE <- Assessment@UMSY
-    MSY.MLE <- Assessment@MSY
-    points(UMSY.MLE, MSY.MLE, col = "red", cex = 1.5, pch = 16)
-
-    if(save_figure) {
-      Model <- Assessment@Model
-      prepare_to_save_figure()
-
-      create_png(file.path(plot.dir, "profile_likelihood.png"))
-      contour(x = UMSY, y = MSY, z = z.mat, xlab = expression(U[MSY]), ylab = "MSY",
-              nlevels = 20)
-      points(UMSY.MLE, MSY.MLE, col = "red", cex = 1.5, pch = 16)
-      dev.off()
-      profile.file.caption <- c("profile_likelihood.png",
-                                "Joint profile likelihood of UMSY and MSY. Numbers indicate change in negative log-likelihood relative to the minimum. Red point indicates maximum likelihood estimate.")
-
-      html_report(plot.dir, model = "Surplus Production",
-                  captions = matrix(profile.file.caption, nrow = 1),
-                  name = Assessment@Name, report_type = "Profile_Likelihood")
-      browseURL(file.path(plot.dir, "Profile_Likelihood.html"))
-    }
+  if(joint_profile) {
+    pars <- c("FMSY", "MSY")
+    MLE <- vapply(pars, function(x, y) slot(y, x), y = Assessment, numeric(1))
+  } else {
+    pars <- profile_par
+    MLE <- slot(Assessment, pars)
   }
-  return(profile.grid)
+
+  output <- new("prof", Model = Assessment@Model, Name = Assessment@Name, Par = pars, MLE = MLE, grid = profile_grid)
+  return(output)
 }
 
 
 
 
-#' @importFrom gplots rich.colors
-retrospective_SP <- function(Assessment, nyr, figure = TRUE,
-                             save_figure = FALSE, save_dir = tempdir()) {
-  assign_Assessment_slots()
-
-  data <- info$data
-  ny <- data$ny
-
+retrospective_SP <- function(Assessment, nyr, state_space = FALSE) {
+  assign_Assessment_slots(Assessment)
+  ny <- info$data$ny
   Year <- info$Year
   Year <- c(Year, max(Year) + 1)
-  C_hist <- data$C_hist
-  I_hist <- data$I_hist
-  params <- info$params
-  map <- obj$env$map
 
   # Array dimension: Retroyr, Year, ts
-  # ts includes: Calendar Year, B, U, relU, relB, dep
-  retro_ts <- array(NA, dim = c(nyr + 1, ny + 1, 6))
-  retro_est <- array(NA, dim = c(nyr + 1, dim(summary(SD))))
+  # ts includes: F, F/FMSY, B, B/BMSY, B/B0
+  retro_ts <- array(NA, dim = c(nyr + 1, ny + 1, 5))
+  TS_var <- c("F", "F_FMSY", "B", "B_BMSY", "B_B0")
+  dimnames(retro_ts) <- list(Peel = 0:nyr, Year = Year, Var = TS_var)
+
+  retro_est <- array(NA, dim = c(nyr + 1, length(SD$par.fixed[names(SD$par.fixed) != "log_B_dev"]), 2))
+  dimnames(retro_est) <- list(Peel = 0:nyr, Var = names(SD$par.fixed)[names(SD$par.fixed) != "log_B_dev"],
+                              Value = c("Estimate", "Std. Error"))
 
   SD <- NULL
   rescale <- info$rescale
 
+  data_ret <- info$data
+  params_ret <- info$params
+
   for(i in 0:nyr) {
     ny_ret <- ny - i
-    data$ny <- ny_ret
-    data$C_hist <- C_hist[1:ny_ret]
-    data$I_hist <- I_hist[1:ny_ret]
+    data_ret$ny <- ny_ret
+    data_ret$C_hist <- info$data$C_hist[1:ny_ret]
+    data_ret$I_hist <- info$data$I_hist[1:ny_ret]
 
-    obj2 <- MakeADFun(data = data, parameters = params, map = map,
+    map <- obj$env$map
+    if(state_space) {
+      data_ret$est_B_dev <- info$data$est_B_dev[1:ny_ret]
+      params_ret$log_B_dev <- rep(0, ny_ret)
+      map$log_B_dev <- obj$env$map$log_B_dev[1:ny_ret]
+    }
+
+    obj2 <- MakeADFun(data = data_ret, parameters = params_ret, map = map, random = obj$env$random,
                       DLL = "MSEtool", silent = TRUE)
     mod <- optimize_TMB_model(obj2, info$control)
     opt2 <- mod[[1]]
@@ -395,137 +196,78 @@ retrospective_SP <- function(Assessment, nyr, figure = TRUE,
     if(!is.character(opt2) && !is.character(SD)) {
       report <- obj2$report(obj2$env$last.par.best)
       if(rescale != 1) {
-        vars_div <- c("B", "BMSY", "SP", "K", "MSY")
+        vars_div <- c("B", "BMSY",  "K", "MSY", "Cpred", "SP")
         vars_mult <- NULL
         var_trans <- c("MSY", "K", "q")
         fun_trans <- c("/", "/", "*")
         fun_fixed <- c("log", NA, NA)
         rescale_report(vars_div, vars_mult, var_trans, fun_trans, fun_fixed)
       }
-	    B <- c(report$B, rep(NA, i))
+
+      FMort <- c(report$F, rep(NA, 1 + i))
+      F_FMSY <- FMort/report$FMSY
+      B <- c(report$B, rep(NA, i))
       B_BMSY <- B/report$BMSY
       B_B0 <- B/report$K
 
-      U <- c(report$U, rep(NA, 1 + i))
-      U_UMSY <- U/report$UMSY
+      retro_ts[i+1, , ] <- cbind(FMort, F_FMSY, B, B_BMSY, B_B0)
 
-      retro_ts[i+1, , ] <- cbind(Year, B, B_BMSY, B_B0, U, U_UMSY)
-      retro_est[i+1, , ] <- summary(SD)
+      sumry <- summary(SD, "fixed")
+      sumry <- sumry[rownames(sumry) != "log_B_dev", drop = FALSE]
+      retro_est[i+1, , ] <- sumry
 
     } else {
-      message(paste("Non-convergence when", i, "years of data were removed."))
+      message("Non-convergence when peel = ", i, " (years of data removed).")
     }
 
   }
-  if(figure) {
-    plot_retro_SP(retro_ts, retro_est, save_figure = save_figure, save_dir = save_dir,
-                  nyr_label = 0:nyr, color = rich.colors(nyr+1))
-  }
-  # Need to write legend
-  legend <- NULL
-  return(invisible(list(legend = legend, retro_ts = retro_ts, retro_est = retro_est)))
-}
 
-plot_retro_SP <- function(retro_ts, retro_est, save_figure = FALSE,
-                          save_dir = tempdir(), nyr_label, color) {
-  n_tsplots <- dim(retro_ts)[3] - 1
-  ts_label <- c("Biomass", expression(B/B[MSY]), expression(B/B[0]),
-                "Exploitation rate (U)", expression(U/U[MSY]))
-  Year <- retro_ts[1, , 1]
+  retro <- new("retro", Model = Assessment@Model, Name = Assessment@Name, TS_var = TS_var, TS = retro_ts,
+               Est_var = dimnames(retro_est)[[2]], Est = retro_est)
+  attr(retro, "TS_lab") <- c("Fishing mortality", expression(F/F[MSY]), "Biomass", expression(B/B[MSY]), expression(B/B[0]))
 
-  if(save_figure) {
-    Model <- "SP"
-    prepare_to_save_figure()
-  }
-
-  for(i in 1:n_tsplots) {
-    y.max <- max(retro_ts[, , i+1], na.rm = TRUE)
-    plot(Year, retro_ts[1, , i+1], typ = 'l', ylab = ts_label[i],
-         ylim = c(0, 1.1 * y.max), col = color[1])
-    for(j in 2:length(nyr_label)) {
-      lines(Year, retro_ts[j, , i+1], col = color[j])
-    }
-    legend("topleft", legend = nyr_label, lwd = 1, col = color, bty = "n",
-           title = "Years removed:")
-    abline(h = 0, col = 'grey')
-    if(i %in% c(2, 5)) abline(h = 1, lty = 2)
-
-    if(save_figure) {
-      create_png(filename = file.path(plot.dir, paste0("retrospective_", i, ".png")))
-      plot(Year, retro_ts[1, , i+1], typ = 'l', ylab = ts_label[i],
-           ylim = c(0, 1.1 * y.max), col = color[1])
-      for(j in 2:length(nyr_label)) {
-        lines(Year, retro_ts[j, , i+1], col = color[j])
-      }
-      legend("topleft", legend = nyr_label, lwd = 1, col = color, bty = "n",
-             title = "Years removed:")
-      abline(h = 0, col = 'grey')
-      if(i %in% c(2, 5)) abline(h = 1, lty = 2)
-      dev.off()
-    }
-  }
-
-  plot_betavar(retro_est[, 1, 1], retro_est[, 1, 2], is_logit = TRUE,
-               label = expression(hat(U)[MSY]), color = color)
-  legend("topleft", legend = nyr_label, lwd = 1, col = color, bty = "n",
-         title = "Years removed:")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, paste0("retrospective_", n_tsplots + 1, ".png")))
-    plot_betavar(retro_est[, 1, 1], retro_est[, 1, 2], is_logit = TRUE,
-                 label = expression(hat(U)[MSY]), color = color)
-    legend("topleft", legend = nyr_label, lwd = 1, col = color, bty = "n",
-           title = "Years removed:")
-    dev.off()
-  }
-
-  plot_lognormalvar(retro_est[, 2, 1], retro_est[, 2, 2], logtransform = TRUE,
-                    label = expression(widehat(MSY)), color = color)
-  legend("topleft", legend = nyr_label, lwd = 1, col = color, bty = "n",
-         title = "Years removed:")
-  if(save_figure) {
-    create_png(filename = file.path(plot.dir, paste0("retrospective_", n_tsplots + 2, ".png")))
-    plot_lognormalvar(retro_est[, 2, 1], retro_est[, 2, 2], logtransform = TRUE,
-                      label = expression(widehat(MSY)), color = color)
-    legend("topleft", legend = nyr_label, lwd = 1, col = color, bty = "n",
-           title = "Years removed:")
-    dev.off()
-  }
-
-  if(save_figure) {
-    ret.file.caption <- data.frame(x1 = paste0("retrospective_", c(1:(n_tsplots+2)), ".png"),
-                                   x2 = paste0("Retrospective pattern in ",
-                                               c("biomass", "B/BMSY", "biomass depletion",
-                                                 "exploitation", "U/UMSY", "UMSY estimate", "MSY estimate"), "."))
-
-    Assessment <- get("Assessment", envir = parent.frame())
-    html_report(plot.dir, model = "Surplus Production", captions = ret.file.caption,
-                name = Assessment@Name, report_type = "Retrospective")
-    browseURL(file.path(plot.dir, "Retrospective.html"))
-  }
-
-  invisible()
+  return(retro)
 }
 
 
-plot_yield_SP <- function(report, umsy, msy, BKratio = seq(0, 1, 0.01),
-                          xaxis = c("U", "Biomass", "Depletion"), relative_yaxis = FALSE) {
+summary_SP_SS <- function(Assessment) summary_SP(Assessment, TRUE)
+
+rmd_SP_SS <- function(Assessment) rmd_SP(Assessment, TRUE)
+
+profile_likelihood_SP_SS <- profile_likelihood_SP
+
+retrospective_SP_SS <- function(Assessment, nyr) retrospective_SP(Assessment, nyr, TRUE)
+
+
+
+
+
+plot_yield_SP <- function(data = NULL, report, fmsy, msy, xaxis = c("F", "Biomass", "Depletion"), relative_yaxis = FALSE) {
+  BKratio <- seq(0, 1, 0.01)
+
   K <- report$K
-  gamma.par <- report$gamma
   n <- report$n
   BMSY <- report$BMSY
-  Yield <- gamma.par * msy * (BKratio - BKratio^n)
+
+  if(n == 1) {
+    Yield <- ifelse(BKratio == 0, 0, -exp(1) * msy * BKratio * log(BKratio))
+  } else {
+    gamma.par <- n^(n/(n-1))/(n-1)
+    Yield <- gamma.par * msy * (BKratio - BKratio^n)
+  }
+
   Biomass <- BKratio * K
-  u.vector <- Yield/Biomass
+  F.vector <- Yield/Biomass
 
   if(relative_yaxis) {
     Yield <- Yield/max(Yield)
     ylab <- "Relative Equilibrium Yield"
   } else ylab <- "Equilibrium Yield"
 
-  if(xaxis == "U") {
-    plot(u.vector, Yield, typ = 'l', xlab = "Exploitation rate (U)", ylab = ylab)
-    segments(x0 = umsy, y0 = 0, y1 = max(Yield), lty = 2)
-    segments(x0 = 0, y0 = max(Yield), x1 = umsy, lty = 2)
+  if(xaxis == "F") {
+    plot(F.vector, Yield, typ = 'l', xlab = "Fishing Mortality F", ylab = ylab)
+    segments(x0 = fmsy, y0 = 0, y1 = max(Yield), lty = 2)
+    segments(x0 = 0, y0 = max(Yield), x1 = fmsy, lty = 2)
     abline(h = 0, col = 'grey')
   }
 
@@ -542,7 +284,7 @@ plot_yield_SP <- function(report, umsy, msy, BKratio = seq(0, 1, 0.01),
     segments(x0 = 0, y0 = max(Yield), x1 = BMSY/K, lty = 2)
     abline(h = 0, col = 'grey')
   }
-  invisible()
+  invisible(data.frame(F = F.vector, Yield = Yield, B = Biomass, B_B0 = BKratio))
 }
 
 #' Find the production parameter based on depletion that produces MSY
@@ -573,7 +315,7 @@ SP_production <- function(depletion, figure = TRUE) {
   if(depletion <= 0 || depletion >= 1) stop(paste("Proposed depletion =", depletion, "but value must be between 0 and 1."))
 
   calc_depletion <- function(n) {
-    depletion_MSY <- n^(1/(1-n))
+    depletion_MSY <- if(n==1) 1/exp(1) else n^(1/(1-n))
     return(depletion_MSY)
   }
   n_solver <- function(x) calc_depletion(x) - depletion
@@ -581,12 +323,25 @@ SP_production <- function(depletion, figure = TRUE) {
   n_answer <- round(get_n$root, 3)
 
   if(figure) {
-    gamm <- n_answer^(n_answer/(n_answer-1))/(n_answer-1)
-    umsy <- 0.1
-    msy <- umsy * depletion
-    plot_yield_SP(report = list(gamma = gamm, n = n_answer, BMSY = depletion, K = 1), umsy = umsy,
+    fmsy <- 0.1
+    msy <- fmsy * depletion
+    plot_yield_SP(report = list(n = n_answer, BMSY = depletion, K = 1), fmsy = fmsy,
                   msy = msy, xaxis = "Depletion", relative_yaxis = TRUE)
     title(paste0("Production exponent n = ", n_answer))
   }
   return(n_answer)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+

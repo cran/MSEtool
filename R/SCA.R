@@ -1,10 +1,15 @@
+
 #' Statistical catch-at-age (SCA) model
 #'
 #' A generic statistical catch-at-age model (single fleet, single season) that uses catch, index, and catch-at-age composition
-#' data. An annual harvest rate is calculated (assuming a pulse fishery) as described in Forrest et al. (2008).
-#' There are two parameterizations for estimation of recruitment deviations, the stock-recruit relationship,
-#' and reference points (see functions section below).
+#' data. \code{SCA} parameterizes R0 and steepness as leading productivity parameters in the assessment model. Recruitment is estimated
+#' as deviations from the resulting stock-recruit relationship. In \code{SCA2}, the mean recruitment in the time series is estimated and
+#' recruitment deviations around this mean are estimated as penalized parameters (similar to Cadigan 2016). The standard deviation is set high
+#' so that the recruitment is almost like free parameters. Unfished and MSY reference points are inferred afterwards from the assessment output
+#' (SSB and recruitment estimates). \code{SCA_Pope} is a variant of \code{SCA} that fixes the expected catch to the observed
+#' catch, and Pope's approximation is used to calculate the annual harvest rate (U).
 #'
+#' @aliases SCA2 SCA_Pope
 #' @param x A position in the Data object (by default, equal to one for assessments).
 #' @param Data An object of class Data
 #' @param SR Stock-recruit function (either \code{"BH"} for Beverton-Holt or \code{"Ricker"}).
@@ -17,12 +22,16 @@
 #' @param rescale A multiplicative factor that rescales the catch in the assessment model, which
 #' can improve convergence. By default, \code{"mean1"} scales the catch so that time series mean is 1, otherwise a numeric.
 #' Output is re-converted back to original units.
-#' @param start Optional list of starting values. See details.
+#' @param max_age Integer, the maximum age (plus-group) in the model.
+#' @param start Optional list of starting values. Entries can be expressions that are evaluated in the function. See details.
 #' @param fix_h Logical, whether to fix steepness to value in \code{Data@@steep} in the model for \code{SCA}. This only affects
 #' calculation of reference points for \code{SCA2}.
-#' @param fix_U_equilibrium Logical, whether the equilibrium harvest rate prior to the first year of the model
-#' is estimated. If \code{TRUE}, \code{U_equilibrium} is fixed to value provided in \code{start} (if provided),
-#' otherwise, equal to zero (assumes virgin conditions).
+#' @param fix_F_equilibrium Logical, whether the equilibrium fishing mortality prior to the first year of the model
+#' is estimated. If \code{TRUE}, \code{F_equilibrium} is fixed to value provided in \code{start} (if provided),
+#' otherwise, equal to zero (assumes unfished conditions).
+#' @param fix_U_equilibrium Logical, same as `fix_F_equilibrium` for `SCA_Pope`.
+#' @param fix_omega Logical, whether the standard deviation of the catch is fixed. If \code{TRUE},
+#' sigma is fixed to value provided in \code{start} (if provided), otherwise, value based on \code{Data@@CV_Cat}.
 #' @param fix_sigma Logical, whether the standard deviation of the index is fixed. If \code{TRUE},
 #' sigma is fixed to value provided in \code{start} (if provided), otherwise, value based on \code{Data@@CV_Ind}.
 #' @param fix_tau Logical, the standard deviation of the recruitment deviations is fixed. If \code{TRUE},
@@ -39,7 +48,8 @@
 #' By default, \code{"comp50"} uses the number of ages (smaller than the mode)
 #' for which the catch-at-age matrix has less than half the abundance than that at the mode.
 #' @param integrate Logical, whether the likelihood of the model integrates over the likelihood
-#' of the recruitment deviations (thus, treating it as a state-space variable).
+#' of the recruitment deviations (thus, treating it as a random effects/state-space variable).
+#' Otherwise, recruitment deviations are penalized parameters.
 #' @param silent Logical, passed to \code{\link[TMB]{MakeADFun}}, whether TMB
 #' will print trace information during optimization. Used for dignostics for model convergence.
 #' @param opt_hess Logical, whether the hessian function will be passed to \code{\link[stats]{nlminb}} during optimization
@@ -53,16 +63,14 @@
 #' is passed on to \code{\link[TMB]{newton}}.
 #' @param ... Other arguments to be passed.
 #' @details
-#' For the statistical catch-at-age model, the basic data inputs are catch (by weight), index
-#' (by weight/biomass), and catch-at-age matrix (by numbers). Catches are
-#' assumed to be known perfectly (the harvest rate in a given year is the ratio of the observed
-#' catch to the vulnerable biomass at the beginning of the year).
-#' The maximum age in the model is a plus-group.
+#' The basic data inputs are catch (by weight), index (by weight/biomass), and catch-at-age matrix (by numbers).
+#' Annual F's are estimated parameters assuming continuous fishing over the year. Note: prior to version 1.2, catches were assumed
+#' to be known perfectly with an annual harvest rate from pulse fishing in \code{SCA}. That feature has now moved to \code{SCA_Pope}.
 #'
 #' By default, steepness is fixed in the model to the value in \code{Data@@steep}.
 #'
-#' The annual sample sizes of the catch-at-age matrix is provided to the model (used in the
-#' likelihood for catch-at-age, assuming a multinomial distribution),
+#' The annual sample sizes of the catch-at-age matrix is provided to the model (used in the likelihood for catch-at-age assuming
+#' a multinomial distribution),
 #' and is manipulated via argument \code{CAA_multiplier}. This argument is
 #' interpreted in two different ways depending on the value provided.
 #' If \code{CAA_multiplier > 1}, then this value will cap the annual sample sizes
@@ -77,9 +85,11 @@
 #' \item \code{R0} Virgin recruitment, only for \code{SCA}.
 #' \item \code{h} Steepness, only for \code{SCA}. If not provided, the value in \code{Data@@steep} is used.
 #' \item \code{meanR} Mean recruitment, only for \code{SCA2}.
-#' \item \code{U_equilibrium} Harvest rate prior to the first year of model, e.g. zero means unfished conditions. Defaults to zero.
+#' \item \code{F_equilibrium} Fishing mortality prior to the first year of model, e.g. zero means unfished conditions. Defaults to zero.
 #' \item \code{vul_par} Vulnerability parameters (length 2 vector for logistic or length 4 for dome, see below). Users should provide
 #' estimates of the parameters in normal space, e.g. \code{vul_max} between 0-1, and the function will perform the appropriate transformations for the model.
+#' \item \code{F} A vector of F's of length nyears, \code{length(Data@@Year)}. If not provided, defaults to 0.1.
+#' \item \code{omega} Standard deviation of catch. If not provided, the value based on \code{Data@@CV_Cat} is used.
 #' \item \code{sigma} Standard deviation of index. If not provided, the value based on \code{Data@@CV_Ind} is used.
 #' \item \code{tau} Standard deviation of recruitment deviations. If not provided, the value in \code{Data@@sigmaR} is used.
 #' }
@@ -102,7 +112,8 @@
 #' \code{a_50 = a_asc - exp(vul_par[2])}.
 #' \item \code{vul_par[3]}: \code{a_des}, the last age of full vulnerability (where the descending limb starts) via logit transformation
 #' to constrain between \code{a_asc} and \code{max_age},
-#' i.e., \code{a_des = (max_age - a_asc) * plogis(vul_par[3]) + a_asc}.
+#' i.e., \code{a_des = (max_age - a_asc) * plogis(vul_par[3]) + a_asc}. By default, fixed to a small value so that the dome is effectively
+#' a three-parameter function.
 #' \item \code{vul_par[4]}: \code{vul_max}, the vulnerability (in logit space) at the maximum age.
 #' }
 #' Vague priors of \code{vul_par[2] ~ N(0, sd = 3)} and \code{vul_par[3] ~ N(0, 3)} are used to aid convergence,
@@ -111,54 +122,49 @@
 #' Cadigan, N.G. 2016. A state-space stock assessment model for northern cod, including under-reported catches and
 #' variable natural mortality rates. Canadian Journal of Fisheries and Aquatic Science 72:296-308.
 #'
-#' Forrest, R.E., Martell, S.J.D., Melnychuk, M.C., and Walters, C.J. 2008.
-#' An age-structured model with leading management parameters, incorporating
-#' age-specific selectivity and maturity. Canadian Journal of Fisheries and Aquatic
-#' Science 65:286-296.
-#'
 #' Maunder, M.N. 2011. Review and evaluation of likelihood functions for composition data in
 #' stock-assessment models: Estimating the effective sample size. Fisheries Research 209:311-319.
 #'
 #' Punt, A.E. and Kennedy, R.B. 1997. Population modelling of Tasmanian rock lobster, Jasus edwardsii, resources. Marine and Freshwater
 #' Research 48:967-980.
+#'
 #' @examples
 #' \donttest{
 #' res <- SCA(Data = DLMtool::SimulatedData)
 #' res2 <- SCA2(Data = DLMtool::Simulation_1)
 #' }
-#' @describeIn SCA The parameterization with R0 and steepness as leading parameters. Recruitment is estimated
-#' as deviations from the resulting stock-recruit relationship.
 #' @section Required Data:
 #' \itemize{
-#' \item \code{SCA}: Cat, Ind, Mort, L50, L95, CAA, vbK, vbLinf, vbt0, wla, wlb, MaxAge
-#' \item \code{SCA2}: Cat, Ind, Mort, L50, L95, CAA, vbK, vbLinf, vbt0, wla, wlb, MaxAge
+#' \item \code{SCA}, \code{SCA_Pope}, and \code{SCA_Pope}: Cat, Ind, Mort, L50, L95, CAA, vbK, vbLinf, vbt0, wla, wlb, MaxAge
 #' }
 #' @section Optional Data:
 #' \itemize{
-#' \item \code{SCA}: Rec, steep, sigmaR, CV_Ind
-#' \item \code{SC2}: Rec, steep, CV_Ind
+#' \item \code{SCA}: Rec, steep, sigmaR, CV_Ind, CV_Cat
+#' \item \code{SC2}: Rec, steep, CV_Ind, CV_Cat
+#' \item \code{SCA_Pope}: Rec, steep, sigmaR, CV_Ind
 #' }
-#' @note For a given catch history, the starting value of \code{R0} or \code{meanR} may be too low and the population crashes in
-#' the middle of the time series. If the assessment function detects this pattern is occurring, it will increase \code{R0} or \code{meanR}
-#' before running the model.
 #' @author Q. Huynh
 #' @return An object of class \linkS4class{Assessment}.
-#' @seealso \link{plot,Assessment,ANY-method} \link{summary,Assessment-method} \link{retrospective} \link{profile_likelihood} \link{make_MP}
+#' @seealso \link{plot.Assessment} \link{summary.Assessment} \link{retrospective} \link{profile} \link{make_MP}
 #' @useDynLib MSEtool
 #' @export
-SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic", "dome"),
-                CAA_dist = c("multinomial", "lognormal"), CAA_multiplier = 50, I_type = c("B", "VB", "SSB"), rescale = "mean1",
-                start = NULL, fix_h = TRUE, fix_U_equilibrium = TRUE, fix_sigma = FALSE, fix_tau = TRUE,
+SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic", "dome"), CAA_dist = c("multinomial", "lognormal"),
+                CAA_multiplier = 50, I_type = c("B", "VB", "SSB"), rescale = "mean1", max_age = Data@MaxAge,
+                start = NULL, fix_h = TRUE, fix_F_equilibrium = TRUE, fix_omega = TRUE, fix_sigma = FALSE, fix_tau = TRUE,
                 early_dev = c("comp_onegen", "comp", "all"), late_dev = "comp50", integrate = FALSE,
                 silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
                 control = list(iter.max = 2e5, eval.max = 4e5), inner.control = list(), ...) {
   dependencies <- "Data@Cat, Data@Ind, Data@Mort, Data@L50, Data@L95, Data@CAA, Data@vbK, Data@vbLinf, Data@vbt0, Data@wla, Data@wlb, Data@MaxAge"
   dots <- list(...)
+  start <- lapply(start, eval, envir = environment())
+
+  max_age <- as.integer(min(max_age, Data@MaxAge))
   vulnerability <- match.arg(vulnerability)
   CAA_dist <- match.arg(CAA_dist)
   SR <- match.arg(SR)
   I_type <- match.arg(I_type)
   early_dev <- match.arg(early_dev)
+
   if(any(names(dots) == "yind")) {
     yind <- eval(dots$yind)
   } else {
@@ -170,7 +176,8 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
   if(any(is.na(C_hist) | C_hist < 0)) warning("Error. Catch time series is not complete.")
   I_hist <- Data@Ind[x, yind]
   Data <- expand_comp_matrix(Data, "CAA") # Make sure dimensions of CAA match that in catch (nyears).
-  CAA_hist <- Data@CAA[x, yind, ]
+  CAA_hist <- Data@CAA[x, yind, 1:max_age]
+  if(max_age < Data@MaxAge) CAA_hist[, max_age] <- rowSums(Data@CAA[x, yind, max_age:Data@MaxAge], na.rm = TRUE)
 
   CAA_n_nominal <- rowSums(CAA_hist)
   if(CAA_multiplier <= 1) {
@@ -178,7 +185,6 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
   } else CAA_n_rescale <- pmin(CAA_multiplier, CAA_n_nominal)
 
   n_y <- length(C_hist)
-  max_age <- Data@MaxAge
   M <- rep(Data@Mort[x], max_age)
   a <- Data@wla[x]
   b <- Data@wlb[x]
@@ -190,6 +196,7 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
   A50 <- min(0.5 * max_age, iVB(t0, K, Linf, Data@L50[x]))
   A95 <- max(A50+0.5, iVB(t0, K, Linf, Data@L95[x]))
   mat_age <- 1/(1 + exp(-log(19) * (c(1:max_age) - A50)/(A95 - A50)))
+  mat_age <- mat_age/max(mat_age)
   LH <- list(LAA = La, WAA = Wa, Linf = Linf, K = K, t0 = t0, a = a, b = b, A50 = A50, A95 = A95)
 
   if(early_dev == "all") {
@@ -230,7 +237,8 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
                CAA_hist = t(apply(CAA_hist, 1, function(x) x/sum(x))),
                CAA_n = CAA_n_rescale, n_y = n_y, max_age = max_age, M = M,
                weight = Wa, mat = mat_age, vul_type = vulnerability, I_type = I_type,
-               SR_type = SR, CAA_dist = CAA_dist, est_early_rec_dev = est_early_rec_dev, est_rec_dev = est_rec_dev)
+               SR_type = SR, CAA_dist = CAA_dist, est_early_rec_dev = est_early_rec_dev,
+               est_rec_dev = est_rec_dev)
 
   # Starting values
   params <- list()
@@ -244,9 +252,9 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
         params$transformed_h <- log(start$h[1] - 0.2)
       }
     }
-    if(!is.null(start$U_equilibrium) && is.numeric(start$U_equilibrium)) params$U_equilibrium <- start$U_equilibrium
+    if(!is.null(start$F_equilibrium) && is.numeric(start$F_equilibrium)) params$F_equilibrium <- start$F_equilibrium
     if(!is.null(start$vul_par) && is.numeric(start$vul_par)) {
-      if(start$vul_par[1] > 0.75 * max_age) stop("start$vul_par[1] needs to be greater than 0.75 * Data@MaxAge (see help).")
+      if(start$vul_par[1] > 0.75 * max_age) stop("start$vul_par[1] needs to be less than 0.75 * Data@MaxAge (see help).")
       if(vulnerability == "logistic") {
         if(length(start$vul_par) < 2) stop("Two parameters needed for start$vul_par with logistic vulnerability (see help).")
         if(start$vul_par[1] <= start$vul_par[2]) stop("start$vul_par[1] needs to be greater than start$vul_par[2] (see help).")
@@ -265,6 +273,9 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
                             logit(1/(max_age - start$vul_par[1])), logit(start$vul_par[4]))
       }
     }
+    if(!is.null(start$F) && is.numeric(start$F)) params$logF <- log(start$F)
+
+    if(!is.null(start$omega) && is.numeric(start$omega)) params$log_omega <- log(start$omega)
     if(!is.null(start$sigma) && is.numeric(start$sigma)) params$log_sigma <- log(start$sigma)
     if(!is.null(start$tau) && is.numeric(start$tau)) params$log_tau <- log(start$tau)
   }
@@ -282,7 +293,7 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
       params$transformed_h <- log(h_start - 0.2)
     }
   }
-  if(is.null(params$U_equilibrium)) params$U_equilibrium <- 0
+  if(is.null(params$F_equilibrium)) params$F_equilibrium <- 0
   if(is.null(params$vul_par)) {
     CAA_mode <- which.max(colSums(CAA_hist, na.rm = TRUE))
     if((is.na(Data@LFC[x]) && is.na(Data@LFS[x])) || (Data@LFC[x] > Linf) || (Data@LFS[x] > Linf)) {
@@ -298,12 +309,18 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
 
       if(vulnerability == "logistic") params$vul_par <- c(logit(Afull/max_age/0.75), log(Afull - A50_vul))
       if(vulnerability == "dome") {
-        params$vul_par <- c(logit(Afull/max_age/0.75), log(Afull - A50_vul), logit(1/(max_age - Afull)), logit(0.5))
+        params$vul_par <- c(logit(Afull/max_age/0.75), log(Afull - A50_vul), logit(0.1/(max_age - Afull)), logit(0.5))
       }
     }
   }
+  if(is.null(params$logF)) params$logF <- rep(log(0.1), n_y)
+
+  if(is.null(params$log_omega)) {
+    sigmaC <- max(0.01, sdconv(1, Data@CV_Cat[x]), na.rm = TRUE)
+    params$log_omega <- log(sigmaC)
+  }
   if(is.null(params$log_sigma)) {
-    sigmaI <- max(0.05, sdconv(1, Data@CV_Ind[x]), na.rm = TRUE)
+    sigmaI <- max(0.01, sdconv(1, Data@CV_Ind[x]), na.rm = TRUE)
     params$log_sigma <- log(sigmaI)
   }
   if(is.null(params$log_tau)) {
@@ -317,8 +334,17 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
                inner.control = inner.control, rescale = rescale)
 
   map <- list()
+  if(any(info$data$C_hist <= 0)) {
+    ind <- info$data$C_hist <= 0
+    info$params$logF[ind] <- -20
+    map_logF <- length(params$logF)
+    map_logF[ind] <- NA
+    map_logF[!ind] <- 1:sum(!ind)
+    map$logF <- factor(map_logF)
+  }
   if(fix_h) map$transformed_h <- factor(NA)
-  if(fix_U_equilibrium) map$U_equilibrium <- factor(NA)
+  if(fix_F_equilibrium) map$F_equilibrium <- factor(NA)
+  if(fix_omega) map$log_omega <- factor(NA)
   if(fix_sigma) map$log_sigma <- factor(NA)
   if(fix_tau) map$log_tau <- factor(NA)
   if(any(is.na(est_early_rec_dev))) {
@@ -334,6 +360,7 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
     est_rec_dev[!is.na(est_rec_dev)] <- 1:n_est
     map$log_rec_dev <- factor(est_rec_dev)
   }
+  if(vulnerability == "dome") map$vul_par <- factor(c(1, 2, NA, 3))
 
   random <- NULL
   if(integrate) random <- c("log_early_rec_dev", "log_rec_dev")
@@ -341,30 +368,13 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
   obj <- MakeADFun(data = info$data, parameters = info$params, hessian = TRUE,
                    map = map, random = random, DLL = "MSEtool", inner.control = inner.control, silent = silent)
 
-  # Add starting values for rec-devs and increase R0 start value if U is too high (> 0.975)
-  high_U <- try(obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0, silent = TRUE)
-  if(!is.character(high_U) && high_U) {
-    Recruit <- try(Data@Rec[x, ], silent = TRUE)
-    if(is.numeric(Recruit) && length(Recruit) == n_y && any(!is.na(Recruit))) {
-      log_rec_dev <- log(Recruit/mean(Recruit, na.rm = TRUE))
-      log_rec_dev[is.na(est_rec_dev) | is.na(log_rec_dev) | is.infinite(log_rec_dev)] <- 0
-      info$params$log_rec_dev <- log_rec_dev
-
-      obj <- MakeADFun(data = info$data, parameters = info$params, hessian = TRUE,
-                       map = map, random = random, DLL = "MSEtool", inner.control = inner.control, silent = silent)
-    }
-    while(obj$par["log_R0"] < 30 && obj$report(c(obj$par, obj$env$last.par[obj$env$random]))$penalty > 0) {
-      obj$par["log_R0"] <- obj$par["log_R0"] + 1
-    }
-  }
-
   mod <- optimize_TMB_model(obj, control, opt_hess, n_restart)
   opt <- mod[[1]]
   SD <- mod[[2]]
   report <- obj$report(obj$env$last.par.best)
 
   if(rescale != 1) {
-    vars_div <- c("B", "E", "CAApred", "CN", "N", "VB", "R", "R_early", "VB0", "R0", "B0", "E0", "N0")
+    vars_div <- c("B", "E", "CAApred", "CN", "Cpred", "N", "VB", "R", "R_early", "VB0", "R0", "B0", "E0", "N0")
     vars_mult <- "Brec"
     var_trans <- c("R0", "q")
     fun_trans <- c("/", "*")
@@ -385,7 +395,7 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
   Assessment <- new("Assessment", Model = "SCA", Name = Data@Name, conv = !is.character(SD) && SD$pdHess,
                     B0 = report$B0, R0 = report$R0, N0 = report$N0,
                     SSB0 = report$E0, VB0 = report$VB0,
-                    h = report$h, U = structure(report$U, names = Year),
+                    h = report$h, FMort = structure(report$F, names = Year),
                     B = structure(report$B, names = Yearplusone),
                     B_B0 = structure(report$B/report$B0, names = Yearplusone),
                     SSB = structure(report$E, names = Yearplusone),
@@ -400,18 +410,18 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
                     Obs_Catch = structure(C_hist, names = Year),
                     Obs_Index = structure(I_hist, names = Year),
                     Obs_C_at_age = CAA_hist,
-                    Catch = structure(colSums(t(report$CAApred) * Wa), names = Year),
+                    Catch = structure(report$Cpred, names = Year),
                     Index = structure(report$Ipred, names = Year),
                     C_at_age = report$CAApred,
                     Dev = Dev_out,
                     Dev_type = "log-Recruitment deviations",
-                    NLL = structure(c(nll_report, report$nll_comp, report$penalty),
-                                    names = c("Total", "Index", "CAA", "Dev", "Penalty")),
+                    NLL = structure(c(nll_report, report$nll_comp, report$penalty + report$prior),
+                                    names = c("Total", "Index", "CAA", "Catch", "Dev", "Penalty")),
                     info = info, obj = obj, opt = opt, SD = SD, TMB_report = report,
                     dependencies = dependencies)
 
   if(Assessment@conv) {
-    ref_pt <- get_MSY(Arec = report$Arec, Brec = report$Brec, M = M, weight = Wa, mat = mat_age, vul = report$vul, SR = SR)
+    ref_pt <- SCA_MSY_calc(Arec = report$Arec, Brec = report$Brec, M = M, weight = Wa, mat = mat_age, vul = report$vul, SR = SR)
     report <- c(report, ref_pt)
 
     if(integrate) {
@@ -438,12 +448,12 @@ SCA <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("logistic
       SE_Dev[is.na(SE_Dev)] <- 0
     }
 
-    Assessment@UMSY <- report$UMSY
+    Assessment@FMSY <- report$FMSY
     Assessment@MSY <- report$MSY
     Assessment@BMSY <- report$BMSY
     Assessment@SSBMSY <- report$EMSY
     Assessment@VBMSY <- report$VBMSY
-    Assessment@U_UMSY <- structure(report$U/report$UMSY, names = Year)
+    Assessment@F_FMSY <- structure(report$F/report$FMSY, names = Year)
     Assessment@B_BMSY <- structure(report$B/report$BMSY, names = Yearplusone)
     Assessment@SSB_SSBMSY <- structure(report$E/report$EMSY, names = Yearplusone)
     Assessment@VB_VBMSY <- structure(report$VB/report$VBMSY, names = Yearplusone)
@@ -457,136 +467,94 @@ class(SCA) <- "Assess"
 
 
 
-get_MSY <- function(Arec, Brec, M, weight, mat, vul, SR = c("BH", "Ricker")) {
+SCA_MSY_calc <- function(Arec, Brec, M, weight, mat, vul, SR = c("BH", "Ricker")) {
   SR <- match.arg(SR)
   maxage <- length(M)
 
-  solveMSY <- function(logit_U) {
-    U <- ilogit(logit_U)
-    surv <- exp(-M) * (1 - vul * U)
+  solveMSY <- function(logF) {
+    Fmort <- exp(logF)
+    surv <- exp(-vul * Fmort - M)
     NPR <- c(1, cumprod(surv[1:(maxage-1)]))
     NPR[maxage] <- NPR[maxage]/(1 - surv[maxage])
     EPR <- sum(NPR * mat * weight)
     if(SR == "BH") Req <- (Arec * EPR - 1)/(Brec * EPR)
     if(SR == "Ricker") Req <- log(Arec * EPR)/(Brec * EPR)
-    YPR <- vul * U * NPR * weight
-    Yield <- Req * sum(YPR)
+    CPR <- vul * Fmort/(vul * Fmort + M) * NPR * (1 - exp(-vul * Fmort - M))
+    Yield <- Req * sum(CPR * weight)
     return(-1 * Yield)
   }
 
-  opt2 <- optimize(solveMSY, interval = c(logit(0.01), logit(0.99)))
-  UMSY <- 1/(1 + exp(-opt2$minimum))
+  opt2 <- optimize(solveMSY, interval = c(-6, 6))
+  FMSY <- exp(opt2$minimum)
   MSY <- -1 * opt2$objective
-  VBMSY <- MSY/UMSY
 
-  surv_UMSY <- exp(-M) * (1 - vul * UMSY)
-  NPR_UMSY <- c(1, cumprod(surv_UMSY[1:(maxage-1)]))
-  NPR_UMSY[maxage] <- NPR_UMSY[maxage]/(1 - surv_UMSY[maxage])
+  surv_MSY <- exp(-vul * FMSY - M)
+  NPR_MSY <- c(1, cumprod(surv_MSY[1:(maxage-1)]))
+  NPR_MSY[maxage] <- NPR_MSY[maxage]/(1 - surv_MSY[maxage])
 
-  RMSY <- VBMSY/sum(vul * NPR_UMSY * weight)
-  BMSY <- RMSY * sum(NPR_UMSY * weight)
-  EMSY <- RMSY * sum(NPR_UMSY * weight * mat)
-  return(list(UMSY = UMSY, MSY = MSY, VBMSY = VBMSY, RMSY = RMSY, BMSY = BMSY, EMSY = EMSY))
+  EPR_MSY <- sum(NPR_MSY * weight * mat)
+  if(SR == "BH") RMSY <- (Arec * EPR_MSY - 1)/(Brec * EPR_MSY)
+  if(SR == "Ricker") RMSY <- log(Arec * EPR_MSY)/(Brec * EPR_MSY)
+
+  VBMSY <- RMSY * sum(NPR_MSY * weight * vul)
+  BMSY <- RMSY * sum(NPR_MSY * weight)
+  EMSY <- RMSY * EPR_MSY
+
+  return(list(FMSY = FMSY, MSY = MSY, VBMSY = VBMSY, RMSY = RMSY, BMSY = BMSY, EMSY = EMSY))
 }
 
 
-get_MSY_opt <- function(x, M, weight, mat, SR = c("BH", "Ricker"), vul_type = c("logistic", "dome"), h = NULL, fix_h = FALSE,
-                        est_deriv = FALSE) {
-  SR <- match.arg(SR)
-  vul_type <- match.arg(vul_type)
+SCA_refpt_calc <- function(E, R, weight, mat, M, vul, SR, fix_h, h) {
+  # Per-recruit quantities
   maxage <- length(M)
-
-  R0 <- exp(x[names(x) == "log_R0"])
-  vul <- vul_fn(x[names(x) == "vul_par"], maxage, vul_type)
-
   surv0 <- exp(-M)
   NPR0 <- c(1, cumprod(surv0[1:(maxage-1)]))
-  NPR0[maxage] <- NPR0[maxage]/(1 - surv0[maxage])
-  E0 <- R0 * sum(NPR0 * weight * mat)
-  EPR0 <- E0/R0
+  NPR0[maxage] <- NPR0[maxage]/(1 - exp(-M[maxage]))
+  EPR0 <- sum(NPR0 * weight * mat)
 
-  if(!fix_h) {
-    if(SR == "BH") {
-      h <- 0.2 + 0.8/(1 + exp(-x[names(x) == "transformed_h"]))
-      Arec <- 4*h/(1-h)/EPR0
-      Brec <- (5*h-1)/(1-h)/E0
+  # Fit stock-recruit curve
+  Rpred <- sigmaR <- NULL
+  solve_SR_par <- function(x, h = NULL) {
+    R0 <- exp(x[1])
+    E0 <- R0 * EPR0
+    if(!fix_h) {
+      if(SR == "BH") h <- 0.2 + 0.8 * ilogit(x[2])
+      if(SR == "Ricker") h <- 0.2 + exp(x[2])
     }
-    if(SR == "Ricker") {
-      h <- 0.2 + exp(x[names(x) == "transformed_h"])
-      Arec <- 1/EPR0 * (5*h)^1.25
-      Brec <- 1.25 * log(5*h) / E0
-    }
+    if(SR == "BH") Rpred <<- (0.8 * R0 * h * E)/(0.2 * EPR0 * R0 *(1-h)+(h-0.2)*E)
+    if(SR == "Ricker") Rpred <<- E/EPR0 * (5*h)^(1.25 * (1 - E/E0))
+    sigmaR <<- sqrt(sum((log(R/Rpred))^2)/length(Rpred))
+    nLL <- -sum(dnorm(log(R/Rpred), -0.5 * sigmaR^2, sigmaR, log = TRUE))
+    return(nLL)
   }
 
-  solveMSY <- function(logit_U) {
-    U <- ilogit(logit_U)
-    surv <- exp(-M) * (1 - vul * U)
-    NPR <- c(1, cumprod(surv[1:(maxage-1)]))
-    NPR[maxage] <- NPR[maxage]/(1 - surv[maxage])
-    EPR <- sum(NPR * mat * weight)
-    if(SR == "BH") Req <- (Arec * EPR - 1)/(Brec * EPR)
-    if(SR == "Ricker") Req <- log(Arec * EPR)/(Brec * EPR)
-    YPR <- vul * U * NPR * weight
-    Yield <- Req * sum(YPR)
-    return(-1 * Yield)
+  if(fix_h) {
+    opt <- optimize(solve_SR_par, interval = c(-10, 10), h = h)$minimum
+    R0 <- exp(opt)
+  } else {
+    opt <- nlminb(c(10, 10), solve_SR_par)
+    R0 <- exp(opt$par[1])
+    if(SR == "BH") h <- 0.2 + 0.8 * ilogit(opt$par[2])
+    if(SR == "Ricker") h <- 0.2 + exp(opt$par[2])
   }
 
-  opt2 <- optimize(solveMSY, interval = c(logit(0.01), logit(0.99)))
-  UMSY <- ilogit(opt2$minimum)
-  MSY <- -1 * as.numeric(opt2$objective)
+  # Virgin reference points
+  N0 <- R0 * sum(NPR0)
+  E0 <- R0 * EPR0
+  VB0 <- R0 * sum(NPR0 * weight * vul)
+  B0 <- R0 * sum(NPR0 * weight)
 
-  res <- c(UMSY = UMSY, MSY = MSY)
-  if(!est_deriv) {
-    VBMSY <- MSY/UMSY
-    surv_UMSY <- exp(-M) * (1 - vul * UMSY)
-    NPR_UMSY <- c(1, cumprod(surv_UMSY[1:(maxage-1)]))
-    NPR_UMSY[maxage] <- NPR_UMSY[maxage]/(1 - surv_UMSY[maxage])
+  # Steepness
+  if(SR == "BH") {
+    Arec <- 4*h/(1-h)/EPR0
+    Brec <- (5*h-1)/(1-h)/E0
+  }
+  if(SR == "Ricker") {
+    Arec <- 1/EPR0 * (5*h)^1.25
+    Brec <- 1.25 * log(5*h) / E0
+  }
 
-    RMSY <- VBMSY/sum(vul * NPR_UMSY * weight)
-    BMSY <- RMSY * sum(NPR_UMSY * weight)
-    EMSY <- RMSY * sum(NPR_UMSY * weight * mat)
-    res2 <- c(VBMSY = VBMSY, RMSY = RMSY, BMSY = BMSY, EMSY = EMSY)
-  } else res2 <- NULL
-
-  return(c(res, res2))
+  refpt_unfished <- list(h = h, Arec = Arec, Brec = Brec, E0 = E0, R0 = R0, N0 = N0, VB0 = VB0, B0 = B0, EPR0 = EPR0, NPR0 = NPR0)
+  refpt_MSY <- SCA_MSY_calc(Arec, Brec, M, weight, mat, vul, SR = SR)
+  return(c(refpt_unfished, refpt_MSY))
 }
-
-
-vul_fn <- function(vul_par, maxage, type) {
-  age <- 1:maxage
-
-  if(type == "logistic") {
-    a50 <- vul_par[1]
-    a95 <- a50 + exp(vul_par[2])
-    vul <- 1/(1 + exp(-log(19) * (age - a50)/(a95 - a50)))
-  }
-  if(type == "dome") {
-    sd_asc <- exp(vul_par[1])
-    mu_asc <- vul_par[2]
-    mu_des <- mu_asc + exp(vul_par[3])
-    sd_des <- exp(vul_par[4])
-
-    denom_asc <- dnorm(mu_asc, mu_asc, sd_asc)
-    denom_des <- dnorm(mu_des, mu_des, sd_des)
-
-    vul <- rep(NA, maxage)
-    for(i in age) {
-      if(i <= mu_asc) {
-        vul[i] <- dnorm(i, mu_asc, sd_asc)/denom_asc
-      } else if(i <= mu_des) {
-        vul[i] <- 1
-      } else {
-        vul[i] <- dnorm(i, mu_des, sd_des)/denom_des
-      }
-    }
-  }
-  return(vul)
-}
-
-
-#SD_ind <- names(SD$par.fixed) == "log_R0" | names(SD$par.fixed) == "transformed_h" | names(SD$par.fixed) == "vul_par"
-#ref_pt2 <- get_MSY_opt(SD$par.fixed[SD_ind], M = M, weight = Wa, mat = mat_age, SR = SR, vul_type = vulnerability, h = report$h,
-#                       fix_h = fix_h, est_deriv = FALSE)
-#MSY_grad <- numDeriv::jacobian(get_MSY_opt, x = SD$par.fixed[SD_ind], M = M, weight = Wa, mat = mat_age, SR = SR,
-#                               vul_type = vulnerability, h = report$h, fix_h = fix_h, est_deriv = TRUE)
-#MSY_covar <- MSY_grad %*% SD$cov.fixed[SD_ind, SD_ind] %*% t(MSY_grad)

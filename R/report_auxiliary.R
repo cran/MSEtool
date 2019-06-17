@@ -1,36 +1,143 @@
 
-# Call from inside generate_plots() and summary.Assessment
-assign_Assessment_slots <- function() {
-  Assessment <- get("Assessment", envir = parent.frame())
-  Nslots <- length(slotNames(Assessment))
-  for(i in 1:Nslots) {
-    assign(slotNames(Assessment)[i], slot(Assessment, slotNames(Assessment)[i]),
-           envir = parent.frame())
+
+#' Compare output from several assessment models
+#'
+#' Plot biomass, recruitment, and fishing mortality time series from several . This function can be used to compare outputs among
+#' different assessment models from the same Data object.
+#'
+#' @param ... Objects of class \linkS4class{Assessment}.
+#' @param label A character vector of the models for the legend.
+#' @param color A vector of colors for each assessment model.
+#' @author Q. Huynh
+#' @return A set of figures of biomass, recruitment, and fishing mortality estimates among the models.
+#' @examples
+#' res <- cDD_SS(Data = DLMtool::SimulatedData)
+#' res2 <- SCA(Data = DLMtool::SimulatedData)
+#' res3 <- SCA2(Data = DLMtool::SimulatedData)
+#' res4 <- VPA(Data = DLMtool::SimulatedData)
+#'
+#' compare_models(res, res2, res3)
+#' @importFrom gplots rich.colors
+#' @export
+compare_models <- function(..., label = NULL, color = NULL) {
+  old_par <- par(no.readonly = TRUE)
+  on.exit(par(old_par))
+
+  dots <- list(...)
+  class_dots <- vapply(dots, inherits, logical(1), what = "Assessment")
+  if(!all(class_dots)) stop("Some objects provided were not of class Assessment", call. = FALSE)
+
+  n_assess <- length(dots)
+  if(n_assess <= 1) stop("Need more than one assessment model for this function.", call. = FALSE)
+
+  if(is.null(label) || length(label) != n_assess) label <- vapply(dots, slot, character(1), name = "Model")
+  if(is.null(color) || length(color) != n_assess) {
+    color <- rich.colors(n_assess)
   }
+
+  par(mfrow = c(3, 2), mar = c(5, 4, 1, 1), oma = c(2, 0, 0, 0))
+
+  # F
+  FM <- do.call(rbind, lapply(dots, slot, name = "FMort"))
+  ts_matplot(FM, "Fishing Mortality", color = color)
+
+  # F/FMSY
+  F_FMSY <- do.call(rbind, lapply(dots, slot, name = "F_FMSY"))
+  ts_matplot(F_FMSY, expression(F/F[MSY]), color = color, dotted_one = TRUE)
+
+  # B/BMSY
+  B_BMSY <- do.call(rbind, lapply(dots, slot, name = "SSB_SSBMSY"))
+  ts_matplot(B_BMSY, expression(SSB/SSB[MSY]), color = color, dotted_one = TRUE)
+
+  # B/B0
+  B_B0 <- do.call(rbind, lapply(dots, slot, name = "SSB_SSB0"))
+  ts_matplot(B_B0, expression(SSB/SSB[0]), color = color)
+
+  # VB
+  VB <- do.call(rbind, lapply(dots, slot, name = "VB"))
+  ts_matplot(VB, "Vulnerable Biomass", color = color)
+
+  # R
+  RR <- lapply(dots, slot, name = "R")
+  R <- match_R_years(RR)
+  ts_matplot(R, "Recruitment", color = color)
+
+  par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
+  plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n")
+  legend("bottom", label, col = color, xpd = TRUE, horiz = TRUE, bty = "n", lwd = 2)
+
   invisible()
 }
 
-# Call from inside generate_plots(), profile_likelihood(), retrospective(),
-prepare_to_save_figure <- function() {
-  Model <- get("Model", envir = parent.frame())
-  base.dir <- get("save_dir", envir = parent.frame()) # by default: getwd()
-  Model.dir <- paste0("plots_", Model)
-  plot.dir <- file.path(base.dir, Model.dir)
+#' @importFrom graphics matlines
+ts_matplot <- function(m, ylab, color, dotted_one = FALSE) {
+  m <- t(m)
+  x <- matrix(as.numeric(rownames(m)), ncol = ncol(m), nrow = nrow(m))
+  plot(NULL, NULL, xlim = range(as.numeric(rownames(m))), ylim = c(0, 1.1 * max(m, na.rm = TRUE)), xlab = "Year", ylab = ylab)
+  abline(h = 0, col = "grey")
+  matlines(x, m, type = "l", col = color, lty = 1, lwd = 2)
+  if(dotted_one) abline(h = 1, lty = 3)
+}
 
-  if(!dir.exists(plot.dir)) {
-    message(paste0("Creating directory: \n", plot.dir, "\n"))
-    dir.create(plot.dir)
+match_R_years <- function(RR) {
+  yrs <- do.call(c, lapply(RR, function(x) as.numeric(names(x))))
+  yrs <- range(yrs)
+
+  R <- matrix(NA, nrow = length(RR), ncol = diff(yrs) + 1)
+  R_yrs <- seq(min(yrs), max(yrs))
+  for(i in 1:length(RR)) {
+    ind <- match(as.numeric(names(RR[[i]])), R_yrs)
+    R[i, ind] <- RR[[i]]
   }
-  assign("plot.dir", plot.dir, envir = parent.frame())
-  invisible()
+  colnames(R) <- R_yrs
+  return(R)
 }
 
 
-create_png <- function(filename, units = "in", res = 400, height = 4, width = 6, ...) {
-  png(filename = filename, units = units, res = res, height = height, width = width)
-  par(mar = c(5, 4, 1, 1), ...)
-  invisible()
+#' @importFrom rmarkdown render
+report <- function(Assessment, retro = NULL, filename = paste0("report_", Assessment@Model), dir = tempdir(), open_file = TRUE, quiet = TRUE, ...) {
+  name <- ifelse(nchar(Assessment@Name) > 0, Assessment@Name, substitute(Assessment))
+
+  # Generate markdown report
+  filename_html <- paste0(filename, ".html")
+  filename_rmd <- paste0(filename, ".Rmd")
+
+  if(!dir.exists(dir)) {
+    message("Creating directory: \n", dir)
+    dir.create(dir)
+  }
+  message("Writing markdown file: ", file.path(dir, filename_rmd))
+
+  if(Assessment@Model == "SCA2") Assessment@info$data$SR_type <- Assessment@info$SR
+  f <- get(paste0("rmd_", Assessment@Model))
+  rmd_model <- f(Assessment)
+
+  if(!is.null(retro)) {
+    rmd_ret <- c("## Retrospective\n",
+                 "```{r}",
+                 "as.data.frame(summary(retro))",
+                 "plot(retro)",
+                 "```\n")
+  } else rmd_ret <- ""
+
+  rmd <- c(rmd_head(name), rmd_model, rmd_ret, rmd_footer())
+  write(rmd, file = file.path(dir, filename_rmd))
+
+  # Rendering markdown file
+  message("Rendering markdown file to HTML: ", file.path(dir, filename_html))
+  assign_Assessment_slots(Assessment)
+
+  output <- rmarkdown::render(file.path(dir, filename_rmd), "html_document", filename_html, dir,
+                              output_options = list(df_print = "paged"), quiet = quiet, ...)
+  message("Rendering complete.")
+
+  if(open_file) browseURL(file.path(dir, filename_html))
+  invisible(output)
 }
+
+
+
+
 
 
 #' Plots a lognormal variable
@@ -443,6 +550,10 @@ plot_timeseries <- function(Year, obs, fit = NULL, obs_CV = NULL, obs_CV_CI = 0.
 plot_residuals <- function(Year, res, res_sd = NULL, res_sd_CI = 0.95,
                            res_upper = NULL, res_lower = NULL, res_ind_blue = NULL, draw_zero = TRUE,
                            zero_linetype = 2, label = "Residual") {
+  old.warning <- options()$warn
+  options(warn = -1)
+  on.exit(options(warn = old.warning))
+
   # Without sd interval
   if(is.null(res_sd)) {
     res.lim <- max(abs(res), na.rm = TRUE)
@@ -457,10 +568,8 @@ plot_residuals <- function(Year, res, res_sd = NULL, res_sd_CI = 0.95,
 
   # With CV interval
   if(!is.null(res_sd) || (!is.null(res_upper) & !is.null(res_lower))) {
-    if(is.null(res_upper))
-      res_upper <- res + qnorm(1-0.5*(1-res_sd_CI)) * res_sd
-    if(is.null(res_lower))
-      res_lower <- res + qnorm(0.5*(1-res_sd_CI)) * res_sd
+    if(is.null(res_upper)) res_upper <- res + qnorm(1-0.5*(1-res_sd_CI)) * res_sd
+    if(is.null(res_lower)) res_lower <- res + qnorm(0.5*(1-res_sd_CI)) * res_sd
     res.lim <- max(abs(c(res_lower, res_upper, res)), na.rm = TRUE)
 
     if(is.null(res_ind_blue)) {
@@ -500,7 +609,11 @@ plot_residuals <- function(Year, res, res_sd = NULL, res_sd_CI = 0.95,
 #' @param N Annual sample sizes. Vector of length \code{nrow(obs)}.
 #' @param CAL_bins A vector of lengths corresponding to the columns in \code{obs}.
 #' and \code{fit}. Ignored for age data.
+#' @param ages An optional vector of ages corresponding to the columns in \code{obs}.
 #' @param ind A numeric vector for plotting a subset of rows (which indexes year) of \code{obs} and \code{fit}.
+#' @param annual_ylab Character string for y-axis label when \code{plot_type = "annual"}.
+#' @param annual_yscale For annual composition plots (\code{plot_type = "annual"}), whether the raw values
+#' ("raw") or frequencies ("proportions") are plotted.
 #' @param bubble_adj Numeric, for adjusting the relative size of bubbles in bubble plots
 #' (larger number = larger bubbles).
 #' @param fit_linewidth Argument \code{lwd} for fitted line.
@@ -519,17 +632,16 @@ plot_residuals <- function(Year, res, res_sd = NULL, res_sd_CI = 0.95,
 #' CAL_bins = Red_snapper@@CAL_bins[1:43])
 #' }
 plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c('annual', 'bubble_data', 'bubble_residuals', 'mean'),
-                             N = rowSums(obs), CAL_bins = NULL, ind = 1:nrow(obs),
+                             N = rowSums(obs), CAL_bins = NULL, ages = NULL, ind = 1:nrow(obs),
+                             annual_ylab = "Frequency", annual_yscale = c("proportions", "raw"),
                              bubble_adj = 5, fit_linewidth = 3, fit_color = "red") {
   old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par))
 
   plot_type <- match.arg(plot_type)
+  annual_yscale <- match.arg(annual_yscale)
   if(is.null(CAL_bins)) data_type <- "age" else data_type <- "length"
-  if(is.null(data_type)) stop('Indicate in data_type whether age or length data are being considered.')
-  if(data_type == 'length' & is.null(CAL_bins)) {
-    stop('Need vector of length bins.')
-  }
+
   if(!is.null(fit) && !all(dim(fit) == dim(obs))) stop("Dimensions of 'obs' and 'fit' do not match.")
 
   if(data_type == 'length') {
@@ -537,15 +649,21 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
     data_lab <- "Length"
   }
   if(data_type == 'age') {
-    MaxAge <- ncol(obs)
-    data_val <- 1:MaxAge
+    data_val <- if(is.null(ages)) 1:ncol(obs) else ages
     data_lab <- "Age"
   }
   N <- round(N, 1)
 
-  obs_prob_all <- obs/rowSums(obs, na.rm = TRUE)
-  if(!is.null(fit)) fit_prob_all <- fit/rowSums(fit, na.rm = TRUE)
-  else fit_prob_all <- NULL
+  if(annual_yscale == "proportions") {
+    obs_prob_all <- obs/rowSums(obs, na.rm = TRUE)
+    if(!is.null(fit)) fit_prob_all <- fit/rowSums(fit, na.rm = TRUE)
+    else fit_prob_all <- NULL
+  }
+  if(annual_yscale == "raw") {
+    obs_prob_all <- obs
+    if(!is.null(fit)) fit_prob_all <- fit
+    else fit_prob_all <- NULL
+  }
 
   # subset
   #ind <- rowSums(obs, na.rm = TRUE) > 0
@@ -553,10 +671,6 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
   obs <- obs[ind, , drop = FALSE]
   if(!is.null(fit)) fit <- fit[ind, , drop = FALSE]
   N <- N[ind]
-
-  obs_prob <- obs/rowSums(obs, na.rm = TRUE)
-  if(!is.null(fit)) fit_prob <- fit/rowSums(fit, na.rm = TRUE)
-  else fit_prob <- NULL
 
   # Bubble plot (obs)
   if('bubble_data' %in% plot_type) {
@@ -566,7 +680,7 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
     if(n2 < n1) n1 <- 0.5 * n2
     diameter_max <- bubble_adj / n2
     plot(NULL, NULL, typ = 'n', xlim = range(Year), xlab = "Year",
-         ylim = c(0, max(data_val)), ylab = data_lab)
+         ylim = range(data_val), ylab = data_lab)
     for(i in 1:length(Year)) {
       for(j in 1:length(data_val)) {
         points(Year[i], data_val[j], cex = 0.5 * diameter_max * pmin(obs[i, j], n2), pch = 21, bg = "white")
@@ -580,10 +694,13 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
   if('bubble_residuals' %in% plot_type) {
     if(is.null(fit)) stop("No fitted data available.")
 
+    obs_prob <- obs/rowSums(obs, na.rm = TRUE)
+    fit_prob <- fit/rowSums(fit, na.rm = TRUE)
+
     resid <- N * (obs_prob - fit_prob) / sqrt(N * fit_prob)
     diameter_max <- bubble_adj / pmin(10, max(abs(resid), na.rm = TRUE))
     plot(NULL, NULL, typ = 'n', xlim = range(Year), xlab = "Year",
-         ylim = c(0, max(data_val)), ylab = data_lab)
+         ylim = range(data_val), ylab = data_lab)
 
     Year_mat <- matrix(Year, ncol = ncol(resid), nrow = nrow(resid))
     data_mat <- matrix(data_val, ncol = ncol(resid), nrow = nrow(resid), byrow = TRUE)
@@ -615,7 +732,20 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
 
     par(mfcol = c(4, 4), mar = rep(0, 4), oma = c(5.1, 5.1, 2.1, 2.1))
     ylim <- c(0, 1.1 * max(obs_prob_all, fit_prob_all, na.rm = TRUE))
-    yaxp <- c(0, 1, 4)
+
+    if(annual_yscale == "proportions") {
+      obs_prob <- obs/rowSums(obs, na.rm = TRUE)
+      if(!is.null(fit)) fit_prob <- fit/rowSums(fit, na.rm = TRUE)
+      else fit_prob <- NULL
+    }
+    if(annual_yscale == "raw") {
+      obs_prob <- obs
+      fit_prob <- fit
+    }
+
+    yaxp <- c(0, max(pretty(ylim, n = 4)), 4)
+    if(max(obs_prob_all, fit_prob_all, na.rm = TRUE) == 1) yaxp <- c(0, 1, 4)
+
     las <- 1
     type <- 'o'
     for(i in 1:length(Year)) {
@@ -662,7 +792,7 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
       }
       if(i %% 16 == 0 || i == length(Year)) {
         mtext(data_lab, side = 1, line = 3, outer = TRUE)
-        mtext('Frequency', side = 2, line = 3.5, outer = TRUE)
+        mtext(annual_ylab, side = 2, line = 3.5, outer = TRUE)
       }
     }
     return(invisible())
@@ -679,12 +809,16 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
 
 
 #' @importFrom graphics arrows
-plot_surplus_production <- function(B, B0 = NULL, C, arrow_size = 0.07) {
+plot_surplus_production <- function(B, B0 = NULL, C, yield_fn = NULL, arrow_size = 0.07, xlab = NULL) {
+  old.warning <- options()$warn
+  options(warn = -1)
+  on.exit(options(warn = old.warning))
+
   if(!is.null(B0)) {
     B <- B/B0
-    xlab_label <- expression(B/B[0])
+    if(is.null(xlab)) xlab <- expression(B/B[0])
   } else {
-    xlab_label <- "Biomass"
+    if(is.null(xlab)) xlab <- "Biomass"
   }
   B_now <- B[1:(length(B)-1)]
   B_next <- B[2:length(B)]
@@ -692,8 +826,13 @@ plot_surplus_production <- function(B, B0 = NULL, C, arrow_size = 0.07) {
 
   xlim <- c(0, max(B))
   ylim <- c(min(0, min(SP_now)), max(SP_now))
-  plot(B_now, SP_now, typ = 'n', xlab = xlab_label, xlim = xlim, ylim = ylim,
+  plot(B_now, SP_now, typ = 'n', xlab = xlab, xlim = xlim, ylim = ylim,
        ylab = "Surplus production")
+  if(!is.null(yield_fn)) {
+    if(!is.null(B0)) lines(yield_fn$B_B0, yield_fn$Yield) else {
+      lines(yield_fn$B, yield_fn$Yield)
+    }
+  }
   arrows(x0 = B_now, y0 = SP_now[1:(length(B)-1)], x1 = B_next, y1 = SP_now[2:length(B)],
          length = arrow_size)
   abline(h = 0, col = 'grey')
@@ -702,17 +841,17 @@ plot_surplus_production <- function(B, B0 = NULL, C, arrow_size = 0.07) {
 }
 
 
-plot_Kobe <- function(biomass, exploit, arrow_size = 0.07, color = TRUE) {
+plot_Kobe <- function(biomass, exploit, arrow_size = 0.07, color = TRUE, xlab = expression(B/B[MSY]), ylab = expression(F/F[MSY])) {
   old.warning <- options()$warn
   on.exit(options(warn = old.warning))
   options(warn = -1)
+
   n.arrows <- length(exploit)
   if(length(biomass) > n.arrows) biomass <- biomass[1:n.arrows]
 
   x.max <- max(biomass, 1)
   y.max <- max(exploit, 1)
-  plot(NULL, NULL, typ = 'n', xlab = expression(B/B[MSY]), ylab = expression(U/U[MSY]),
-       xlim = c(0, 1.1 * x.max), ylim = c(0, 1.1 * y.max))
+  plot(NULL, NULL, typ = 'n', xlab = xlab, ylab = ylab, xlim = c(0, max(1.1, 1.1 * x.max)), ylim = c(0, max(1.1, 1.1 * y.max)))
   if(color) {
     # Colors from https://www.rapidtables.com/web/color/html-color-codes.html
     green <- "#228B22"    #forestgreen
@@ -753,11 +892,12 @@ plot_Kobe <- function(biomass, exploit, arrow_size = 0.07, color = TRUE) {
 #' spawners and recruitment deviations over time.
 #' @param y_zoom If recruitment deviations are plotted, the y-axis limit relative to
 #' maximum expected recruitment \code{expectedR}. If \code{NULL}, all recruitments are plotted.
+#' @param ylab Character string for label on y-axis.
 #' @author Q. Huynh
 #' @return A stock-recruit plot
 #' @export plot_SR
-plot_SR <- function(Spawners, expectedR, R0, S0, rec_dev = NULL, trajectory = FALSE,
-                    y_zoom = NULL) {
+plot_SR <- function(Spawners, expectedR, R0 = NULL, S0 = NULL, rec_dev = NULL, trajectory = FALSE,
+                    y_zoom = NULL, ylab = "Recruitment") {
   if(is.null(rec_dev)) {
     R.max <- 1.1 * max(expectedR)
   } else {
@@ -766,7 +906,7 @@ plot_SR <- function(Spawners, expectedR, R0, S0, rec_dev = NULL, trajectory = FA
   }
   S.max <- 1.1 * max(c(Spawners, S0))
   plot(Spawners[order(Spawners)], expectedR[order(Spawners)], typ = 'l', xlim = c(0, 1.05 * S.max), ylim = c(0, 1.1 * R.max),
-       xlab = 'Spawning Stock Biomass (SSB)', ylab = 'Recruitment')
+       xlab = 'Spawning Stock Biomass (SSB)', ylab = ylab)
   if(!trajectory) {
     if(is.null(rec_dev)) points(Spawners, expectedR)
     if(!is.null(rec_dev)) points(Spawners, rec_dev)
@@ -780,7 +920,7 @@ plot_SR <- function(Spawners, expectedR, R0, S0, rec_dev = NULL, trajectory = FA
     arrows(x0 = Spawners[1:(n.arrows-1)], y0 = rec_dev[1:(n.arrows-1)],
            x1 = Spawners[2:n.arrows], y1 = rec_dev[2:n.arrows], length = 0.07)
   }
-  points(S0, R0, col = 'red', pch = 16)
+  if(!is.null(R0) && !is.null(S0)) points(S0, R0, col = 'red', pch = 16)
   abline(h = 0, col = 'grey')
   abline(v = 0, col = 'grey')
 }
@@ -799,4 +939,28 @@ plot_ogive <- function(Age, ogive, label = "Selectivity") {
   plot_generic_at_age(Age = Age, quantity = ogive, label = label, ymax = 1.1)
 
   invisible()
+}
+
+
+calculate_Mohn_rho <- function(ts, est = NULL, ts_lab, est_lab = NULL) {
+  rho_ts <- apply(ts, 3, Mohn_rho)
+  rho_est <- if(!is.null(est)) apply(est, 2, Mohn_rho, type = "est") else NULL
+
+  ans <- matrix(c(rho_ts, rho_est), ncol = 1)
+  dimnames(ans) <- list(c(ts_lab, est_lab), "Mohn's rho")
+  return(round(ans, 3))
+}
+
+
+Mohn_rho <- function(x, type = c("ts", "est")) {
+  type <- match.arg(type)
+  if(type == "ts") { # let x be a matrix of nrow = n_peel + 1 and ncol = nyear + 1
+    terminal_ind <- apply(x[-1, , drop = FALSE], 1, function(y) sum(!is.na(y)))
+    n_peel <- length(terminal_ind)
+    rho <- diag(x[1:n_peel + 1, terminal_ind, drop = FALSE])/x[1, terminal_ind] - 1
+  } else { # let x be a vector of length n_peel + 1
+    n_peel <- length(x) - 1
+    rho <- x[1:n_peel + 1]/x[1] - 1
+  }
+  return(mean(rho))
 }

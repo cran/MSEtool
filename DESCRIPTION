@@ -1,12 +1,12 @@
 Package: MSEtool
 Type: Package
 Title: Management Strategy Evaluation Toolkit
-Version: 1.2.0
+Version: 1.2.1
 Authors@R: c(person("Quang", "Huynh", email = "q.huynh@oceans.ubc.ca", role = "aut"), 
   person("Tom", "Carruthers", email = "t.carruthers@oceans.ubc.ca", role = c("aut", "cre")),
   person("Adrian", "Hordyk", email = "a.hordyk@oceans.ubc.ca", role = "aut"),
   person("Chris", "Grandin", rol = "ctb", comment = "iSCAM functions"))
-Date: 2019-06-07
+Date: 2019-07-29
 Maintainer: Tom Carruthers <t.carruthers@oceans.ubc.ca>
 Description: Simulation tools for management strategy evaluation are provided for the 'DLMtool' operating model to inform data-rich fisheries. 
   'MSEtool' provides complementary assessment models of varying complexity with standardized reporting, diagnostic tools for evaluating 
@@ -25,10 +25,10 @@ VignetteBuilder: knitr
 URL: http://www.datalimitedtoolkit.org
 BugReports: https://github.com/tcarruth/MSEtool/issues
 NeedsCompilation: yes
-Packaged: 2019-06-10 22:45:16 UTC; qhuynh
+Packaged: 2019-07-29 21:26:04 UTC; qhuynh
 Author: Quang Huynh [aut],
   Tom Carruthers [aut, cre],
   Adrian Hordyk [aut],
   Chris Grandin [ctb] (iSCAM functions)
 Repository: CRAN
-Date/Publication: 2019-06-17 19:10:04 UTC
+Date/Publication: 2019-07-29 23:10:02 UTC

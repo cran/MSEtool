@@ -48,9 +48,9 @@
 #'
 #' \itemize{
 #' \item SSB - A matrix of \code{OM@@nsim} rows and \code{OM@@nyears+1} columns for estimated spawning biomass
-#' \item N - An array of dimension nsim, nyears+1, maxage for estimated abundance by simulation, year, and age.
-#' \item CAA - An array of dimension nsim, nyears+1, maxage, and nfleet for estimated catch at age by simulation, year, age, and fleet.
-#' \item CAL - An array of dimension nsim, nyears+1, maxage, and nfleet for estimated catch at length by simulation, year, length bin, and fleet.
+#' \item N - An array of dimension \code{c(nsim, nyears+1, maxage)} for estimated abundance by simulation, year, and age.
+#' \item CAA - An array of dimension \code{c(nsim, nyears+1, maxage, and nfleet)} for estimated catch at age by simulation, year, age, and fleet.
+#' \item CAL - An array of dimension \code{c(nsim, nyears+1, maxage, and nfleet)} for estimated catch at length by simulation, year, length bin, and fleet.
 #' \item conv - A logical vector of length nsim indicating convergence of the SRA in the i-th simulation.
 #' }
 #'
@@ -76,6 +76,14 @@
 #' multinomial sample size. See argument \code{ESS}.
 #'
 #' @note If the operating model \code{OM} uses time-varying growth or M, then those trends will be used in the SRA as well.
+#' Time-varying life history parameters create ambiguity in the calculation and interpretation of depletion and reference points in \link[DLMtool]{runMSE}.
+#' See section D.5 of \code{DLMtool::userguide()}.
+#'
+#' Here, the initial depletion (OM@@cpars$initD) is calculated based on unfished spawning biomass using growth and M in the first year. If growth/M varies,
+#' then this reference point may no longer be relevant at the end of the historical period and in the projection period.
+#'
+#' The easiest way to turn off time-varying growth/M is by setting: \code{OM@@Msd <- OM@@Linfsd <- OM@@Ksd <- c(0, 0)}.
+#'
 #' @author Q. Huynh
 #'
 #' @export
@@ -330,13 +338,12 @@ SRA_scope <- function(OM, Chist, Index = NULL, I_sd = NULL, CAA = NULL, CAL = NU
   #  message("For non-converged iterations, values were re-sampled from converged iterations.\n")
   #}
 
-
   ### R0
   OM@cpars$R0 <- vapply(res, getElement, numeric(1), name = "R0")
   message("Range of unfished recruitment (OM@cpars$R0): ", paste(round(range(OM@cpars$R0), 2), collapse = " - "))
 
   ### Depletion and init D
-  OM@cpars$initD <- vapply(res, function(x) x$E[1]/x$E0, numeric(1))
+  OM@cpars$initD <- vapply(res, function(x) x$E[1]/x$E0_year1, numeric(1))
   message("Range of initial spawning depletion (OM@cpars$initD): ", paste(round(range(OM@cpars$initD), 2), collapse = " - "))
 
   OM@cpars$D <- vapply(res, function(x) x$E[length(x$E)-1]/x$E0, numeric(1))
@@ -402,7 +409,7 @@ SRA_scope <- function(OM, Chist, Index = NULL, I_sd = NULL, CAA = NULL, CAL = NU
 
       } else {
         sd_asc <- sqrt((L50 - LFS)^2/log(4))
-        L5 <- sd_asc * sqrt(-log(0.05)/0.5) + LFS
+        L5 <- LFS - sd_asc * sqrt(-log(0.05)/0.5)
 
         OM@cpars$L5 <- L5
         message("Range of OM@cpars$L5: ", paste(round(range(OM@cpars$L5), 2), collapse = " - "))
@@ -424,16 +431,22 @@ SRA_scope <- function(OM, Chist, Index = NULL, I_sd = NULL, CAA = NULL, CAL = NU
   Eff <- apply(OM@cpars$Find, 2, range)
   OM@EffLower <- Eff[1, ]
   OM@EffUpper <- Eff[2, ]
-  OM@EffYears <- 1:nyears
+  if(length(OM@EffYears) != nyears) OM@EffYears <- 1:nyears
   message("Historical effort trends set in OM@EffLower and OM@EffUpper.\n")
 
   ### Rec devs
   OM@cpars$Perr <- StockPars$procsd
-  make_Perr <- function(x) exp(x$log_rec_dev - 0.5 * x$tau^2)
-  Perr <- do.call(rbind, lapply(res, make_Perr))
+  make_Perr <- function(x) {
+    bias_corr <- ifelse(is.na(x$obj$env$data$est_rec_dev), 1, exp(-0.5 * x$report$tau^2))
+    exp(x$report$log_rec_dev) * bias_corr
+  }
+  Perr <- do.call(rbind, lapply(mod, make_Perr))
 
-  make_early_Perr <- function(x) exp(x$log_early_rec_dev - 0.5 * x$tau^2)
-  early_Perr <- do.call(rbind, lapply(res, make_early_Perr))
+  make_early_Perr <- function(x) {
+    bias_corr <- ifelse(is.na(x$obj$env$data$est_early_rec_dev), 1, exp(-0.5 * x$report$tau^2))
+    exp(x$report$log_early_rec_dev) * bias_corr
+  }
+  early_Perr <- do.call(rbind, lapply(mod, make_early_Perr))
 
   OM@cpars$Perr_y <- StockPars$Perr_y
   OM@cpars$Perr_y[, 1:(OM@maxage - 1)] <- early_Perr
@@ -471,10 +484,13 @@ SRA_scope <- function(OM, Chist, Index = NULL, I_sd = NULL, CAA = NULL, CAL = NU
   OM@cpars$h <- StockPars$hs
 
   if(fix_sel) {
-    OM@cpars$L5 <- FleetPars$L5
-    OM@cpars$LFS <- FleetPars$LFS
-    OM@cpars$Vmaxlen <- FleetPars$Vmaxlen
-    OM@cpars$V <- FleetPars$V
+    OM@cpars$L5 <- if(is.matrix(FleetPars$L5)) FleetPars$L5[nyears, ] else FleetPars$L5
+    OM@cpars$LFS <- if(is.matrix(FleetPars$LFS)) FleetPars$LFS[nyears, ] else FleetPars$LFS
+    OM@cpars$Vmaxlen <- if(is.matrix(FleetPars$Vmaxlen)) FleetPars$Vmaxlen[nyears, ] else FleetPars$Vmaxlen
+    V <- FleetPars$V
+    maxV <- apply(FleetPars$V, c(1, 3), max)
+    for(i in 1:maxage) V[,i,] <- V[,i,]/maxV
+    OM@cpars$V <- V
   }
 
   OM@cpars$Iobs <- ObsPars$Iobs
@@ -499,7 +515,7 @@ SRA_scope <- function(OM, Chist, Index = NULL, I_sd = NULL, CAA = NULL, CAL = NU
                  CAA = aperm(CAA_pred2, c(4, 1, 2, 3)), CAL = aperm(CAL_pred2, c(4, 1, 2, 3)), conv = conv)
 
   ### Generate figures
-  if(figure) plot_SRA_scope(OM, Chist, Index, CAA, CAL, ML, res, Year)
+  if(figure) plot_SRA_scope(OM, Chist, Index, CAA, CAL, ML, res, OM@EffYears)
 
   message("Complete.")
   return(list(OM = OM, output = output, report = if(report) res else NULL))
@@ -613,8 +629,9 @@ SRA_scope_est3 <- function(x, SRA_scope_est, Catch, Index = NULL, I_sd = NULL, C
   report <- obj$report(obj$env$last.par.best)
   report$vul <- do.call(cbind, report$vul)
 
-  vars_div <- c("B", "E", "Cat", "CAApred", "CALpred", "CN", "Cpred", "N", "N_full", "VB", "R", "R_early", "R_eq", "VB0", "R0", "B0", "E0", "N0")
-  vars_mult <- "Brec"
+  vars_div <- c("B", "E", "Cat", "C_eq_pred", "CAApred", "CALpred", "CN", "Cpred", "N", "N_full", "VB",
+                "R", "R_early", "R_eq", "VB0", "R0", "B0", "E0", "N0", "E0_year1")
+  vars_mult <- c("Brec", "q")
   var_trans <- c("R0", "q")
   fun_trans <- c("/", "*")
   fun_fixed <- c("log", NA)
@@ -638,11 +655,13 @@ plot_SRA_scope <- function(OM, Chist, Index = matrix(NA, 0, 0), CAA = NA, CAL = 
   nsim <- OM@nsim
   maxage <- OM@maxage
   nyears <- OM@nyears
-  if(is.null(Year)) Year <- 1:nyears
+  if(is.null(Year)) {
+    if(length(OM@EffYears) == nyears) Year <- OM@EffYears else Year <- 1:nyears
+  }
   Year_matrix <- matrix(Year, ncol = nsim, nrow = nyears)
   Yearplusone_matrix <- matrix(c(Year, max(Year) + 1), ncol = nsim, nrow = nyears+1)
   nfleet <- ncol(Chist)
-  nsurvey <- ncol(Index)
+  nsurvey <- ifelse(all(is.na(Index)), 0, ncol(Index))
   length_bin <- report_list[[1]]$length_bin
 
   ###### First figure OM summary
@@ -656,7 +675,7 @@ plot_SRA_scope <- function(OM, Chist, Index = matrix(NA, 0, 0), CAA = NA, CAL = 
   hist(OM@cpars$D, main = "", xlab = "Depletion")
 
   # Perr
-  Perr <- OM@cpars$Perr_y[, maxage:(maxage+nyears-1)]
+  Perr <- OM@cpars$Perr_y[, maxage:(maxage+nyears-1), drop = FALSE]
   matplot(Year_matrix, t(Perr), type = "l", col = "black", xlab = "Year", ylab = "Recruitment deviations", ylim = c(0, 1.1 * max(Perr)))
   abline(h = 0, col = "grey")
 

@@ -1,3 +1,59 @@
+#' What objects of this class are available
+#'
+#' Generic class finder
+#'
+#' Finds objects of the specified class in the global environment or in the
+#' MSEtool and DLMtool packages. This function is an addendum to the \code{\link[DLMtool]{avail}}
+#' function in DLMtool.
+#'
+#' @param classy A class of object (character string, e.g. 'Fleet')
+#' @param all_avail Logical. If TRUE, function will return all objects of class \code{classy} available to user.
+#' If FALSE, returns only those objects included in MSEtool.
+#' @author Q. Huynh
+#' @examples
+#' avail("Assess")
+#' avail("HCR")
+#' avail("Stock")
+#' avail("MP")
+#' avail("MP", all_avail = FALSE)
+#' @export
+avail <- function(classy, all_avail = TRUE) {
+  temp <- try(class(classy), silent = TRUE)
+  if(class(temp) == "try-error") classy <- deparse(substitute(classy))
+  if(temp == "function") classy <- deparse(substitute(classy))
+
+  temp <- ls("package:MSEtool")[vapply(ls("package:MSEtool"), getclass, logical(1), classy = classy)]
+
+  if(all_avail) {
+    temp_globalenv <- ls(envir = .GlobalEnv)[vapply(ls(envir = .GlobalEnv), getclass, logical(1), classy = classy)]
+    temp <- c(temp, temp_globalenv)
+
+    temp_DLMtool <- try(DLMtool::avail(classy), silent = TRUE)
+    if(!inherits(temp_DLMtool, "try-error")) temp <- unique(c(temp, temp_DLMtool))
+  }
+
+  if(length(temp) < 1) stop("No objects of class '", classy, "' found", call. = FALSE)
+  return(temp)
+}
+
+getclass <- function(x, classy) any(inherits(get(x), classy))
+
+#' Get the MSEtool vignettes
+#'
+#' A convenient function to open a web browser with the MSEtool package vignettes
+#' @examples
+#' \dontrun{
+#' MSEtool::userguide()
+#' DLMtool::userguide()
+#' }
+#' @seealso \link[DLMtool]{userguide}
+#' @export
+userguide <- function() {
+  message("For the DLMtool user guide, type in \"DLMtool::userguide()\" to the console.")
+  browseVignettes("MSEtool")
+}
+
+
 # Internal DLMtool functions that are also needed for MSEtool
 iVB <- function(t0, K, Linf, L) max(1, ((-log(1 - L/Linf))/K + t0))
 mconv <- function (m, sd) log(m) - 0.5 * log(1 + ((sd^2)/(m^2)))
@@ -14,9 +70,9 @@ optimize_TMB_model <- function(obj, control = list(), use_hessian = FALSE, resta
   if(any(c("U_equilibrium", "F_equilibrium") %in% names(obj$par))) {
     low[match(c("U_equilibrium", "F_equilibrium"), names(obj$par))] <- 0
   }
-  opt <- suppressWarnings(tryCatch(nlminb(obj$par, obj$fn, obj$gr, h, control = control), lower = low, error = as.character))
+  opt <- suppressWarnings(tryCatch(nlminb(obj$par, obj$fn, obj$gr, h, control = control, lower = low), error = as.character))
   if(is.character(opt) && all(is.na(obj$gr()))) {
-    opt <- suppressWarnings(tryCatch(nlminb(obj$par, obj$fn, hessian = h, control = control), lower = low, error = as.character))
+    opt <- suppressWarnings(tryCatch(nlminb(obj$par, obj$fn, hessian = h, control = control, lower = low), error = as.character))
   }
   SD <- get_sdreport(obj, opt)
 
@@ -115,4 +171,30 @@ rescale_report <- function(var_div, var_mult, var_trans = NULL, fun_trans = NULL
     assign("SD", SD, envir = parent.frame())
   }
   invisible()
+}
+
+
+sample_steepness3 <- function(n, mu, cv, SR_type = c("BH", "Ricker")) {
+  if(n == 1) {
+    return(mu)
+  } else if(SR_type == "BH") {
+    sigma <- mu * cv
+    mu.beta.dist <- (mu - 0.2)/0.8
+    sigma.beta.dist <- sigma/0.8
+    beta.par <- derive_beta_par(mu.beta.dist, sigma.beta.dist)
+    h.transformed <- rbeta(n, beta.par[1], beta.par[2])
+    h <- 0.8 * h.transformed + 0.2
+    h[h > 0.99] <- 0.99
+    h[h < 0.2] <- 0.2
+    return(h)
+  } else {
+    sigma <- mu * cv
+    mu.lognorm.dist <- mconv(mu - 0.2)
+    sigma.lognorm.dist <- sigma
+
+    h.transformed <- trlnorm(n, mconv(mu.lognorm.dist, sigma.lognorm.dist), sdconv(mu.lognorm.dist, sigma.lognorm.dist))
+    h <- h.transformed + 0.2
+    h[h < 0.2] <- 0.2
+    return(h)
+  }
 }

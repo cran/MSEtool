@@ -67,7 +67,6 @@
 
   vector<Type> BPRinf(ny);
   vector<Type> Rec_dev(ny-k);
-  vector<Type> Rinf(ny);
   vector<Type> Binf(ny);
   vector<Type> Ninf(ny);
 
@@ -82,21 +81,23 @@
   Type penalty = 0;
 
   for(int tt=0; tt<ny; tt++) {
-	F(tt) = cDD_F(C_hist(tt)/B(tt), C_hist(tt), M, Winf, Kappa, wk, Arec, Brec, SR_type2, N, B, Cpred, BPRinf, Binf, R, Ninf, nitF, tt);
-	Z(tt) = F(tt) + M;
+    Type F_start = CppAD::CondExpLe(C_hist(tt), Type(1e-8), Type(0), -log(1 - C_hist(tt)/B(tt)));
+    F(tt) = cDD_F(F_start, C_hist(tt), M, Winf, Kappa, wk, N, B, Cpred, BPRinf, Binf, R, Ninf,
+      CppAD::Integer(CppAD::CondExpLe(C_hist(tt), Type(1e-8), Type(1), Type(nitF))), tt);
+    Z(tt) = F(tt) + M;
 
-	N(tt+1) = Ninf(tt) + (N(tt) - Ninf(tt)) * exp(-Z(tt));
-	B(tt+1) = Binf(tt);
-	B(tt+1) += Kappa * Winf * (N(tt) - Ninf(tt)) / (Z(tt) + Kappa);
-	B(tt+1) += (B(tt) - Binf(tt) - Kappa * Winf * (N(tt) - Ninf(tt))/(Z(tt) + Kappa)) * exp(-Z(tt) - Kappa);
+    N(tt+1) = Ninf(tt) + (N(tt) - Ninf(tt)) * exp(-Z(tt));
+    B(tt+1) = Binf(tt);
+    B(tt+1) += Kappa * Winf * (N(tt) - Ninf(tt)) / (Z(tt) + Kappa);
+    B(tt+1) += (B(tt) - Binf(tt) - Kappa * Winf * (N(tt) - Ninf(tt))/(Z(tt) + Kappa)) * exp(-Z(tt) - Kappa);
 
-	if(SR_type == "BH") {
+    if(SR_type == "BH") {
       R(tt+k) = BH_SR(B(tt), h, R0, B0);
     } else {
       R(tt+k) = Ricker_SR(B(tt), h, R0, B0);
     }
     if(tt+k<ny) {
-      Rec_dev(tt) = exp(log_rec_dev(tt) - 0.5 * pow(tau, 2));
+      Rec_dev(tt) = exp(log_rec_dev(tt) - 0.5 * tau * tau);
       R(tt+k) *= Rec_dev(tt);
     }
   }
@@ -110,10 +111,6 @@
   vector<Type> nll_comp(2);
   nll_comp.setZero();
 
-  //for(int tt=0;tt<ny;tt++) {
-  //  if(!R_IsNA(asDouble(I_hist(tt)))) nll_comp(0) -= dnorm(log(I_hist(tt)), log(Ipred(tt)), sigma, true);
-  //  if(tt+k<ny) nll_comp(1) -= dnorm(log_rec_dev(tt), Type(0), tau, true);
-  //}
   for(int tt=0;tt<ny;tt++) if(!R_IsNA(asDouble(I_hist(tt)))) nll_comp(0) -= dnorm(log(I_hist(tt)), log(Ipred(tt)), sigma, true);
   for(int tt=0;tt<log_rec_dev.size();tt++) nll_comp(1) -= dnorm(log_rec_dev(tt), Type(0), tau, true);
 
@@ -141,7 +138,6 @@
   REPORT(BPRinf);
   REPORT(Binf);
   REPORT(Ninf);
-  REPORT(Rinf);
   REPORT(h);
   REPORT(R0);
   REPORT(N0);

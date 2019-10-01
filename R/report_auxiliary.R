@@ -30,7 +30,10 @@ compare_models <- function(..., label = NULL, color = NULL) {
   n_assess <- length(dots)
   if(n_assess <= 1) stop("Need more than one assessment model for this function.", call. = FALSE)
 
-  if(is.null(label) || length(label) != n_assess) label <- vapply(dots, slot, character(1), name = "Model")
+  if(is.null(label) || length(label) != n_assess) {
+    label <- vapply(dots, slot, character(1), name = "Model")
+    if(length(unique(label)) != length(dots)) label <- as.character(substitute(list(...)))[-1]
+  }
   if(is.null(color) || length(color) != n_assess) {
     color <- rich.colors(n_assess)
   }
@@ -60,7 +63,7 @@ compare_models <- function(..., label = NULL, color = NULL) {
   # R
   RR <- lapply(dots, slot, name = "R")
   R <- match_R_years(RR)
-  ts_matplot(R, "Recruitment", color = color)
+  if(!all(is.na(R))) ts_matplot(R, "Recruitment", color = color)
 
   par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
   plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n")
@@ -80,14 +83,18 @@ ts_matplot <- function(m, ylab, color, dotted_one = FALSE) {
 }
 
 match_R_years <- function(RR) {
-  yrs <- do.call(c, lapply(RR, function(x) as.numeric(names(x))))
-  yrs <- range(yrs)
+  yrs <- do.call(c, lapply(RR, function(x) if(length(x) > 0) as.numeric(names(x)) else NA))
+  if(all(is.na(yrs))) return(NA)
+
+  yrs <- range(yrs, na.rm = TRUE)
 
   R <- matrix(NA, nrow = length(RR), ncol = diff(yrs) + 1)
   R_yrs <- seq(min(yrs), max(yrs))
   for(i in 1:length(RR)) {
-    ind <- match(as.numeric(names(RR[[i]])), R_yrs)
-    R[i, ind] <- RR[[i]]
+    if(!all(is.na(RR[[i]]))) {
+      ind <- match(as.numeric(names(RR[[i]])), R_yrs)
+      R[i, ind] <- RR[[i]]
+    }
   }
   colnames(R) <- R_yrs
   return(R)
@@ -557,7 +564,7 @@ plot_residuals <- function(Year, res, res_sd = NULL, res_sd_CI = 0.95,
   # Without sd interval
   if(is.null(res_sd)) {
     res.lim <- max(abs(res), na.rm = TRUE)
-    if(is.null(res_ind_blue)) {
+    if(is.null(res_ind_blue) || all(!res_ind_blue)) {
       plot(Year, res, typ = 'o', ylab = label, ylim = c(-res.lim, res.lim))
     } else {
       plot(Year, res, typ = 'n', ylab = label, ylim = c(-res.lim, res.lim))
@@ -572,7 +579,7 @@ plot_residuals <- function(Year, res, res_sd = NULL, res_sd_CI = 0.95,
     if(is.null(res_lower)) res_lower <- res + qnorm(0.5*(1-res_sd_CI)) * res_sd
     res.lim <- max(abs(c(res_lower, res_upper, res)), na.rm = TRUE)
 
-    if(is.null(res_ind_blue)) {
+    if(is.null(res_ind_blue) || all(!res_ind_blue)) {
       plot(Year, res, typ = 'o', ylab = label, ylim = c(-res.lim, res.lim))
       arrows(Year, res_lower, Year, res_upper, length = 0.025, angle = 90,
              code = 3, col = 'grey30')

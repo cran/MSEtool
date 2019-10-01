@@ -9,6 +9,7 @@
   DATA_INTEGER(nstep);
   DATA_SCALAR(dt);
   DATA_INTEGER(nitF);
+  DATA_VECTOR(r_prior);
 
   PARAMETER(log_FMSY);
   PARAMETER(log_MSY);
@@ -27,7 +28,7 @@
 
   Type BMSY = MSY/FMSY;
   Type K = BMSY / n_term2;
-  Type r = MSY * n_term / K;
+  Type r = MSY * n_term / K; // r = FMSY * pow(n, 1/(1-n))
 
   vector<Type> B(ny+1);
   vector<Type> SP(ny);
@@ -35,14 +36,18 @@
   vector<Type> Ipred(ny);
   vector<Type> F(ny);
 
-  Type nll = 0.;
-  Type penalty = 0.;
+  Type nll = 0;
+  Type penalty = 0;
+  Type prior = 0;
+
+  if(r_prior(0) > 0) prior -= dnorm(r, r_prior(0), r_prior(1), true);
 
   Cpred.setZero();
 
   B(0) = dep * K;
   for(int y=0;y<ny;y++) {
-    F(y) = SP_F(C_hist(y)/(C_hist(y) + B(y)), C_hist(y), MSY, K, n, n_term, dt, nstep, nitF, Cpred, B, y, penalty);
+    F(y) = SP_F(C_hist(y)/(C_hist(y) + B(y)), C_hist(y), MSY, K, n, n_term,
+      CppAD::CondExpLe(C_hist(y), Type(1e-8), Type(1), dt), nstep, nitF, Cpred, B, y, penalty);
     SP(y) = B(y+1) - B(y) + Cpred(y);
   }
 
@@ -54,7 +59,7 @@
     if(!R_IsNA(asDouble(I_hist(y)))) nll -= dnorm(log(I_hist(y)), log(Ipred(y)), sigma, true);
   }
 
-  nll += penalty;
+  nll += penalty + prior;
 
   Type F_FMSY_final = F(F.size()-1)/FMSY;
   Type B_BMSY_final = B(B.size()-1)/BMSY;
@@ -86,6 +91,7 @@
   REPORT(F);
   REPORT(nll);
   REPORT(penalty);
+  REPORT(prior);
 
   return nll;
 

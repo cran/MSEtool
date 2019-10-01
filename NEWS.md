@@ -1,5 +1,24 @@
 The latest release of the MSEtool package is available on [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+## MSEtool 1.3.0
+
+### Updates to SRA_scope
+- Defaults for `SRA_scope` are now more robust (set maximum F in model, higher std. dev. for likelihood of mean lengths).
+- Users can choose to use `SRA_scope` conditioned on either observed catch or observed effort. 
+- `SRA_scope` returns an S4 object of class `SRA` with a `plot()` method that generates a markdown report of model fits.
+
+### Assessment models
+- A prior for r is now possible with `SP` and `SP_SS` using life history information (priors in natural mortality and steepness, as well as maturity/weight at age).
+- Default process error standard deviation for `SP_SS` is reduced to 0.1.
+- `cDD` and `cDD_SS` are more robust when catch is very, very small (F is set to 0). This is important for management procedures that shut down fishing.
+- Minor updates to simplify TMB code.
+- Minor revision to `make_MP`.
+
+### Other edits
+- Vignette links are now available through the MSEtool help page. Type `?MSEtool` into the console.
+- Minor fixes to `multiMSE`.
+- `SS2OM` now has an option for selecting male or female life history parameters.
+
 ## MSEtool 1.2.1
 - Fixed error in Solaris build.
 
@@ -10,7 +29,9 @@ For the new features described below, DLMtool version 5.3.1 is recommended.
 - The initial release for multi-fleet and multi-stock operating models and MSEs are released in this version, with `multiMSE` being the core function. The multiMSE vignette will be quite useful and can be accessed at `browseVignettes("MSEtool")`.
 
 ### Assessment models
+
 Quite a few additions and changes have been made to the Assessment models. See the help manual and vignettes for descriptions of these new Assessment functions.
+
 - The continuous delay-differential model with deterministic and stochastic recruitment (`cDD` and `cDD_SS`, respectively) have been added as new Assessment models to the package. The continuous formulation should be more stable in high F situations.
 - A virtual population analysis `VPA` model has also been added to the package.
 - The surplus production model `SP` assumes continuous production and estimates continuous F's, similar to ASPIC. This formulation will be more stable in high F situations. The Fox model can be implemented by setting the production function exponent `n = 1`.

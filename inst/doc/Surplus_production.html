@@ -7,12 +7,13 @@
 <meta charset="utf-8" />
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2019-07-29" />
+<meta name="date" content="2019-09-27" />
 
 <title>Description of the surplus production model</title>
 
@@ -20,9 +21,9 @@
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -32,14 +33,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -48,9 +51,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -96,7 +99,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
       if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
       var style = rule.style.cssText;
       // check if color or background-color is set
-      if (rule.style.color === '' || rule.style.backgroundColor === '') continue;
+      if (rule.style.color === '' && rule.style.backgroundColor === '') continue;
       // replace div.sourceCode by a pre.sourceCode rule
       sheets[i].deleteRule(j);
       sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
@@ -291,6 +294,9 @@ code > span.al { color: #ff0000; font-weight: bold; }
 code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61717; background-color: #e3d2d2; } 
 </style>
 
+
+
+
 </head>
 
 <body>
@@ -299,8 +305,8 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 
 
 <h1 class="title toc-ignore">Description of the surplus production model</h1>
-<h4 class="author"><em>Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca">q.huynh@oceans.ubc.ca</a>)</em></h4>
-<h4 class="date"><em>2019-07-29</em></h4>
+<h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
+<h4 class="date">2019-09-27</h4>
 
 
 <div id="TOC">
@@ -310,6 +316,7 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 <li><a href="#dynamics-equations"><span class="toc-section-number">2.1</span> Dynamics equations</a></li>
 <li><a href="#derived-parameters"><span class="toc-section-number">2.2</span> Derived parameters</a></li>
 <li><a href="#state-space-version-sp_ss"><span class="toc-section-number">2.3</span> State-space version (SP_SS)</a></li>
+<li><a href="#prior-for-r"><span class="toc-section-number">2.4</span> Prior for r</a></li>
 </ul></li>
 <li><a href="#references"><span class="toc-section-number">3</span> References</a></li>
 </ul>
@@ -350,7 +357,7 @@ pre { /* Code block */
 <h1><span class="header-section-number">1</span> Introduction</h1>
 <p>In MSEtool, assessment models are of class <code>Assess</code>. This appendix provides a brief description and references for the <code>Assess</code> objects. Further details regarding parameterization, e.g., fixing parameters, and tuning, e.g., adjusting start parameters, are provided in the function documentation.</p>
 <p>For LaTeX equation rendering, it is recommended that this vignette be viewed in a HTML browser. This can be done with the <code>browseVignettes</code> function in R:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">browseVignettes</span>(<span class="st">&quot;MSEtool&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">browseVignettes</span>(<span class="st">&quot;MSEtool&quot;</span>)</span></code></pre></div>
 </div>
 <div id="surplus-production-sp-model" class="section level1">
 <h1><span class="header-section-number">2</span> Surplus-production (SP) model</h1>
@@ -369,13 +376,35 @@ pre { /* Code block */
 <p>In the state-state version, annual biomass deviates are estimated as random effects. Similar to Meyer and Millar (1999), the biomass <span class="math inline">\(B_t\)</span> in year <span class="math inline">\(t\)</span> is <span class="math display">\[B_t = (B_{t-1} + P_{t-1} - C_{t-1})\exp(\delta_t - 0.5 \tau^2),\]</span> where <span class="math inline">\(\delta_t \sim N(0, \tau^2)\)</span> are biomass deviations in lognormal space and <span class="math inline">\(\tau\)</span> is the standard deviation of the biomass deviations.</p>
 <p>The log-likelihood of the estimated deviations <span class="math inline">\(\hat{\delta}_t\)</span> is <span class="math display">\[\hat{\delta}_t \sim N(0, \tau^2).\]</span></p>
 </div>
+<div id="prior-for-r" class="section level2">
+<h2><span class="header-section-number">2.4</span> Prior for r</h2>
+<p>To generate the prior for the intrinsic rate of increase, natural mortality <span class="math inline">\(M_a\)</span> and steepness <span class="math inline">\(h\)</span> are sampled from a distribution. Natural mortality is modelled to be age-invariant and is sampled from a lognormal distribution. Assuming either a Beverton-Holt or Ricker stock-recruit relationship, steepness is sampled from a transformed beta or transformed lognormal distribution, respectively.</p>
+<p>For each pair of sampled M and h values, the corresponding value of <span class="math inline">\(r\)</span> is obtained by solving a modified Euler-Lotka equation: <span class="math display">\[\alpha \Sigma_{a=1}^A l_a m_a w_a \exp(-ra) = 1.\]</span></p>
+<p>Equation 12 is modified to include the <span class="math inline">\(\alpha\)</span> term from the stock-recruit relationship (Stanley et al. 2009). In this way, the recruits-per-spawner at low stock sizes, i.e., as spawning biomass approaches zero, is considered for calculating r.</p>
+<p>The numbers-per-recruit at age <span class="math inline">\(a\)</span> is <span class="math display">\[
+l_a =
+\begin{cases}
+      1 &amp; a = 1\\
+      l_{a-1} \exp(-M_{a-1}) &amp; a = 2, \ldots, A-1\\
+      \dfrac{l_{a-1} \exp(-M_{a-1})}{1 - \exp(-M_a)} &amp; a = A \\
+\end{cases}.
+\]</span></p>
+<p>Maturity at age <span class="math inline">\(m_a\)</span> is <span class="math display">\[m_a = \left[1 + \exp\left(-\log(19) \dfrac{a - \tilde{a}_{50}}{\tilde{a}_{95} - \tilde{a}_{50}}\right)\right]^{-1}, \]</span> where <span class="math inline">\(\tilde{a}_{50}\)</span> and <span class="math inline">\(\tilde{a}_{95}\)</span> are the ages of 50% and 95% maturity, respectively.</p>
+<p>Weight-at-age <span class="math inline">\(w_a\)</span> is <span class="math display">\[w_a = W_{\infty}(1 - \exp[K\{a-a_0\}])^b.\]</span></p>
+<p>The recruits per spawner at the origin of the stock-recruit relationship <span class="math inline">\(alpha\)</span> is <span class="math display">\[\alpha = \dfrac{4h}{(1-h)\phi_0}, \]</span> or <span class="math display">\[\alpha = \dfrac{(5h)^{1.25}}{\phi_0},\]</span> for a Beverton-Holt and Ricker stock-recruit relationship, respectively, where unfished recruits-per-spawner <span class="math inline">\(\phi_0\)</span> is <span class="math display">\[\phi_0 = \Sigma_{a=1}^A l_a w_a m_a.\]</span></p>
+<p>A normal distribution is assumed for the prior with the mean and standard deviation calculated from the values of <span class="math inline">\(r\)</span> calculated using the above procedure.</p>
+</div>
 </div>
 <div id="references" class="section level1">
 <h1><span class="header-section-number">3</span> References</h1>
 <p>Fletcher, R.I. 1978. On the restructuring of the Pella-Tomlinson system. Fishery Bulletin 76:515-521.</p>
 <p>Meyer, R., and Millar, R.B. 1999. BUGS in Bayesian stock assessments. Canadian Journal of Fisheries and Aquatic Science 56:1078-1086.</p>
+<p>Stanley, R.D., M. McAllister, P. Starr and N. Olsen. 2009. Stock assessment for bocaccio (Sebastes paucispinis) in British Columbia waters. DFO Can. Sci. Advis. Sec. Res. Doc. 2009/055. xiv + 200 p. </p>
 </div>
 
+
+
+<!-- code folding -->
 
 
 <!-- dynamically load mathjax for compatibility with self-contained -->

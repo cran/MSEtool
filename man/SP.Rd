@@ -146,8 +146,10 @@ res <- SP(Data = swordfish)
 start <- list(dep = 0.875, n = 2)
 res <- SP(Data = swordfish, start = start)
 
-\donttest{
+\dontrun{
 plot(res)
+}
+\donttest{
 profile(res, FMSY = seq(0.1, 0.4, 0.01))
 retrospective(res)
 }
@@ -155,7 +157,7 @@ retrospective(res)
 #### State-space version
 res_SS <- SP_SS(Data = swordfish, start = list(dep = 0.875, sigma = 0.1, tau = 0.1))
 
-\donttest{
+\dontrun{
 plot(res_SS)
 }
 
@@ -164,10 +166,10 @@ res_Fox <- SP(Data = swordfish, start = list(n = 1), fix_n = TRUE)
 res_Fox2 <- SP_Fox(Data = swordfish)
 
 #### SP with r_prior
-res_prior <- SP(Data = SimulatedData, r_prior = TRUE)
+res_prior <- SP(Data = SimulatedData, use_r_prior = TRUE)
 
 #### Pass an r_prior to the model with mean = 0.35, sd = 0.10
-res_prior2 <- SP(Data = SimulatedData, r_prior = TRUE, start = list(r_prior = c(0.35, 0.10)))
+res_prior2 <- SP(Data = SimulatedData, use_r_prior = TRUE, start = list(r_prior = c(0.35, 0.10)))
 }
 \references{
 Fletcher, R. I. 1978. On the restructuring of the Pella-Tomlinson system. Fishery Bulletin 76:515:521.

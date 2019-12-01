@@ -140,7 +140,7 @@ get_dependencies <- function(Assess, arg = list()) {
   more_deps <- dep_args[do.call(c, formals2[dep_match])]
 
   if(length(more_deps) > 0) {
-    if(Assess == "DD_SS" && any(names(more_deps) == "fix_sigma")) more_deps$fix_sigma <- "Data@CV_Cat"
+    #if(Assess == "DD_SS" && any(names(more_deps) == "fix_sigma")) more_deps$fix_sigma <- "Data@CV_Cat"
     more_deps <- paste(do.call(c, more_deps), collapse = ", ")
     dep <- paste(c(dep, more_deps), collapse = ", ")
   }
@@ -148,7 +148,7 @@ get_dependencies <- function(Assess, arg = list()) {
 }
 
 dep_args <- list(fix_h = "Data@steep", fix_sigma = "Data@CV_Ind", fix_tau = "Data@sigmaR", fix_omega = "Data@CV_Cat",
-                 r_prior = "Data@Mort, Data@CV_Mort, Data@steep, Data@CV_steep, Data@vbLinf, Data@vbK, Data@vbt0, Data@wla, Data@wlb, Data@MaxAge, Data@L50, Data@L95")
+                 use_r_prior = "Data@Mort, Data@CV_Mort, Data@steep, Data@CV_steep, Data@vbLinf, Data@vbK, Data@vbt0, Data@wla, Data@wlb, Data@MaxAge, Data@L50, Data@L95")
 
 
 

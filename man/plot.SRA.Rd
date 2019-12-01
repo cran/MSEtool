@@ -6,20 +6,27 @@
 \alias{plot,SRA,missing-method}
 \title{Plot SRA scope output}
 \usage{
-\S4method{plot}{SRA,missing}(x, filename = "SRA_scope",
-  dir = tempdir(), sims = 1:OM@nsim, Year = NULL, open_file = TRUE,
-  quiet = TRUE, ...)
+\S4method{plot}{SRA,missing}(x, compare = TRUE, filename = "SRA_scope",
+  dir = tempdir(), sims = 1:x@OM@nsim, Year = NULL, f_name = NULL,
+  s_name = NULL, open_file = TRUE, quiet = TRUE, ...)
 }
 \arguments{
 \item{x}{An object of class \linkS4class{SRA} (output from \link{SRA_scope}).}
+
+\item{compare}{Logical, if TRUE, the function will run \code{runMSE} to compare the historical period of the operating model
+and the SRA model output.}
 
 \item{filename}{Character string for the name of the markdown and HTML files.}
 
 \item{dir}{The directory in which the markdown and HTML files will be saved.}
 
-\item{sims}{A logical vector of length \code{OM@nsim} or a numeric vector indicating which simulations to keep.}
+\item{sims}{A logical vector of length \code{x@OM@nsim} or a numeric vector indicating which simulations to keep.}
 
 \item{Year}{Optional, a vector of years for the historical period for plotting.}
+
+\item{f_name}{Character vector for fleet names.}
+
+\item{s_name}{Character vector for survey names.}
 
 \item{open_file}{Logical, whether the HTML document is opened after it is rendered.}
 

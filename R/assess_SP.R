@@ -108,8 +108,10 @@
 #' start <- list(dep = 0.875, n = 2)
 #' res <- SP(Data = swordfish, start = start)
 #'
-#' \donttest{
+#' \dontrun{
 #' plot(res)
+#' }
+#' \donttest{
 #' profile(res, FMSY = seq(0.1, 0.4, 0.01))
 #' retrospective(res)
 #' }
@@ -117,7 +119,7 @@
 #' #### State-space version
 #' res_SS <- SP_SS(Data = swordfish, start = list(dep = 0.875, sigma = 0.1, tau = 0.1))
 #'
-#' \donttest{
+#' \dontrun{
 #' plot(res_SS)
 #' }
 #'
@@ -165,7 +167,7 @@ SP <- function(x = 1, Data, rescale = "mean1", start = NULL, fix_dep = TRUE, fix
       rp <- data$r_prior <- start$r_prior
     } else {
       rp <- r_prior_fn(x, Data, r_reps = r_reps, SR_type = SR_type)
-      data$r_prior <- c(mean(rp), sd(rp))
+      data$r_prior <- c(mean(rp), max(sd(rp), 0.1 * mean(rp)))
     }
   } else {
     rp <- data$r_prior <- c(0, 0)
@@ -205,7 +207,7 @@ SP <- function(x = 1, Data, rescale = "mean1", start = NULL, fix_dep = TRUE, fix
 
   if(rescale != 1) {
     vars_div <- c("B", "BMSY", "K", "MSY", "Cpred", "SP")
-    vars_mult <- NULL
+    vars_mult <- "q"
     var_trans <- c("MSY", "K", "q")
     fun_trans <- c("/", "/", "*")
     fun_fixed <- c("log", NA, NA)
@@ -293,7 +295,7 @@ SP_SS <- function(x = 1, Data, rescale = "mean1", start = NULL, fix_dep = TRUE, 
       rp <- data$r_prior <- start$r_prior
     } else {
       rp <- r_prior_fn(x, Data, r_reps = r_reps, SR_type = SR_type)
-      data$r_prior <- c(mean(rp), sd(rp))
+      data$r_prior <- c(mean(rp), max(sd(rp), 0.1 * mean(rp)))
     }
   } else {
     rp <- data$r_prior <- c(0, 0)
@@ -347,7 +349,7 @@ SP_SS <- function(x = 1, Data, rescale = "mean1", start = NULL, fix_dep = TRUE, 
 
   if(rescale != 1) {
     vars_div <- c("B", "BMSY", "K", "MSY", "Cpred", "SP")
-    vars_mult <- NULL
+    vars_mult <- "q"
     var_trans <- c("MSY", "K", "q")
     fun_trans <- c("/", "/", "*")
     fun_fixed <- c("log", NA, NA)

@@ -1,0 +1,325 @@
+---
+title: "Description of the SRA model for conditioning DLMtool operating models"
+author: "Quang Huynh (<q.huynh@oceans.ubc.ca>)"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    number_sections: true
+vignette: >
+  %\VignetteIndexEntry{SRA model for conditioning operating models}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+---
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({ TeX: { equationNumbers: {autoNumber: "all"} } });
+</script>
+
+<style type="text/css">
+
+body{ /* Normal  */
+   font-size: 12px;
+}
+td {  /* Table  */
+   font-size: 8px;
+}
+h1 { /* Header 1 */
+ font-size: 18px;
+ color: DarkBlue;
+}
+h2 { /* Header 2 */
+ font-size: 15px;
+ color: DarkBlue;
+}
+h3 { /* Header 3 */
+ font-size: 14px;
+ color: DarkBlue;
+}
+code.r{ /* Code block */
+  font-size: 10px;
+}
+pre { /* Code block */
+  font-size: 10px
+}
+</style>
+
+
+```{r set options, echo = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+knitr::opts_chunk$set(dpi=85)
+options(width = 650)
+```
+
+<br>
+
+# Introduction
+
+For conditioning an operating model, it is desirable that some objective method be available (as opposed to intuition or a simple guess) to inform key historical parameters. Biological studies can be used to inform life history parameters such as growth and maturity, while other parameters such as historical depletion and fishing mortality have typically been informed by an assessment model. In data-limited or data-moderate settings, the lack of an accepted assessment makes it difficult to parameterize historical depletion and F.
+
+In the literature, the term "stock reduction analysis" has been used to describe a model in which the predicted total catch matches the observed catch. Kimura and Tagart (1982) presented SRA as an alternative to a VPA or surplus production model. The SRA would be suitable over the VPA when catch-at-age data weren't available, while also utilizing an age-structured modeling approach that incorporates natural mortality and recruitment information for reconstructing the stock history instead a pooled biomass dynamics approach with a surplus production model. 
+
+Stock reduction analysis (SRA) is a potential tool for conditioning operating models in the absence of information from assessments. In any assessment, point estimates of depletion and unfished recruitment may not be credible if there is high uncertainty of input values to the model such as natural mortality, recruitment compensation (i.e., steepness). 
+
+In this context, we don't look at point estimates, but rather try to reduce the range of plausible parameters. Walters et al. (2006) used SRA as an approach to address a broader question: what combinations of historical fishing mortality and recruitment could have generated the observed data? We would exclude parameters that would otherwise generate unlikely scenarios in the historical reconstruction of the stock. 
+
+Consider two extreme scenarios. If the productivity or unfished stock size is too low, then the modeled population would crash while trying to explain the observed catches over time. On the other hand, if the productivity or unfished stock size is too high, then the observed catches are tiny in relation to the population, and implies still unfished conditions despite the observed fishing history. Finding a suitable range of parameters is akin to "threading the needle" in order to avoid these two extreme scenarios.
+
+
+# Stock Reduction Analysis (SRA) for conditioning DLMtool operating models
+
+The stock reduction paradigm can be quite useful for informing the historical scenarios in a DLMtool operating model. Suppose that we are unsure about how to specify certain life history parameters, e.g. steepness. For other life history parameters such as growth, we may be more certain or we prefer to incorporate uncertainty in other parameters. With some data, we can try to fit an age-structured model that estimates historical depletion (spawning biomass in the last year of the historical period relative to that when fishing started), recruitment, and fishing mortality that are consistent with the specified parameter values. 
+
+In MSEtool, `SRA_scope()` will be the main function for scoping historical scenarios for an operating model `OM`. `SRA_scope` takes an operating model, data, in order to run the SRA and then returns a list with an updated OM and predicted outputs from the SRA. All model configurations for the SRA will also be specified through arguments passed through `SRA_scope`.
+
+The approach can be stochastic (with Monte Carlo sampling) if the operating model is specified as such. For example, steepness is highly uncertain, then one could specify a range of values, for example, between 0.6 and 0.9 with a uniform distribution, in an operating model:
+```{r, eval = FALSE}
+OM@h <- c(0.6, 0.9)
+```
+If one wishes to run 250 simulations in the closed-loop simulation, then `SRA_scope` will sample 250 steepness values from this distribution and then fit the SRA model 250 times. Alternatively, one can manually provide values in the `cpars` section of the operating model:
+
+```{r, eval = FALSE}
+# Sample from a beta distribution and transform the random variable
+h_samp <- rbeta(250, 13.3, 4.4)
+OM@cpars$h <- 0.8 * h_samp + 0.2 # Mean = 0.8 with SD = 0.08
+```
+
+The SRA model reconstruction from `i-th` fit will be conditioned on the `i-th` sampled value of steepness. The sampled values of steepness (as well as all input parameters to the SRA) are saved in the OM object returned by `SRA_scope` to ensure consistency.
+
+
+## Model configuration of the SRA
+
+The first order of business with set-up of the SRA model is to decide whether to condition the model on catch, e.g., `SRA_scope(..., condition = "catch")` or effort. If the model is conditioned on catch, then the SRA will generate predicted catches that match the observed. If conditioned on effort, the estimated fishing mortality in the model will be proportional to the observed effort. A full time series of the conditioning variable is needed, and length of the historical period `OM@nyears` will be the length of the conditioned time series.
+
+Ideally, the time series begins at unfished conditions. One could pass the asssumed equilibrium catch or equilibrium effort prior to the first year of data to `SRA_scope`. The SRA will then attempt to estimate the initial depletion in the first year of the historical period. However, initial depletion may be generally difficult to estimate with precision (consider what data are informative to estimate initial depletion, perhaps an age or length sample from that first year that shows the truncation of the composition data relative to unfished conditions). 
+
+If catch or effort data are unavailable going back to unfished conditions, then the data could be extrapolated back in time using reconstruction. Examples of catch reconstruction methods for the purposes of a stock asesssment can be found in Porch et al. (2004) and Appendix A of Starr and Haigh (2017).
+
+In addition to the conditioning variable, additional data types can be used:
+
+- Indices of abundance (either as surveyed biomass or fishery-dependent catch-per-unit time series)
+- Age compositions
+- Length compositions
+- Mean lengths (this option is generally for very sparse data scenarios when mean length data are available but not the composition data)
+
+Multiple surveys and fleets can be accommodated with `SRA_scope`. One of these several data types in addition to catch or effort is generally needed to obtain depletion estimates. Availability of these data can be quite sparse over time, yet still informative. For example, an age composition sample from a single recent year that shows a very truncated age structure can be sufficient to imply a heavily depleted stock.
+
+Here are the required pre-specified OM parameters needed for SRA scoping:
+
+- Growth (length-at-age) using slots `OM@Linf, OM@K, OM@t0` (or alternatively, `OM@cpars$Len_age`) and  `OM@LenCV`
+- Length-weight conversion factors using slots `OM@a` and `OM@b` (or alternatively, `OM@cpars$Wt_age`)
+- Natural mortality using slots `OM@M, OM@M2` or `OM@cpars$M_ageArray`
+- Maturity using slots `OM@L50, OM@L50_95` or `OM@cpars$Mat_age`
+- Standard deviation of recruitment deviations using slot `OM@Perr` or `OM@cpars$Perr`
+- Stock-recruit relationship with `OM@SRrel`
+- If no age or length compositions, selectivity is needed with `OM@L5`, `OM@LFS`, and `OM@Vmaxlen`
+
+If growth, natural mortality, or maturity are time-varying in the historical period, then the SRA will implement time-varying life history in the estimation model as well. For example, if we're setting up an operating model where the length of the historical period is 50 years, and we believe that natural mortality has doubled from 0.2 to 0.4 since Year 30 and will remain so into the future, this code can be used to set up this scenario:
+
+```{r, eval = FALSE}
+OM@nyears <- 50
+OM@proyears <- 30
+
+M_ageArray <- array(0.4, c(OM@nsim, OM@maxage, OM@nyears + OM@proyears)) # Default M = 0.4
+M_ageArray[, , 1:30] <- 0.2 # M = 0.2 in the first 30 years of the simulation
+OM@cpars$M_ageArray <- M_ageArray
+```
+
+The SRA will pick up this change in the model as well.
+
+The easiest way to turn off time-varying growth and M is to set:
+
+```{r, eval = FALSE}
+OM@Linfsd <- OM@Ksd <- OM@Msd <- c(0, 0)
+```
+
+Selectivity is fixed if no age or length compositions are provided. Otherwise, the ascending limb of selectivity is estimated with age or length composition data. If the selectivity is assumed to be dome-shaped, then the descending limb can either be fixed values sampled from slot `OM@Vmaxlen` or estimated in the SRA. 
+
+Information about the slots in the OM object can be viewed through `class?OM`. If passing custom objects to the operating model that override default inputs (e.g., for time-varying parameters), then `DLMtool::validcpars()` will be helpful for setting up and indexing the dimensions of the custom objects.
+
+## Updated parameters and SRA model evaluation
+
+Historical OM parameters that are updated by the SRA scoping function include:
+
+- Unfished recruitment `OM@R0`, only if catch is provided
+- Depletion `OM@D`
+- Relative effort `OM@cpars$Find`
+- Annual recruitment deviations `OM@cpars$Perr_y`
+- If age or length compositions were used, selectivity parameters `OM@L5, OM@LFS, and OM@Vmaxlen`
+
+If initial depletion is estimated, then the recruitment deviations `OM@cpars$Perr_y` for the operating model are adjusted in order to produce the estimated abundance-at-age in the first year of the SRA model. 
+
+The SRA model will estimate and return R0 when conditioned on catch. When conditioning on effort, the model is generally scale-independent; there can be information to inform depletion but not the stock size. 
+
+The exception occurs when the SRA is conditioned on effort from multiple-fleets, in which case, catch data from all fleets (incomplete series are acceptable) are needed to inform the relative F's among fleets. In this scenario, R0 is estimated.
+
+Additionally, if multiple fleets are used for conditioning, then the annual selectivity can change based on the relative F among fleets. In this case, the annual selectivity is passed from the OM output in the `OM@cpars$V` slot. The default assumption in the projection period of the closed-loop simulation is that the selectivity and relative F among fleets are identical to those in the last historical year. Fleet allocation in management procedures can be explored in `multiMSE`, see `vignette("multiMSE")`.
+
+Life history parameters used in the SRA reconstruction will be also passed to `OM@cpars` to ensure reproducibility. Time-varying parameters affect calculation of reference points, mostly importantly unfished depletion. In `SRA_scope` (and DLMtool), depletion is the ratio of the spawning biomass in the terminal year and the unfished spawning biomass in the first year of the model. In this sense, depletion used to describe changes in the stock since fishing began. If life-history parameter are time-varying, then this definition may not necessarily reflect a management target.
+
+The relative effort provided in the output is the apical F from the SRA. When running the management strategy evaluation with `DLMtool::runMSE()`, the apical F may be re-scaled to ensure that specified depletion has been reached at the beginning and end of the historical period. For simple operating models, i.e. those with conditions identical to the SRA, the apical F's in the MSE should be nearly identical to those from the SRA. To confirm that this is the case, one can run the `plot` function on output returned by `SRA_scope`:
+
+```{r, eval = FALSE}
+output <- SRA_scope(...)
+plot(output)
+```
+
+This function returns a markdown report with:
+
+- Histograms of updated parameters in the OM object
+- Fits of the SRA model to the provided data
+- Output from the SRA model, e.g. predicted recruitment
+- Fits to an additional run of the SRA model to mean life history values among simulations (only when `SRA_scope(..., mean_fit = TRUE)` is run)
+- Comparisons of the historical period of the updated OM to the estimated SRA output
+
+Currently, it is possible to create a more complex operating model than the SRA model itself. For example, discard mortality, movement, and spatial targetting are currently not modeled in the SRA. It is assumed that the catch in the SRA are all known sources of removal, i.e. landings plus discards. The SRA is a single area model, whereas DLMtool uses a multiple-area model. A simple operating model that best matches the SRA model may have the following configurations:
+
+```{r, eval = FALSE}
+OM@DR <- c(0, 0) # All discards are accounted for
+OM@Size_area_1 <- OM@Frac_area_1 <- OM@Prob_staying <- c(0.5, 0.5) # A well-mixed stock in 2 areas of equal sizes
+```
+
+It may be desirable to compare the SRA to a simple operating model before incorporating more complex dynamics in the operating model.
+
+# Case study
+
+To be added.
+
+# Mathematical description of the SRA model
+
+## Selectivity and mortality
+Selectivity $v$ is length-based and modeled as a double-exponential function (using base 2). For fleet $f$ with flat-topped selectivity, two parameters are used, the length of 5% selectivity ($L^5_f$) and the length of full selectivity $L^{\textrm{FS}}_f$. For dome selectivity, a third parameter, the selectivity at $L_{\infty}$, $V^{L_{\infty}}_f$ is also used. Length-based selectivity is converted to age-based selectivity in the age-structured model as:
+
+$$ v_{y,a,f} = 
+\begin{cases}
+2^{-[(L_{y,a} - L^{\textrm{FS}}_f)/(\sigma^{\textrm{asc}}_f)]^2} & \textrm{if } L_{y,a} < L^{\textrm{FS}}_f\\ 
+1 & \textrm{if logistic and } L_{y,a} \ge L^{\textrm{FS}}_f,\\
+2^{-[(L_{y,a} - L^{\textrm{FS}}_f)/(\sigma^{\textrm{des}}_f)]^2} & \textrm{if flat-topped and } L_{y,a} \ge L^{\textrm{FS}}_f
+\end{cases}
+$$
+
+
+where $L_{y,a}$ is the mean length-at-age in year $y$, and $\sigma^{\textrm{asc}}_f = (L^5_f - L^{\textrm{FS}}_f)/\sqrt{-\log_2(0.05)}$ and $\sigma^{\textrm{des}}_f = (L_{\infty} - L^{\textrm{FS}}_f)/\sqrt{-\log_2(V^{L_{\infty}})}$ control the shape of the ascending and descending limbs, respectively, of the selectivity function. In this parameterization, length-based selectivity is constant over time. The corresponding age-based selectivity is constant over time if growth is not time-varying.
+
+Total mortality $Z$ in year $y$ and for age $a$ is the sum of fishing mortality $F$ from all fleets and natural mortality $M$,
+
+$$ Z_{y,a} = M_{y,a} + \Sigma_f v_{y,a,f} F_{y,f}.$$
+
+## Initial population distribution
+The population age distribution in the first year of the model $y=1$ is in equilibrium where
+$$ N_{1,a} = 
+\begin{cases}
+      R^{\textrm{eq}} \exp(-\Sigma_{i=1}^{a-1}Z^{\textrm{eq}}_i) & a = 1, \ldots, A-1\\
+      \dfrac{R^{\textrm{eq}} \exp(-\Sigma_{i=1}^{a-1}Z^{\textrm{eq}}_i)}{1 - \exp(-Z^{\textrm{eq}}_A)} & a = A,
+\end{cases}
+$$
+where the $R^{\textrm{eq}}$ is the equilibrium recruitment and $Z^{\textrm{eq}}_a = M_{1,a} + \Sigma_f v_{1,a,f} F^{\textrm{eq}}_f$ is the equilibrium total mortality rate. Unfished conditions are modeled by setting $F^{\textrm{eq}}_f = 0$. To estimate $F^{\textrm{eq}}_f$, the corresponding equilibrium catch in weight $\tilde{C}^{\textrm{eq}}_f$ prior to the first year of the model should be provided. In the equilibrium yield curve,  $F^{\textrm{eq}}_f$ would be the fishing mortality corresponding to fishing at $F^{\textrm{eq}}_f$. Once $Z^{\textrm{eq}}_a$ is obtained, then the equilibrium recruitment is calculated as:
+
+$$ R^{\textrm{eq}} = 
+\begin{cases}
+      \dfrac{\alpha^{\textrm{BH}}\phi^{\textrm{eq}} - 1}{\beta^{\textrm{BH}}\phi^{\textrm{eq}}} & \textrm{if Beverton-Holt stock-recruit relationship}\\
+      \dfrac{\log(\alpha^{\textrm{Ricker}}\phi^{\textrm{eq}})}{\beta^{\textrm{Ricker}}\phi^{\textrm{eq}}} & \textrm{if Ricker stock-recruit relationship}
+\end{cases},
+$$
+where $\phi^{\textrm{eq}}$ is the spawners-per-recruit when the mortality is $Z^{\textrm{eq}}_a$. From steepness $h$, $\alpha^{\textrm{BH}} = \frac{4h}{(1-h)\phi_0}$, $\beta^{\textrm{BH}} = \frac{5h-1}{(1-h)B^S_0}$, $\alpha^{\textrm{Ricker}} = \frac{(5h)^{1.25}}{\phi_0}$, $\beta^{\textrm{Ricker}} = \frac{\log(5h)}{B^S_0}$, where $\phi_0$ and $B^S_0$ are unfished spawners-per-recruit and unfished spawning biomass, respectively.
+
+## Dynamics equations
+After setting the equilibrium population age distribution in the first year of the model, the population abundance $N_{y,a}$ in subsequent years is
+$$ N_{y,a} =
+\begin{cases}
+      R_y & a = 1\\
+      N_{y-1,a-1} \exp(-Z_{y-1,a-1}) & a = 2, \ldots, A - 1,\\
+      N_{y-1,a-1} \exp(-Z_{y-1,a-1}) + N_{y-1,a} \exp(-Z_{y-1,a}) & a = A
+\end{cases}
+$$
+where $R_y$ is the recruitment and $A$ is the maximum-age as the plus-group. Recruitment is modelled as
+$$ R_y = 
+\begin{cases}
+      \dfrac{\alpha^{\textrm{BH}} B^S_{y-1}}{1 + \beta^{\textrm{BH}}B^S_{y-1}} \exp(\delta_y - 0.5 \tau^2) & \textrm{if Beverton-Holt stock-recruit relationship}\\
+      \alpha^{\textrm{Ricker}} B^S_{y-1} \exp(-\beta^{\textrm{Ricker}} B^S_{y-1})\exp(\delta_y - 0.5 \tau^2) & \textrm{if Ricker stock-recruit relationship}
+\end{cases},
+$$
+where $\delta_y$ are recruitment deviates and $\tau$ is the standard deviation of the deviates.
+
+The spawning biomass is $B^S_y$ is
+$$B^S_y = \sum_a w_{y,a} m_{y,a} N_{y,a},$$
+where $m_{y,a}$ and $w_{y,a}$ are the maturity at age and weight at age, respectively.
+
+The catch (in numbers) $C^N$ at age for fleet $f$ is
+$$ C^N_{y,a,f} = \dfrac{v_{y,a,f} F_{y,f}}{Z_{y,a}} N_{y,a} (1 - \exp[-Z_{y,a}]).$$
+
+If the model is conditioned on catch, then $F_{y,f}$ are estimated. If the model is conditioned on effort, then
+$$ F_{y,f} = q_f E_{y,f},$$
+where $E_{y,f}$ is the observed effort and $q_f$ is the scaling coefficient.
+
+The catch at length is calculated assuming a normally distributed length-at-age $P(\ell,a)$, where
+$$ C^N_{y,\ell,f} = \sum_a C^N_{y,a,f} P(\ell|a) $$
+and
+
+$$ P(\ell|a) = 
+\begin{cases}
+      \phi(L'_{\ell+1}) & \ell = 1\\
+      \phi(L'_{\ell+1}) - \phi(L'_\ell) & \ell = 2, \ldots, L - 1,\\
+      1 -\phi(L'_\ell) & \ell = L
+\end{cases}
+$$
+with $L'_{\ell}$ as the length at the lower boundary of length bin $\ell$ and $\phi(L'_{\ell})$ as the cumulative distribution function of a normal variable with mean $\tilde{L}_{y,a}$ (the expected mean length at age $a$) and standard deviation $\tilde{L}_{y,a} \times CV^L$ ($CV^L$ is the coefficient of variation in mean length at age). 
+
+The catch in weight $\tilde{C}$ is
+$$ \tilde{C}_{y,f} = \sum_a C^N_{y,a,f} w_{y,a}.$$
+
+The mean length of the catch $\bar{L}_{y,f}$ is
+$$ \bar{L}_{y,f} = \dfrac{\sum_{\ell} L_{\ell} C^N_{y,\ell,f}}{\sum_{\ell} C^N_{y,\ell,f}},$$
+where $L_\ell$ is the midpoint of the length bin $\ell$.
+
+The proportion of the catch-at-age is
+$$ p_{y,a,f} = \dfrac{C^N_{y,a,f}}{\sum_a C^N_{y,a,f}}.$$
+
+The proportion of the catch-at-length is
+$$ p_{y,\ell,f} = \dfrac{C^N_{y,\ell,f}}{\sum_{\ell}C^N_{y,\ell,f}}.$$
+
+
+## Likelihoods
+
+If the model is conditioned on catch, then the log-likelihood component $\Lambda_1$ of the catch is
+$$\Lambda_1 = \sum_f \left[\lambda^{\tilde{C}}_f \sum_y \left(-\log(0.01) - \dfrac{[\log(\tilde{C}^{\textrm{obs}}_{y,f}) - \log(\tilde{C}^{\textrm{pred}}_{y,f})]^2}{2 \times 0.01^2}\right)\right],$$
+
+where $\textrm{obs}$ and $\textrm{pred}$ indicate observed and predicted quantities, respectively, and $\lambda$ are likelihood weights. With a small standard deviation for the catch likelihood relative to the variance in other likelihood components, the predicted catch should match the observed catch.
+
+The log-likelihood component $\Lambda_2$ of survey data is
+$$\Lambda_2 = \sum_s \left[ \lambda^I_s \sum_y \left(-\log(\sigma_{y,s}) - \dfrac{[\log(I_{y,s}) - \log(q_s B_{y,s})]^2}{2\sigma_{y,s}^2}\right) \right],$$
+where $I$ is the value of the survey with $s$ indexing survey, $\sigma_{y,s}$ is the corresponding standard deviation of the survey, $q$ is a scaling coefficient, and $B_{y,s}$ is the reference biomass that corresponds to the index, e.g., spawning biomass or vulnerable biomass.
+
+The log-likelihood component $\Lambda_3$ of catch-at-age data is
+$$\Lambda_3 = \sum_f \lambda^A_f \left[\sum_y O^A_{y,f} \log(p_{y,a,f})\right],$$
+where $O^A$ is the annual sample sizes for the age compositions.
+
+The log-likelihood component $\Lambda_4$ of catch-at-length data is
+$$\Lambda_4 = \sum_f \lambda^L_f \left[ \sum_y O^L_{y,f} \log(p_{y,\ell,f}) \right]$$
+where $O^L$ is the annual sample sizes for the length compositions.
+
+The log-likelihood component $\Lambda_5$ of observed mean lengths in the catch is
+$$\Lambda_5 = \sum_f \lambda^{\bar{L}}_f\left[ \sum_y \left(-\log(\omega_f) - \dfrac{[\bar{L}^{\textrm{obs}}_{y,f} - \bar{L}^{\textrm{pred}}_{y,f}]^2}{2 \omega^2_f}\right)\right],$$
+where $\omega_f$ is the standard deviation of mean lengths.
+
+The log-likelihood component $\Lambda_6$ of annual estimated recruitment deviates $\delta_y$ in log space is
+$$\Lambda_6 = \Sigma_y\left(-\log(\tau) - \dfrac{\delta_y^2}{2 \tau^2}\right),$$
+where $\tau$ is the standard deviation of recruitment deviates.
+
+The log-likelihood component $\Lambda_7$ of the equilibrium catch is
+$$\Lambda_7 = \sum_f \lambda^{\tilde{C}}_f \left(-\log(0.01) - \dfrac{[\log(\tilde{C}^{\textrm{eq,obs}}_f) - \log(\tilde{C}^{\textrm{eq,pred}}_f)]^2}{2 \times 0.01^2}\right),$$
+
+The total log-likelihood $\textrm{LL}$ to be maximized is
+$$\textrm{LL} = \sum_{i=1}^7\Lambda_i.$$
+
+# References
+
+Kimura, D.K. and Tagart, J.V. 1982. Stock Reduction Analysis, Another Solution to the Catch Equations. Can. J. Fish. Aquat. Sci. 39: 1467-1472.
+
+Porch, C.E., Turner, S.C., and Schirripa, M.J. 2004. The commercial landings of red snapper in the Gulf of Mexico
+from 1872 to 1962. SEDAR7-AW-22. SEDAR, North Charleston, South Carolina. Available at: http://sedarweb.org/docs/wpapers/SEDAR7-AW-22.pdf (Retrieved July 9, 2019)
+
+Starr, P.J. and Haigh, R. 2017. Stock assessment of the coastwide population of Shortspine
+Thornyhead (Sebastolobus alascanus) in 2015 off the British Columbia coast. DFO
+Can. Sci. Advis. Sec. Res. Doc. 2017/015. ix + 174 p. Available at: http://www.dfo-mpo.gc.ca/csas-sccs/Publications/ResDocs-DocRech/2017/2017_015-eng.html (Retrieved July 9, 2019)
+
+Walters, C.J., Martell, S.J.D., and Korman, J. 2004. A stochastic approach to stock reduction analysis. Can. J. Fish. Aquat. Sci. 63: 212-223.

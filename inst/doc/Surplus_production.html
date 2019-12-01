@@ -13,7 +13,7 @@
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2019-09-27" />
+<meta name="date" content="2019-11-29" />
 
 <title>Description of the surplus production model</title>
 
@@ -306,7 +306,7 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 
 <h1 class="title toc-ignore">Description of the surplus production model</h1>
 <h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2019-09-27</h4>
+<h4 class="date">2019-11-29</h4>
 
 
 <div id="TOC">
@@ -363,13 +363,13 @@ pre { /* Code block */
 <h1><span class="header-section-number">2</span> Surplus-production (SP) model</h1>
 <div id="dynamics-equations" class="section level2">
 <h2><span class="header-section-number">2.1</span> Dynamics equations</h2>
-<p>The surplus production model uses the Fletcher (1978) formulation. The biomass <span class="math inline">\(B_t\)</span> in year <span class="math inline">\(t\)</span> is <span class="math display">\[B_t = B_{t-1} + P_{t-1} - C_{t-1},\]</span> where <span class="math inline">\(C_t\)</span> is the observed catch and <span class="math inline">\(P_t\)</span> is the surplus production given by: <span class="math display">\[P_t = \gamma MSY \left(\dfrac{B_t}{K}-\left[\dfrac{B_t}{K}\right]^n\right), \]</span> where <span class="math inline">\(K\)</span> is the carrying capacity, <span class="math inline">\(MSY\)</span> is the estimated maximum sustainable yield, and <span class="math inline">\(n\)</span> is the parameter that controls shape of the production curve, and <span class="math inline">\(\gamma\)</span> is <span class="math display">\[\gamma = \dfrac{1}{n-1}n^{n/(n-1)}.\]</span></p>
+<p>The surplus production model uses the Fletcher (1978) formulation. The biomass <span class="math inline">\(B_t\)</span> in year <span class="math inline">\(t\)</span> is <span class="math display">\[B_t = B_{t-1} + P_{t-1} - C_{t-1},\]</span> where <span class="math inline">\(C_t\)</span> is the observed catch and <span class="math inline">\(P_t\)</span> is the surplus production given by: <span class="math display">\[P_t = \gamma \times MSY \times \left(\dfrac{B_t}{K}-\left[\dfrac{B_t}{K}\right]^n\right), \]</span> where <span class="math inline">\(K\)</span> is the carrying capacity, <span class="math inline">\(MSY\)</span> is the estimated maximum sustainable yield, and <span class="math inline">\(n\)</span> is the parameter that controls shape of the production curve, and <span class="math inline">\(\gamma\)</span> is <span class="math display">\[\gamma = \dfrac{1}{n-1}n^{n/(n-1)}.\]</span></p>
 <p>By conditioning the model on observed catch, the predicted index <span class="math inline">\(\hat{I}_t\)</span> is <span class="math display">\[\hat{I}_t = \hat{q} \hat{B}_t \]</span> and the harvest rate is <span class="math display">\[\hat{F}_t = \dfrac{C_t}{\hat{B}_t}.\]</span> The dynamics equations above use an annual time step. Optionally, smaller time steps are used in the model to approximate continuous production and fishing. Given the biomass in the start of the year and assuming a constant fishing mortality over the time steps within a year, the fishing mortality that produces the observed annual catch is solved iteratively.</p>
 <p>The likelihood of the observed index <span class="math inline">\(I_t\)</span>, assuming a lognormal distribution, is <span class="math display">\[\log(I_t) \sim N(\log[\hat{I}_t], \sigma^2).\]</span></p>
 </div>
 <div id="derived-parameters" class="section level2">
 <h2><span class="header-section-number">2.2</span> Derived parameters</h2>
-<p>From estimates of leading parameters <span class="math inline">\(F_{MSY}\)</span> and <span class="math inline">\(MSY\)</span>, the biomass <span class="math inline">\(B_{MSY}\)</span> at <span class="math inline">\(MSY\)</span> is <span class="math display">\[B_{MSY} = \dfrac{MSY}{F_{MSY}},\]</span> the carrying capacity <span class="math inline">\(K\)</span> is <span class="math display">\[K = n^{1/(n-1)} B_{MSY} ,\]</span> and the intrinsic rate of population increase <span class="math inline">\(r\)</span> is <span class="math display">\[ r = n F_{MSY}.\]</span> The production parameter <span class="math inline">\(n\)</span> is typically fixed and the model has a symmetric productive curve (<span class="math inline">\(B_{MSY}/K = 0.5\)</span>) when <span class="math inline">\(n = 2\)</span>.</p>
+<p>From estimates of leading parameters <span class="math inline">\(F_{MSY}\)</span> and <span class="math inline">\(MSY\)</span>, the biomass <span class="math inline">\(B_{MSY}\)</span> at <span class="math inline">\(MSY\)</span> is <span class="math display">\[B_{MSY} = \dfrac{MSY}{F_{MSY}},\]</span> the carrying capacity <span class="math inline">\(K\)</span> is <span class="math display">\[K = n^{1/(n-1)} \times B_{MSY} ,\]</span> and the intrinsic rate of population increase <span class="math inline">\(r\)</span> is <span class="math display">\[ r = n \times F_{MSY}.\]</span> The production parameter <span class="math inline">\(n\)</span> is typically fixed and the model has a symmetric productive curve (<span class="math inline">\(B_{MSY}/K = 0.5\)</span>) when <span class="math inline">\(n = 2\)</span>.</p>
 </div>
 <div id="state-space-version-sp_ss" class="section level2">
 <h2><span class="header-section-number">2.3</span> State-space version (SP_SS)</h2>
@@ -379,8 +379,8 @@ pre { /* Code block */
 <div id="prior-for-r" class="section level2">
 <h2><span class="header-section-number">2.4</span> Prior for r</h2>
 <p>To generate the prior for the intrinsic rate of increase, natural mortality <span class="math inline">\(M_a\)</span> and steepness <span class="math inline">\(h\)</span> are sampled from a distribution. Natural mortality is modelled to be age-invariant and is sampled from a lognormal distribution. Assuming either a Beverton-Holt or Ricker stock-recruit relationship, steepness is sampled from a transformed beta or transformed lognormal distribution, respectively.</p>
-<p>For each pair of sampled M and h values, the corresponding value of <span class="math inline">\(r\)</span> is obtained by solving a modified Euler-Lotka equation: <span class="math display">\[\alpha \Sigma_{a=1}^A l_a m_a w_a \exp(-ra) = 1.\]</span></p>
-<p>Equation 12 is modified to include the <span class="math inline">\(\alpha\)</span> term from the stock-recruit relationship (Stanley et al. 2009). In this way, the recruits-per-spawner at low stock sizes, i.e., as spawning biomass approaches zero, is considered for calculating r.</p>
+<p>For each pair of sampled M and h values, the corresponding value of <span class="math inline">\(r\)</span> is obtained by solving a modified Euler-Lotka equation: <span class="math display">\[\Sigma_{a=1}^A l_a m_a \exp(-r \times a) = 1.\]</span></p>
+<p>Equation 12 is modified to include the <span class="math inline">\(\alpha\)</span> term from the stock-recruit relationship (Stanley et al. 2009). In this way, the recruits-per-spawner at low stock sizes, i.e., as spawning biomass approaches zero, is considered for calculating <span class="math inline">\(r\)</span>.</p>
 <p>The numbers-per-recruit at age <span class="math inline">\(a\)</span> is <span class="math display">\[
 l_a =
 \begin{cases}
@@ -389,9 +389,9 @@ l_a =
       \dfrac{l_{a-1} \exp(-M_{a-1})}{1 - \exp(-M_a)} &amp; a = A \\
 \end{cases}.
 \]</span></p>
-<p>Maturity at age <span class="math inline">\(m_a\)</span> is <span class="math display">\[m_a = \left[1 + \exp\left(-\log(19) \dfrac{a - \tilde{a}_{50}}{\tilde{a}_{95} - \tilde{a}_{50}}\right)\right]^{-1}, \]</span> where <span class="math inline">\(\tilde{a}_{50}\)</span> and <span class="math inline">\(\tilde{a}_{95}\)</span> are the ages of 50% and 95% maturity, respectively.</p>
+<p>Fecundity at age <span class="math inline">\(m_a\)</span> is <span class="math display">\[m_a = \dfrac{\alpha w_a}{\left[1 + \exp\left(-\log(19) \dfrac{a - \tilde{a}_{50}}{\tilde{a}_{95} - \tilde{a}_{50}}\right)\right]}, \]</span> where <span class="math inline">\(\tilde{a}_{50}\)</span> and <span class="math inline">\(\tilde{a}_{95}\)</span> are the ages of 50% and 95% maturity, respectively.</p>
 <p>Weight-at-age <span class="math inline">\(w_a\)</span> is <span class="math display">\[w_a = W_{\infty}(1 - \exp[K\{a-a_0\}])^b.\]</span></p>
-<p>The recruits per spawner at the origin of the stock-recruit relationship <span class="math inline">\(alpha\)</span> is <span class="math display">\[\alpha = \dfrac{4h}{(1-h)\phi_0}, \]</span> or <span class="math display">\[\alpha = \dfrac{(5h)^{1.25}}{\phi_0},\]</span> for a Beverton-Holt and Ricker stock-recruit relationship, respectively, where unfished recruits-per-spawner <span class="math inline">\(\phi_0\)</span> is <span class="math display">\[\phi_0 = \Sigma_{a=1}^A l_a w_a m_a.\]</span></p>
+<p>The recruits per spawner at the origin of the stock-recruit relationship <span class="math inline">\(\alpha\)</span> is <span class="math display">\[\alpha = \dfrac{4h}{(1-h)\phi_0}, \]</span> or <span class="math display">\[\alpha = \dfrac{(5h)^{1.25}}{\phi_0},\]</span> for a Beverton-Holt and Ricker stock-recruit relationship, respectively, where unfished recruits-per-spawner <span class="math inline">\(\phi_0\)</span> is <span class="math display">\[\phi_0 = \Sigma_{a=1}^A l_a w_a m_a.\]</span></p>
 <p>A normal distribution is assumed for the prior with the mean and standard deviation calculated from the values of <span class="math inline">\(r\)</span> calculated using the above procedure.</p>
 </div>
 </div>

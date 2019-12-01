@@ -147,6 +147,8 @@ setMethod("summary", signature(object = "Assessment"), function(object) {
 #' @examples
 #' \donttest{
 #' output <- DD_TMB(Data = Simulation_1)
+#' }
+#' \dontrun{
 #' plot(output)
 #' }
 #' @seealso \link{retrospective}
@@ -169,6 +171,11 @@ if(getRversion() >= "2.15.1") {
 
   # For Awatea2OM - Quang assumes these variables are loaded in from .rda files
   utils::globalVariables(c("Bmcmc", "currentMCMC", "currentRes"))
+
+  # For dplyr functions in SS2OM
+  utils::globalVariables(c("Year", "Age", "M", "steep", "int_Age", "Len_Beg", "Wt_Beg", "Len_Mat", "Age_Mat", "Yr",
+                           "LAA", "Gender", "true_Age", "true_Year", "true_Yr", "bias_adjusted", "pred_recr", "Z"))
+
 }
 
 

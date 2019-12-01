@@ -1,5 +1,19 @@
 The latest release of the MSEtool package is available on [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+## MSEtool 1.4.0
+
+### Updates to SRA_scope 
+- Revised function arguments. Data inputs are in a single list in order to keep function calls tidy. The function should be backwards compatible for the most part.
+- Mean weight-at-age is now used to calculate biomass and catch in order to match calculations in `DLMtool::runMSE`. Depletion calculations also match those in `DLMtool::runMSE`.
+- Survey selectivity can now be estimated if age or length compositions for the survey are provided. See help file for setup.
+- New plots have been added to the markdown report, include those that compare the outputs from the SRA and the updated operating model.
+- A vignette for `SRA_scope` has now been added.
+
+### Other
+- Extensive revisions to `SS2OM` have been added. The function also generates a markdown report to compare operating model output to Stock Synthesis outputs, e.g., recruitment, catch, spawning biomass time series.
+- A log-Jacobian transform has been added for the r prior in `SP` and `SP_SS` (surplus production models). This is needed because FMSY is estimated rate parameter rather than r. By default, the minimum CV on the r-prior is 0.1 to allow the model to update r. It is assumed n is fixed in the model. 
+- Re-organize TMB files.
+
 ## MSEtool 1.3.0
 
 ### Updates to SRA_scope
@@ -8,7 +22,7 @@ The latest release of the MSEtool package is available on [CRAN](https://CRAN.R-
 - `SRA_scope` returns an S4 object of class `SRA` with a `plot()` method that generates a markdown report of model fits.
 
 ### Assessment models
-- A prior for r is now possible with `SP` and `SP_SS` using life history information (priors in natural mortality and steepness, as well as maturity/weight at age).
+- A prior for r is now possible with `SP` and `SP_SS` using life history information (priors in natural mortality and steepness, as well as maturity/weight at age). To use this feature, set argument `use_r_prior = TRUE`.
 - Default process error standard deviation for `SP_SS` is reduced to 0.1.
 - `cDD` and `cDD_SS` are more robust when catch is very, very small (F is set to 0). This is important for management procedures that shut down fishing.
 - Minor updates to simplify TMB code.

@@ -172,6 +172,7 @@ SCA_Pope <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("log
       }
     }
   }
+  if(is.na(params$vul_par[1])) params$vul_par[1] <- 1
   if(is.null(params$log_sigma)) {
     sigmaI <- max(0.05, sdconv(1, Data@CV_Ind[x]), na.rm = TRUE)
     params$log_sigma <- log(sigmaI)
@@ -225,7 +226,7 @@ SCA_Pope <- function(x = 1, Data, SR = c("BH", "Ricker"), vulnerability = c("log
 
   if(rescale != 1) {
     vars_div <- c("B", "E", "CAApred", "CN", "N", "VB", "R", "R_early", "VB0", "R0", "B0", "E0", "N0")
-    vars_mult <- "Brec"
+    vars_mult <- c("Brec", "q")
     var_trans <- c("R0", "q")
     fun_trans <- c("/", "*")
     fun_fixed <- c("log", NA)

@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
 
 <head>
 
 <meta charset="utf-8" />
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
@@ -13,7 +12,7 @@
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2019-12-02" />
+<meta name="date" content="2020-01-09" />
 
 <title>Description of the SRA model for conditioning DLMtool operating models</title>
 
@@ -306,7 +305,7 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 
 <h1 class="title toc-ignore">Description of the SRA model for conditioning DLMtool operating models</h1>
 <h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2019-12-02</h4>
+<h4 class="date">2020-01-09</h4>
 
 
 <div id="TOC">
@@ -509,14 +508,16 @@ pre { /* Code block */
 <p>The mean length of the catch <span class="math inline">\(\bar{L}_{y,f}\)</span> is <span class="math display">\[ \bar{L}_{y,f} = \dfrac{\sum_{\ell} L_{\ell} C^N_{y,\ell,f}}{\sum_{\ell} C^N_{y,\ell,f}},\]</span> where <span class="math inline">\(L_\ell\)</span> is the midpoint of the length bin <span class="math inline">\(\ell\)</span>.</p>
 <p>The proportion of the catch-at-age is <span class="math display">\[ p_{y,a,f} = \dfrac{C^N_{y,a,f}}{\sum_a C^N_{y,a,f}}.\]</span></p>
 <p>The proportion of the catch-at-length is <span class="math display">\[ p_{y,\ell,f} = \dfrac{C^N_{y,\ell,f}}{\sum_{\ell}C^N_{y,\ell,f}}.\]</span></p>
+<p>If the <span class="math inline">\(s^{\textrm{th}}\)</span> survey is biomass-based, then the survey value <span class="math inline">\(I_{y,s}\)</span> is calculated as <span class="math display">\[ I_{y,s} = q_s \sum_a v_{y,a,s} N_{y,a} w_{y,a}, \]</span> where <span class="math inline">\(q\)</span> is the scaling coefficient and <span class="math inline">\(s\)</span> indexes survey.</p>
+<p>If the survey is abundance-based, then <span class="math display">\[ I_{y,s} = q_s \sum_a v_{y,a,s} N_{y,a} . \]</span></p>
 </div>
 <div id="likelihoods" class="section level2">
 <h2><span class="header-section-number">4.4</span> Likelihoods</h2>
 <p>If the model is conditioned on catch, then the log-likelihood component <span class="math inline">\(\Lambda_1\)</span> of the catch is <span class="math display">\[\Lambda_1 = \sum_f \left[\lambda^{\tilde{C}}_f \sum_y \left(-\log(0.01) - \dfrac{[\log(\tilde{C}^{\textrm{obs}}_{y,f}) - \log(\tilde{C}^{\textrm{pred}}_{y,f})]^2}{2 \times 0.01^2}\right)\right],\]</span></p>
 <p>where <span class="math inline">\(\textrm{obs}\)</span> and <span class="math inline">\(\textrm{pred}\)</span> indicate observed and predicted quantities, respectively, and <span class="math inline">\(\lambda\)</span> are likelihood weights. With a small standard deviation for the catch likelihood relative to the variance in other likelihood components, the predicted catch should match the observed catch.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_2\)</span> of survey data is <span class="math display">\[\Lambda_2 = \sum_s \left[ \lambda^I_s \sum_y \left(-\log(\sigma_{y,s}) - \dfrac{[\log(I_{y,s}) - \log(q_s B_{y,s})]^2}{2\sigma_{y,s}^2}\right) \right],\]</span> where <span class="math inline">\(I\)</span> is the value of the survey with <span class="math inline">\(s\)</span> indexing survey, <span class="math inline">\(\sigma_{y,s}\)</span> is the corresponding standard deviation of the survey, <span class="math inline">\(q\)</span> is a scaling coefficient, and <span class="math inline">\(B_{y,s}\)</span> is the reference biomass that corresponds to the index, e.g., spawning biomass or vulnerable biomass.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_3\)</span> of catch-at-age data is <span class="math display">\[\Lambda_3 = \sum_f \lambda^A_f \left[\sum_y O^A_{y,f} \log(p_{y,a,f})\right],\]</span> where <span class="math inline">\(O^A\)</span> is the annual sample sizes for the age compositions.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_4\)</span> of catch-at-length data is <span class="math display">\[\Lambda_4 = \sum_f \lambda^L_f \left[ \sum_y O^L_{y,f} \log(p_{y,\ell,f}) \right]\]</span> where <span class="math inline">\(O^L\)</span> is the annual sample sizes for the length compositions.</p>
+<p>The log-likelihood component <span class="math inline">\(\Lambda_2\)</span> of survey data is <span class="math display">\[\Lambda_2 = \sum_s \left[ \lambda^I_s \sum_y \left(-\log(\sigma_{y,s}) - \dfrac{[\log(I^{\textrm{obs}}_{y,s}) - \log(I^{\textrm{pred}}_{y,s})]^2}{2\sigma_{y,s}^2}\right) \right].\]</span></p>
+<p>The log-likelihood component <span class="math inline">\(\Lambda_3\)</span> of catch-at-age data is <span class="math display">\[\Lambda_3 = \sum_f \lambda^A_f \left[\sum_y O^A_{y,f} \sum_a p^{\textrm{obs}}_{y,a,f} \log(p^{\textrm{pred}}_{y,a,f})\right],\]</span> where <span class="math inline">\(O^A\)</span> is the annual sample sizes for the age compositions.</p>
+<p>The log-likelihood component <span class="math inline">\(\Lambda_4\)</span> of catch-at-length data is <span class="math display">\[\Lambda_4 = \sum_f \lambda^L_f \left[ \sum_y O^L_{y,f} \sum_{\ell} p^{\textrm{obs}}_{y,\ell,f} \log(p^{\textrm{pred}}_{y,\ell,f})\right]\]</span> where <span class="math inline">\(O^L\)</span> is the annual sample sizes for the length compositions.</p>
 <p>The log-likelihood component <span class="math inline">\(\Lambda_5\)</span> of observed mean lengths in the catch is <span class="math display">\[\Lambda_5 = \sum_f \lambda^{\bar{L}}_f\left[ \sum_y \left(-\log(\omega_f) - \dfrac{[\bar{L}^{\textrm{obs}}_{y,f} - \bar{L}^{\textrm{pred}}_{y,f}]^2}{2 \omega^2_f}\right)\right],\]</span> where <span class="math inline">\(\omega_f\)</span> is the standard deviation of mean lengths.</p>
 <p>The log-likelihood component <span class="math inline">\(\Lambda_6\)</span> of annual estimated recruitment deviates <span class="math inline">\(\delta_y\)</span> in log space is <span class="math display">\[\Lambda_6 = \Sigma_y\left(-\log(\tau) - \dfrac{\delta_y^2}{2 \tau^2}\right),\]</span> where <span class="math inline">\(\tau\)</span> is the standard deviation of recruitment deviates.</p>
 <p>The log-likelihood component <span class="math inline">\(\Lambda_7\)</span> of the equilibrium catch is <span class="math display">\[\Lambda_7 = \sum_f \lambda^{\tilde{C}}_f \left(-\log(0.01) - \dfrac{[\log(\tilde{C}^{\textrm{eq,obs}}_f) - \log(\tilde{C}^{\textrm{eq,pred}}_f)]^2}{2 \times 0.01^2}\right),\]</span></p>

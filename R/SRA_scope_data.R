@@ -24,7 +24,14 @@ SRA_scope_data <- function (OM, Data, ...) {
   return(out)
 }
 
-
+SRA_tiny_comp <- function(x) {
+  all_zero <- all(is.na(x)) | sum(x, na.rm = TRUE) == 0
+  if(!all_zero) {
+    ind <- is.na(x) | x == 0
+    if(any(ind)) x[ind] <- 1e-8
+  }
+  return(x)
+}
 
 update_SRA_data <- function(data, OM, condition, dots) {
 
@@ -272,6 +279,22 @@ update_SRA_data <- function(data, OM, condition, dots) {
     }
   } else {
     data$s_CAL <- array(0, c(data$nyears, length(data$length_bin), ncol(data$Index)))
+  }
+
+  # Absolute survey
+  if(data$nsurvey > 0) {
+    if(is.null(data$abs_I)) data$abs_I <- rep(0L, data$nsurvey)
+    if(length(data$abs_I) < data$nsurvey) stop("abs_I should be of length", data$nsurvey, call. = FALSE)
+  } else {
+    data$abs_I <- 0L
+  }
+
+  # Index basis - biomass/abundance
+  if(data$nsurvey > 0) {
+    if(is.null(data$I_basis)) data$I_basis <- rep(1L, data$nsurvey)
+    if(length(data$I_basis) < data$nsurvey) stop("I_basis should be of length", data$nsurvey, call. = FALSE)
+  } else {
+    data$I_basis <- 1L
   }
 
   return(list(data = data, OM = OM, StockPars = StockPars, ObsPars = ObsPars, FleetPars = FleetPars))

@@ -15,11 +15,13 @@
 #' @param data A list of data inputs. See Data section below.
 #' @param condition String to indicate whether the SRA model is conditioned on catch or effort.
 #' @param selectivity A character vector of length nfleet to indicate \code{"logistic"} or \code{"dome"} selectivity for each fleet in \code{Chist}.
-#' @param s_selectivity A character vector of length nsurvey to indicate \code{"logistic"} or \code{"dome"} selectivity for each fleet in \code{Chist}.
-#' Only used if any of \code{data$I_type = "est"}.
+#' @param s_selectivity A vector of length nsurvey to indicate \code{"logistic"} or \code{"dome"} selectivity for each survey in \code{Index}. Use a number
+#' for an age-specific index.
+#' Only used if any of the corresponding entries of \code{data$I_type = "est"} or if a number is specified here.
 #' @param LWT A named list of likelihood weights for the SRA model. See details.
-#' @param ESS A numeric vector of length two to cap the maximum effective samples size of the age and length compositions, respectively, for the
-#' multinomial likelihood function. The effective sample size of an age or length composition sample is the minimum of ESS or the number of observations
+#' @param comp_like A string indicating either "multinomial" (default) or "lognormal" distributions for the composition data.
+#' @param ESS If \code{comp_like = "multinomial"}, a numeric vector of length two to cap the maximum effective samples size of the age and length compositions,
+#' respectively, for the multinomial likelihood function. The effective sample size of an age or length composition sample is the minimum of ESS or the number of observations
 #' (sum across columns). For more flexibility, set ESS to be very large and alter the arrays as needed.
 #' @param max_F The maximum F for any fleet in the scoping model (higher F's in the model are penalized in the objective function).
 #' @param cores Integer for the number of CPU cores for the stock reduction analysis.
@@ -31,6 +33,9 @@
 #' @return An object of class \linkS4class{SRA}, including the updated operating model object.
 #'
 #' @section Data:
+#' One of indices, age compositions, or length compositions should be provided in addition to the historical catch or effort. Not all arguments
+#' are needed to run the model (some have defaults, while others are ignored if not applicable depending on the data provided).
+#'
 #' The \code{data} list can include:
 #'
 #' \itemize{
@@ -38,12 +43,13 @@
 #' Ideally, the first year of the catch series represents unfished conditions (see also \code{C_eq}).
 #' \item Ehist - A vector of historical effort, should be of length OM@@nyears (see also \code{E_eq}).
 #' \item Index - A vector of values of an index (of length OM@@nyears). If there are multiple surveys: a matrix of historical indices of abundances, with rows
-#' indexing years and columns indexing surveys.
+#' indexing years and columns indexing surveys. Age-specific indices should be numbers-specific while all others are weight-based.
 #' \item I_sd - A vector or matrix of standard deviations (lognormal distribution) for the indices corresponding to the entries in \code{Index}.
 #' If not provided, this function will use values from \code{OM@@Iobs}.
 #' \item I_type - A character vector of length nsurvey to indicate the type of biomass for which each index follows. Either \code{"B"} for
 #' total biomass, or \code{"SSB"} for spawning biomass. If not provided, "B" is used. Use numbers if the index corresponds to a fleet in \code{Chist}.
-#' Use \code{"est"} to estimate survey selectivity, but this generally requires age \code{s_CAA} or length \code{s_CAL}compositions.
+#' Use \code{"est"} to set survey selectivity to be an independent component of the model, i.e., as an age-specific index or estimated separatel.
+#' Note, this generally requires age \code{s_CAA} or length \code{s_CAL}compositions.
 #' \item CAA - Fishery age composition matrix with nyears rows and OM@@maxage columns. If multiple fleets: an array with dimension: nyears, OM@@maxage, and nfleets.
 #' \item CAL - Fishery Length composition matrix with nyears rows and columns indexing the length bin. If multiple fleets: an array with dimension: nyears,
 #' length bins, and nfleets.
@@ -58,9 +64,10 @@
 #' Zero (default) implies unfished conditions in year one. Otherwise, this is used to estimate depletion in the first year of the data.
 #' \item E_eq - The equilibrium effort for each fleet in \code{Ehist} prior to the first year of the operating model.
 #' Zero (default) implies unfished conditions in year one. Otherwise, this is used to estimate depletion in the first year of the data.
+#' \item abs_I - Optional, an integer vector to indicate which indices are in absolute magnitude. Use 1 to set q = 1, otherwise use 0 to estimate q.
+#' \item I_basis - Optional, an integer vector to indicate whether indices are biomass based (1) or abundance-based (0). By default, all are biomass-based.
 #' }
 #'
-#' One of indices, age compositions, or length compositions should be provided in addition to the historical catch.
 #' Selectivity is fixed to values sampled from \code{OM} if no age or length compositions are provided.
 #'
 #' @details
@@ -112,12 +119,17 @@
 #' @seealso \link{plot.SRA} \linkS4class{SRA}
 #' @importFrom dplyr %>%
 #' @export
-SRA_scope <- function(OM, data = list(), condition = c("catch", "effort"), selectivity = "logistic", s_selectivity = NULL, LWT = list(), ESS = c(30, 30),
+SRA_scope <- function(OM, data = list(), condition = c("catch", "effort"), selectivity = "logistic", s_selectivity = NULL, LWT = list(),
+                      comp_like = c("multinomial", "lognormal"), ESS = c(30, 30),
                       max_F = 3, cores = 1L, integrate = FALSE, mean_fit = FALSE, drop_nonconv = FALSE, ...) {
 
-  dots <- list(...) # can be vul_par, s_vul_par, map_vul_par, map_s_vul_par, map_log_rec_dev
+  dots <- list(...) # can be vul_par, s_vul_par, map_vul_par, map_s_vul_par, map_log_rec_dev, rescale
+  if(!is.null(dots$maxF)) max_F <- dots$maxF
+  if(length(ESS) == 1) ESS <- rep(ESS, 2)
 
+  comp_like <- match.arg(comp_like)
   condition <- match.arg(condition)
+
   dat_update <- update_SRA_data(data, OM, condition, dots)
   OM <- dat_update$OM
   data <- dat_update$data
@@ -154,7 +166,7 @@ SRA_scope <- function(OM, data = list(), condition = c("catch", "effort"), selec
   if(length(selectivity) < nfleet) stop("selectivity vector should be of length nfleet (", nfleet, ").", call. = FALSE)
   sel_test <- match(selectivity, c("logistic", "dome"))
   if(any(is.na(sel_test))) stop("selectivity vector should be either \"logistic\" or \"dome\".", call. = FALSE)
-  sel <- ifelse(selectivity == "logistic", 1L, 0L)
+  sel <- ifelse(selectivity == "logistic", -1, 0)
 
   if(nsurvey > 0) {
     if(is.null(s_selectivity)) s_selectivity <- rep("logistic", nsurvey)
@@ -163,12 +175,13 @@ SRA_scope <- function(OM, data = list(), condition = c("catch", "effort"), selec
       s_sel <- rep(1L, nsurvey)
     } else {
       if(length(s_selectivity) < nsurvey) stop("s_selectivity vector should be of length nsurvey (", nsurvey, ").", call. = FALSE)
-      s_sel_test <- match(s_selectivity, c("logistic", "dome"))
-      if(any(is.na(s_sel_test) && I_type2 == 0)) {
-        ind <- which(any(is.na(s_sel_test) && I_type2 == 0))
+      s_sel <- suppressWarnings(as.numeric(s_selectivity))
+      s_sel[s_selectivity == "logistic"] <- -1
+      s_sel[s_selectivity == "dome"] <- 0
+      if(any(s_sel > 0 && I_type2 == 0)) {
+        ind <- which(s_sel > 0 && I_type2 == 0)
         stop("Selectivity for survey ", paste0(ind, collapse = " "), " is estimated but s_selectivity should be either \"logistic\" or \"dome\".", call. = FALSE)
       }
-      s_sel <- ifelse(s_selectivity == "logistic", 1L, 0L)
     }
 
   } else {
@@ -232,6 +245,8 @@ SRA_scope <- function(OM, data = list(), condition = c("catch", "effort"), selec
   }
   if(length(LWT$s_CAL) != max(1, nsurvey)) stop("LWT$s_CAL should be a vector of length ", nsurvey, ".")
 
+  data$LWT <- LWT
+
   # SR
   message(ifelse(OM@SRrel == 1, "Beverton-Holt", "Ricker"), " stock-recruitment relationship used.")
 
@@ -241,12 +256,12 @@ SRA_scope <- function(OM, data = list(), condition = c("catch", "effort"), selec
   if(cores > 1 && !snowfall::sfIsRunning()) DLMtool::setup(as.integer(cores))
   if(snowfall::sfIsRunning()) {
     mod <- snowfall::sfClusterApplyLB(1:nsim, SRA_scope_est, data = data, I_type = I_type2, selectivity = sel, s_selectivity = s_sel,
-                                      SR_type = ifelse(OM@SRrel == 1, "BH", "Ricker"), LWT = LWT, ESS = ESS,
+                                      SR_type = ifelse(OM@SRrel == 1, "BH", "Ricker"), LWT = LWT, comp_like = comp_like, ESS = ESS,
                                       max_F = max_F, integrate = integrate, StockPars = StockPars, ObsPars = ObsPars,
                                       FleetPars = FleetPars, dots = dots)
   } else {
     mod <- lapply(1:nsim, SRA_scope_est, data = data, I_type = I_type2, selectivity = sel, s_selectivity = s_sel,
-                  SR_type = ifelse(OM@SRrel == 1, "BH", "Ricker"), LWT = LWT, ESS = ESS,
+                  SR_type = ifelse(OM@SRrel == 1, "BH", "Ricker"), LWT = LWT, comp_like = comp_like, ESS = ESS,
                   max_F = max_F, integrate = integrate, StockPars = StockPars, ObsPars = ObsPars,
                   FleetPars = FleetPars, dots = dots)
   }
@@ -262,16 +277,43 @@ SRA_scope <- function(OM, data = list(), condition = c("catch", "effort"), selec
     keep <- !logical(OM@nsim)
   }
 
-  ### Fit to life history means if mean_fit = TRUE
-  if(mean_fit) {
+  # Test for identical sims
+  all_identical_sims_fn <- function() {
+    vector_fn <- function(x) sum(mean(x) - x) == 0
+    array_fn <- function(x) {
+      x_mean <- apply(x, 2:length(dim(x)), mean)
+      all(apply(x, 1, identical, x_mean))
+    }
+    run_test <- function(x) if(is.null(dim(x))) vector_fn(x) else array_fn(x)
+    StockPars_subset <- StockPars[c("hs", "procsd", "ageM", "M_ageArray", "Linf", "Len_age", "Wt_age", "Mat_age")]
+    if(!any(data$CAL > 0, na.rm = TRUE) || !any(data$s_CAL > 0, na.rm = TRUE) || !any(data$ML > 0, na.rm = TRUE)) {
+      StockPars_subset <- c(StockPars_subset, StockPars["LenCV"])
+    }
+    S_test <- vapply(StockPars_subset, run_test, logical(1))
+    if(data$nfleet == 1 && !any(data$CAL > 0, na.rm = TRUE) && !any(data$CAA > 0, na.rm = TRUE)) {
+      FleetPars_subset <- StockPars[c("L5", "LFS", "Vmaxlen")]
+      FleetPars_subset <- lapply(FleetPars_subset, function(x) x[nyears, ])
+      F_test <- vapply(FleetPars_subset, run_test, logical(1))
+    } else {
+      F_test <- TRUE
+    }
+    if(data$nsurvey > 0 && !any(data$I_sd > 0, na.rm = TRUE)) {
+      O_test <- run_test(ObsPars$Isd)
+    } else {
+      O_test <- TRUE
+    }
+    return(all(c(S_test, F_test, O_test)))
+  }
+  if(all_identical_sims_fn()) { # All identical sims detected
+    mean_fit_output <- mod[[1]]
+  } else if(mean_fit) { ### Fit to life history means if mean_fit = TRUE
     message("Generating additional model fit from mean values of parameters in the operating model...\n")
     mean_fit_output <- SRA_scope_est(data = data, I_type = I_type2, selectivity = sel, s_selectivity = s_sel,
-                                     SR_type = ifelse(OM@SRrel == 1, "BH", "Ricker"), LWT = LWT, ESS = ESS,
+                                     SR_type = ifelse(OM@SRrel == 1, "BH", "Ricker"), LWT = LWT, comp_like = comp_like, ESS = ESS,
                                      max_F = max_F, integrate = integrate, StockPars = StockPars, ObsPars = ObsPars,
                                      FleetPars = FleetPars, mean_fit = TRUE, dots = dots)
-
-    if(!mean_fit_output$report$conv) warning("Mean fit model did not appear to converge.")
-  }
+  } else mean_fit_output <- list()
+  if(length(mean_fit_output) > 0 && !mean_fit_output$report$conv) warning("Mean fit model did not appear to converge.")
 
   ### R0
   OM@cpars$R0 <- vapply(1:length(mod), function(x) ifelse("log_R0" %in% names(mod[[x]]$obj$par), res[[x]]$R0, StockPars$R0[x]), numeric(1))
@@ -394,13 +436,13 @@ SRA_scope <- function(OM, data = list(), condition = c("catch", "effort"), selec
   CAL_pred <- array(sapply(res[keep], getElement, "CALpred"), c(nyears, length(data$length_bin), nfleet, sum(keep)))
 
   output <- new("SRA", OM = Sub_cpars(OM, keep), SSB = E, NAA = aperm(N, c(3, 1, 2)), CAA = aperm(CAA_pred, c(4, 1:3)),
-                CAL = aperm(CAL_pred, c(4, 1:3)), conv = conv[keep], data = data, Misc = res[keep])
-  if(mean_fit) output@mean_fit <- mean_fit_output
+                CAL = aperm(CAL_pred, c(4, 1:3)), mean_fit = mean_fit_output, conv = conv[keep], data = data, Misc = res[keep])
 
   # Data in cpars
   if(sum(output@data$Chist > 0, na.rm = TRUE) || nsurvey > 0) {
 
     real_Data <- new("Data")
+    real_Data@Year <- (output@OM@CurrentYr - output@OM@nyears + 1):output@OM@CurrentYr
     if(sum(output@data$Chist > 0, na.rm = TRUE) && all(!is.na(output@data$Chist))) {
       real_Data@Cat <- matrix(rowSums(output@data$Chist, na.rm = TRUE), 1, nyears)
       real_Data@CV_Cat <- matrix(sqrt(exp(0.01^1 - 1)), 1, nyears)
@@ -449,23 +491,43 @@ SRA_scope <- function(OM, data = list(), condition = c("catch", "effort"), selec
 # SR type
 # selectivity type
 # maxage integer
-SRA_scope_est <- function(x = 1, data, I_type, selectivity, s_selectivity, SR_type = c("BH", "Ricker"), LWT = list(), ESS = c(30, 30),
+SRA_scope_est <- function(x = 1, data, I_type, selectivity, s_selectivity, SR_type = c("BH", "Ricker"), LWT = list(),
+                          comp_like = c("multinomial", "lognormal"), ESS = c(30, 30),
                           max_F = 3, integrate = FALSE, StockPars, ObsPars, FleetPars, mean_fit = FALSE,
                           control = list(iter.max = 2e+05, eval.max = 4e+05), inner.control = list(maxit = 1e3), dots = list()) {
 
   SR_type <- match.arg(SR_type)
+  comp_like <- match.arg(comp_like)
 
   nyears <- data$nyears
   nfleet <- data$nfleet
   max_age <- dim(data$CAA)[2]
   nsurvey <- ncol(data$Index)
 
+  data$CAA <- apply(data$CAA, c(1, 3), SRA_tiny_comp) %>% aperm(c(2, 1, 3))
+  data$CAL <- apply(data$CAL, c(1, 3), SRA_tiny_comp) %>% aperm(c(2, 1, 3))
   CAA_n <- apply(data$CAA, c(1, 3), sum, na.rm = TRUE)
   CAL_n <- apply(data$CAL, c(1, 3), sum, na.rm = TRUE)
 
-  for(ff in 1:nfleet) { # Annual sums to effective sample size
-    data$CAA[,,ff] <- data$CAA[,,ff]/CAA_n[,ff] * pmin(CAA_n[,ff], ESS[1])
-    data$CAL[,,ff] <- data$CAL[,,ff]/CAL_n[,ff] * pmin(CAL_n[,ff], ESS[2])
+  data$s_CAA <- apply(data$s_CAA, c(1, 3), SRA_tiny_comp) %>% aperm(c(2, 1, 3))
+  data$s_CAL <- apply(data$s_CAL, c(1, 3), SRA_tiny_comp) %>% aperm(c(2, 1, 3))
+  s_CAA_n <- apply(data$s_CAA, c(1, 3), sum, na.rm = TRUE)
+  s_CAL_n <- apply(data$s_CAL, c(1, 3), sum, na.rm = TRUE)
+
+  if(comp_like == "multinomial") {
+    for(ff in 1:nfleet) { # Annual sums to effective sample size
+      data$CAA[,,ff] <- data$CAA[,,ff]/CAA_n[,ff] * pmin(CAA_n[,ff], ESS[1])
+      data$CAL[,,ff] <- data$CAL[,,ff]/CAL_n[,ff] * pmin(CAL_n[,ff], ESS[2])
+    }
+    CAA_n <- pmin(CAA_n, ESS[1])
+    CAL_n <- pmin(CAL_n, ESS[2])
+
+    for(sur in 1:nsurvey) { # Annual sums to effective sample size
+      data$s_CAA[,,sur] <- data$s_CAA[,,sur]/s_CAA_n[,sur] * pmin(s_CAA_n[,sur], ESS[1])
+      data$s_CAL[,,sur] <- data$s_CAL[,,sur]/s_CAL_n[,sur] * pmin(s_CAL_n[,sur], ESS[2])
+    }
+    s_CAA_n <- pmin(s_CAA_n, ESS[1])
+    s_CAL_n <- pmin(s_CAL_n, ESS[2])
   }
 
   LWT_C <- matrix(c(LWT$Chist, LWT$CAA, LWT$CAL, LWT$ML, LWT$C_eq), nrow = nfleet, ncol = 5)
@@ -502,23 +564,12 @@ SRA_scope_est <- function(x = 1, data, I_type, selectivity, s_selectivity, SR_ty
 
   if(is.null(data$I_sd)) data$I_sd <- matrix(sdconv(1, ObsPars$Isd[x]), nyears, nsurvey)
 
-  TMB_data_all <- list(condition = data$condition,
-                       nll_C = as.integer((all(CAA_n <= 0) & all(CAL_n <= 0) & all(is.na(data$ML)) & all(is.na(data$Index))) || nfleet > 1), # if condition = "effort"
-                       I_hist = data$Index, sigma_I = data$I_sd, CAA_hist = data$CAA, CAA_n = pmin(CAA_n, ESS[1]),
-                       CAL_hist = data$CAL, CAL_n = pmin(CAL_n, ESS[2]), s_CAA_hist = data$s_CAA, s_CAA_n = apply(data$s_CAA, c(1, 3), sum),
-                       s_CAL_hist = data$s_CAL, s_CAL_n = apply(data$s_CAL, c(1, 3), sum), length_bin = data$length_bin, mlen = data$ML,
-                       n_y = nyears, max_age = max_age, nfleet = nfleet, nsurvey = nsurvey,
-                       M = t(StockPars$M_ageArray[x, , 1:nyears]), len_age = t(StockPars$Len_age[x, , 1:(nyears+1)]),
-                       Linf = StockPars$Linf[x], CV_LAA = StockPars$LenCV[x], wt = t(StockPars$Wt_age[x, , 1:(nyears+1)]),
-                       mat = t(StockPars$Mat_age[x, , 1:(nyears+1)]), vul_type = selectivity, s_vul_type = s_selectivity,
-                       I_type = I_type, SR_type = SR_type, LWT_C = LWT_C, LWT_Index = LWT_Index,
-                       max_F = max_F, ageM = min(nyears, ceiling(StockPars$ageM[x, 1])),
-                       est_early_rec_dev = rep(0, max_age-1))
-  TMB_data_all$CAA_hist[TMB_data_all$CAA_hist < 1e-8] <- 1e-8
-  TMB_data_all$CAL_hist[TMB_data_all$CAL_hist < 1e-8] <- 1e-8
-
   if(!is.null(data$Chist) && any(data$Chist > 0, na.rm = TRUE)) {
-    rescale <- 1/mean(data$Chist, na.rm = TRUE)
+    if(is.null(dots$rescale)) {
+      rescale <- 1/mean(data$Chist, na.rm = TRUE)
+    } else {
+      rescale <- dots$rescale
+    }
     C_hist <- data$Chist * rescale
   } else {
     rescale <- 1
@@ -532,6 +583,19 @@ SRA_scope_est <- function(x = 1, data, I_type, selectivity, s_selectivity, SR_ty
     rescale_effort <- 1
     E_hist <- matrix(0, nyears, nfleet)
   }
+
+  TMB_data_all <- list(condition = data$condition,
+                       nll_C = as.integer((all(CAA_n <= 0) & all(CAL_n <= 0) & all(is.na(data$ML)) & all(is.na(data$Index))) || nfleet > 1), # if condition = "effort"
+                       I_hist = data$Index, sigma_I = data$I_sd, CAA_hist = data$CAA, CAA_n = pmin(CAA_n, ESS[1]),
+                       CAL_hist = data$CAL, CAL_n = pmin(CAL_n, ESS[2]), s_CAA_hist = data$s_CAA, s_CAA_n = s_CAA_n,
+                       s_CAL_hist = data$s_CAL, s_CAL_n = s_CAL_n, length_bin = data$length_bin, mlen = data$ML,
+                       n_y = nyears, max_age = max_age, nfleet = nfleet, nsurvey = nsurvey,
+                       M = t(StockPars$M_ageArray[x, , 1:nyears]), len_age = t(StockPars$Len_age[x, , 1:(nyears+1)]),
+                       Linf = StockPars$Linf[x], CV_LAA = StockPars$LenCV[x], wt = t(StockPars$Wt_age[x, , 1:(nyears+1)]),
+                       mat = t(StockPars$Mat_age[x, , 1:(nyears+1)]), vul_type = selectivity, s_vul_type = s_selectivity, I_type = I_type, abs_I = data$abs_I,
+                       I_basis = data$I_basis, SR_type = SR_type, LWT_C = LWT_C, LWT_Index = LWT_Index, comp_like = comp_like,
+                       max_F = max_F, rescale = rescale, ageM = min(nyears, ceiling(StockPars$ageM[x, 1])),
+                       est_early_rec_dev = rep(0, max_age-1), yindF = as.integer(rep(0.5 * nyears, nfleet)))
 
   if(data$condition == "catch") {
     TMB_data <- list(model = "SRA_scope", C_hist = C_hist, C_eq = data$C_eq * rescale, E_hist = E_hist, E_eq = rep(0, nfleet))
@@ -580,7 +644,7 @@ SRA_scope_est <- function(x = 1, data, I_type, selectivity, s_selectivity, SR_ty
 
   if(is.null(dots$map_s_vul_par)) {
     map_s_vul_par <- matrix(0, 3, nsurvey)
-    map_s_vul_par[3, as.logical(s_selectivity)] <- NA
+    map_s_vul_par[3, s_selectivity < 0] <- NA # if logistic
     for(sur in 1:nsurvey) {
       if(I_type[sur] != 0 || (all(data$s_CAA[,,sur] <= 0, na.rm = TRUE) & all(data$s_CAL[,,sur] <= 0, na.rm = TRUE))) {
         map_s_vul_par[, sur] <- NA
@@ -591,10 +655,12 @@ SRA_scope_est <- function(x = 1, data, I_type, selectivity, s_selectivity, SR_ty
     map_s_vul_par <- dots$map_s_vul_par
   }
 
-  TMB_params <- list(log_R0 = ifelse(TMB_data_all$nll_C, 3, log(StockPars$R0[x])),
+  log_F_start <- matrix(0, nyears, nfleet)
+  log_F_start[TMB_data$yindF - 1, 1:nfleet] <- log(0.1)
+  TMB_params <- list(log_R0 = ifelse(TMB_data_all$nll_C, 0, log(StockPars$R0[x])),
                      transformed_h = transformed_h, vul_par = vul_par, s_vul_par = s_vul_par,
                      log_q_effort = rep(log(0.1), nfleet),
-                     log_F = matrix(log(0.05), nyears, nfleet), log_F_equilibrium = rep(log(0.05), nfleet),
+                     log_F = log_F_start, log_F_equilibrium = rep(log(0.05), nfleet),
                      log_sigma_mlen = log(data$ML_sd), log_tau = log(StockPars$procsd[x]),
                      log_early_rec_dev = rep(0, max_age - 1), log_rec_dev = rep(0, nyears))
 
@@ -618,7 +684,7 @@ SRA_scope_est <- function(x = 1, data, I_type, selectivity, s_selectivity, SR_ty
   map$log_sigma_mlen <- factor(rep(NA, nfleet))
   map$log_early_rec_dev <- factor(rep(NA, max_age - 1))
   if(is.null(dots$map_log_rec_dev)) {
-    map$log_rec_dev <- factor(c(1:(nyears-1), NA))
+    map$log_rec_dev <- factor(1:nyears)
   } else {
     map$log_rec_dev <- factor(dots$map_log_rec_dev)
   }
@@ -634,21 +700,26 @@ SRA_scope_est <- function(x = 1, data, I_type, selectivity, s_selectivity, SR_ty
   SD <- mod[[2]]
   report <- obj$report(obj$env$last.par.best)
 
-  vars_div <- c("B", "E", "Cat", "C_eq_pred", "CAApred", "CALpred", "s_CAApred", "s_CALpred", "CN", "Cpred", "N", "N_full", "VB",
-                "R", "R_early", "R_eq", "VB0", "R0", "B0", "E0", "N0", "E0_SR")
-  vars_mult <- c("Brec", "q")
-  var_trans <- c("R0", "q")
-  fun_trans <- c("/", "*")
+  if(rescale != 1) {
 
-  if(data$condition == "catch" || TMB_data_all$nll_C) {
-    fun_fixed <- c("log", NA)
-    rescale_report(vars_div, vars_mult, var_trans, fun_trans, fun_fixed)
-  } else if(any(data$Chist > 0, na.rm = TRUE)) {
-    rescale <- 1/exp(mean(log(data$Chist/report$Cpred), na.rm = TRUE))
+    vars_div <- c("B", "E", "Cat", "C_eq_pred", "CAApred", "CALpred", "s_CAApred", "s_CALpred", "CN", "Cpred", "N", "N_full", "VB",
+                  "R", "R_early", "R_eq", "VB0", "R0", "B0", "E0", "N0", "E0_SR")
+    vars_mult <- c("Brec", "q")
+    var_trans <- c("R0", "q")
+    fun_trans <- c("/", "*")
 
-    fun_fixed <- c(NA, NA)
-    rescale_report(vars_div, vars_mult, var_trans, fun_trans, fun_fixed)
+    if(data$condition == "catch" || TMB_data_all$nll_C) {
+      fun_fixed <- c("log", NA)
+      rescale_report(vars_div, vars_mult, var_trans, fun_trans, fun_fixed)
+    } else if(any(data$Chist > 0, na.rm = TRUE)) {
+      rescale <- 1/exp(mean(log(data$Chist/report$Cpred), na.rm = TRUE))
+
+      fun_fixed <- c(NA, NA)
+      rescale_report(vars_div, vars_mult, var_trans, fun_trans, fun_fixed)
+    }
+
   }
+
   report$F_at_age <- report$Z - report$M[1:nyears, ]
   report$vul_len <- get_vul_len(report)
   report <- get_s_vul_len(report, TMB_data_all)
@@ -722,15 +793,10 @@ get_vul_len <- function(report) {
 }
 
 get_s_vul_len <- function(report, TMB_data) {
-  s_vul <- array(NA, dim(report$s_vul)) # age-based array of dimension nyears, maxage, nsurvey
   s_vul_len <- matrix(NA, length(TMB_data$length_bin), TMB_data$nsurvey) # length-based: matrix of dimension nlbin, nsurvey
 
   for(i in 1:TMB_data$nsurvey) {
-    if(TMB_data$I_type[i] == -2) s_vul[, , i] <- TMB_data$mat
-    if(TMB_data$I_type[i] == -1) s_vul[, , i] <- s_vul_len[, i] <- 1
     if(TMB_data$I_type[i] == 0) {
-      s_vul[,,i] <- report$s_vul[,,i]
-
       sls <- (report$s_LFS[i] - report$s_L5[i])/sqrt(-log(0.05, 2))
       srs <- (report$Linf - report$s_LFS[i])/sqrt(-log(report$s_Vmaxlen[i], 2))
 
@@ -739,12 +805,9 @@ get_s_vul_len <- function(report, TMB_data) {
                     2^-((report$length_bin - report$s_LFS[i])/srs * (report$length_bin - report$s_LFS[i])/srs))
       s_vul_len[, i] <- ifelse(report$length_bin > report$s_LFS[i], dsc, asc)
     }
-    if(TMB_data$I_type[i] > 0) {
-      s_vul[,,i] <- report$vul[, , TMB_data$I_type[i]]
-      s_vul_len[, i] <- report$vul_len[, TMB_data$I_type[i]]
-    }
+    if(TMB_data$I_type[i] > 0) s_vul_len[, i] <- report$vul_len[, TMB_data$I_type[i]]
   }
-  report$s_vul <- s_vul
+
   report$s_vul_len <- s_vul_len
   return(report)
 }

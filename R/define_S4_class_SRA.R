@@ -30,7 +30,8 @@ SRA <- setClass("SRA", slots = c(OM = "ANY", SSB = "matrix", NAA = "array",
 #' @title Plot SRA scope output
 #' @description Produces HTML file (via markdown) figures of parameter estimates and output from an \linkS4class{Assessment} object.
 #' Plots histograms of operating model parameters that are updated by the SRA scoping function, as well as diagnostic plots
-#' for the fits to the SRA for each simulation.
+#' for the fits to the SRA for each simulation. \code{compare_SRA} plots a short report that compares output from multiple SRA objects,
+#' assuming the same model structure but different data weightings, data omissions, etc.
 #'
 #' @param x An object of class \linkS4class{SRA} (output from \link{SRA_scope}).
 #' @param compare Logical, if TRUE, the function will run \code{runMSE} to compare the historical period of the operating model
@@ -41,22 +42,57 @@ SRA <- setClass("SRA", slots = c(OM = "ANY", SSB = "matrix", NAA = "array",
 #' @param Year Optional, a vector of years for the historical period for plotting.
 #' @param f_name Character vector for fleet names.
 #' @param s_name Character vector for survey names.
+#' @param MSY_ref A numeric vector for reference horizontal lines for B/BMSY plots.
+#' @param bubble_adj A number to adjust the size of bubble plots (for residuals of age and length comps).
+#' @param scenario Optional, a named list to label each simulation in the SRA for plotting, e.g.:
+#' \code{list(names = c("low M", "high M"), col = c("blue", "red"))}.
+#' @param title Optional character string for an alternative title for the markdown report.
 #' @param open_file Logical, whether the HTML document is opened after it is rendered.
 #' @param quiet Logical, whether to silence the markdown rendering function.
-#' @param ... Other arguments to pass to \link[rmarkdown]{render}.
+#' @param render_args A list of other arguments to pass to \link[rmarkdown]{render}.
+#' @param ... For \code{compare_SRA}, multiple SRA objects for comparison.
 #' @return Returns invisibly the output from \link[rmarkdown]{render}.
 #' @importFrom rmarkdown render
 #' @seealso \linkS4class{SRA} \link{SRA_scope}
 #' @exportMethod plot
 setMethod("plot", signature(x = "SRA", y = "missing"),
           function(x, compare = TRUE, filename = "SRA_scope", dir = tempdir(), sims = 1:x@OM@nsim, Year = NULL,
-                   f_name = NULL, s_name = NULL, open_file = TRUE, quiet = TRUE, ...) {
+                   f_name = NULL, s_name = NULL, MSY_ref = c(0.5, 1), bubble_adj = 10, scenario = list(), title = NULL,
+                   open_file = TRUE, quiet = TRUE, render_args, ...) {
 
+            # Update scenario
+            if(is.null(scenario$col)) {
+              scenario$col <- "red"
+              scenario$col2 <- "black"
+            } else {
+              scenario$col2 <- scenario$col
+            }
+
+            if(is.null(scenario$lwd)) scenario$lwd <- 1
+            if(is.null(scenario$lty)) scenario$lty <- 1:5
+
+            ####### Function arguments for rmarkdown::render
+            filename_rmd <- paste0(filename, ".Rmd")
+
+            if(missing(render_args)) render_args <- list()
+            render_args$input <- file.path(dir, filename_rmd)
+            if(is.null(render_args$output_format)) {
+              render_args$output_format <- "html_document"
+            }
+            if(is.null(render_args$output_options)) {
+              if(render_args$output_format == "html_document") {
+                render_args$output_options <- list(df_print = "paged")
+              } else {
+                render_args$output_options <- list(toc = TRUE, df_print = "kable")
+              }
+            }
+            if(is.null(render_args$quiet)) render_args$quiet <- quiet
+
+            ####### Assign variables
             OM <- Sub_cpars(x@OM, sims)
             mean_fit <- x@mean_fit
             report_list <- x@Misc[sims]
 
-            ####### Assign variables
             nsim <- OM@nsim
             data <- x@data
 
@@ -64,6 +100,7 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
             age <- 1:max_age
             nyears <- OM@nyears
             if(is.null(Year)) Year <- (OM@CurrentYr - nyears + 1):OM@CurrentYr
+            Yearplusone <- c(Year, max(Year) + 1)
 
             nfleet <- x@data$nfleet
             nsurvey <- x@data$nsurvey
@@ -73,8 +110,9 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
             if(is.null(s_name)) s_name <- paste("Survey", 1:nsurvey)
 
             ####### Document header
+            if(is.null(title)) title <- "Operating model (OM) conditioning for `r ifelse(nchar(OM@Name) > 0, OM@Name, substitute(OM))`"
             header <- c("---",
-                        "title: \"Operating model (OM) conditioning for `r ifelse(nchar(OM@Name) > 0, OM@Name, substitute(OM))`\"",
+                        paste0("title: \"", title, "\""),
                         "subtitle: Output from Stock Reduction Analysis scoping function (SRA_scope)",
                         "date: \"`r Sys.Date()`\"",
                         "---",
@@ -91,7 +129,7 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
 
             ####### Updated historical OM parameters
             Year_matrix <- matrix(Year, ncol = nsim, nrow = nyears)
-            Yearplusone_matrix <- matrix(c(Year, max(Year) + 1), ncol = nsim, nrow = nyears+1)
+            Yearplusone_matrix <- matrix(Yearplusone, ncol = nsim, nrow = nyears+1)
 
             OM_update <- c("# Summary {.tabset}\n",
                            "## Updated historical OM parameters\n", rmd_SRA_R0(),
@@ -118,9 +156,16 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
 
               conv <- report$conv
 
-              sumry <- c("## Fit to mean parameters of the OM {.tabset}\n",
-                         "### SRA Model Estimates\n",
-                         "`r as.data.frame(summary(SD))`\n\n")
+              SD2 <- rbind(summary(SD, "report"), summary(SD, "fixed")) %>% as.data.frame()
+              if(render_args$output_format == "html_document") {
+                sumry <- c("## Fit to mean parameters of the OM {.tabset}\n",
+                           "### SRA Model Estimates\n",
+                           "`r SD2`\n\n")
+              } else {
+                sumry <- c("## Fit to mean parameters of the OM {.tabset}\n",
+                           "### SRA Model Estimates\n",
+                           "`r SD2 %>% kable(format = \"markdown\")`\n\n")
+              }
 
               # Life History section
               LH_varies_fn <- function(x) {
@@ -151,12 +196,12 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
               # Data and fit section
               individual_matrix_fn <- function(i, obs, pred, fig.cap, label) {
                 rmd_assess_fit2("Year", paste0(obs, "[, ", i, "]"), paste0(pred, "[, ", i, "]"),
-                                fig.cap = paste(fig.cap, i), label = paste0(label, "[", i, "]"))
+                                fig.cap = paste(fig.cap, i), label = eval(parse(text = paste0(label, "[", i, "]"))))
               }
               individual_array_fn <- function(i, obs, pred, comps = c("age", "length"), label) {
                 comps <- match.arg(comps)
-                obs2 <- paste(obs, "[, , ", i, "]")
-                pred2 <- paste(pred, "[, , ", i, "]")
+                obs2 <- paste0(obs, "[, , ", i, "]")
+                pred2 <- paste0(pred, "[, , ", i, "]")
                 fig.cap2 <- paste0("Observed (black) and predicted (red) ", comps, " composition from ", label[i], ".")
                 fig.cap3 <- paste0("Residuals for ", comps, " composition from ", label[i], ".")
                 if(comps == "age") {
@@ -240,7 +285,7 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
                                                   "expression(SSB[0])")
               } else SSB_plot <- NULL
 
-              SSB_SSB0 <- structure(report$E/c(report$E0, report$E0[length(report$E0)]), names = c(Year, max(Year) + 1))
+              SSB_SSB0 <- structure(report$E/report$E0_SR, names = c(Year, max(Year) + 1))
 
               R <- structure(report$R, names = c(Year, max(Year) + 1))
               N_at_age <- report$N
@@ -253,11 +298,11 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
               N_bubble <- rmd_bubble("c(Year, max(Year)+1)", "N_at_age", fig.cap = "Predicted abundance-at-age.")
 
               CAA_all <- apply(report$CAApred, c(1, 2), sum)
-              CAA_bubble <- rmd_bubble("Year", "CAA_all", fig.cap = "Predicted catch-at-age (summed over all fleets).")
+              CAA_bubble <- rmd_bubble("Year", "CAA_all", fig.cap = "Predicted catch-at-age (summed over all fleets).", bubble_adj = as.character(bubble_adj))
 
               CAL_all <- apply(report$CALpred, c(1, 2), sum)
               CAL_bubble <- rmd_bubble("Year", "CAL_all", CAL_bins = "data_mean_fit$length_bin",
-                                       fig.cap = "Predicted catch-at-length (summed over all fleets).")
+                                       fig.cap = "Predicted catch-at-length (summed over all fleets).", bubble_adj = as.character(bubble_adj))
 
               ts_output <- c(sel_matplot, F_matplot, rmd_SSB(), SSB_plot, rmd_SSB_SSB0(FALSE), rmd_R(),
                              rmd_residual("log_rec_dev", fig.cap = "Time series of recruitment deviations.", label = "log-Recruitment deviations"),
@@ -265,7 +310,34 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
                                           label = "log-Recruitment deviations", conv_check = TRUE),
                              rmd_N(), N_bubble, CAA_bubble, CAL_bubble)
 
-              mean_fit_rmd <- c(sumry, LH_section, data_section, ts_output)
+              nll <- SRA_get_likelihoods(report, data$LWT, f_name, s_name)
+              if(render_args$output_format == "html_document") {
+                nll_table <- c("### Likelihood components\n",
+                               "#### Summary\n",
+                               "`r nll[[1]]`\n\n",
+                               "#### Fleet likelihoods\n",
+                               "`r nll[[2]]`\n\n",
+                               "#### Fleet weights\n",
+                               "`r nll[[3]]`\n\n",
+                               "#### Survey likelihoods\n",
+                               "`r nll[[4]]`\n\n",
+                               "#### Survey weights\n",
+                               "`r nll[[5]]`\n\n")
+              } else {
+                nll_table <- c("### Likelihood components\n",
+                               "#### Summary\n",
+                               "`r nll[[1]] %>% kable(format = \"markdown\")`\n\n",
+                               "#### Fleet likelihoods\n",
+                               "`r nll[[2]] %>% kable(format = \"markdown\")`\n\n",
+                               "#### Fleet weights\n",
+                               "`r nll[[3]] %>% kable(format = \"markdown\")`\n\n",
+                               "#### Survey likelihoods\n",
+                               "`r nll[[4]] %>% kable(format = \"markdown\")`\n\n",
+                               "#### Survey weights\n",
+                               "`r nll[[5]] %>% kable(format = \"markdown\")`\n\n")
+              }
+
+              mean_fit_rmd <- c(sumry, LH_section, data_section, ts_output, nll_table)
             } else mean_fit_rmd <- c("## Fit to mean parameters of OM {.tabset}\n",
                                      "No model found. Re-run `SRA_scope()` with `mean_fit = TRUE`.\n\n")
 
@@ -276,40 +348,70 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
                                "### OM historical period\n\n",
                                "```{r, fig.cap = \"Apical F from the operating model.\"}",
                                "Hist_F <- apply(Hist@AtAge$FM, c(1, 3), max)",
-                               "matplot(Year, t(Hist_F), typ = \"l\", col = \"black\", xlab = \"Year\", ylab = \"OM Apical F\", ylim = c(0, 1.1 * max(Hist_F)))",
+                               "matplot(Year, t(Hist_F), typ = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"OM Apical F\", ylim = c(0, 1.1 * max(Hist_F)))",
                                "abline(h = 0, col = \"grey\")",
+                               "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
                                "```\n",
                                "",
                                "```{r, fig.cap = \"Spawning biomass (SSB) from the operating model.\"}",
-                               "matplot(Year, t(Hist@TSdata$SSB), typ = \"l\", col = \"black\", xlab = \"Year\", ylab = \"OM SSB\", ylim = c(0, 1.1 * max(Hist@TSdata$SSB)))",
+                               "matplot(Year, t(Hist@TSdata$SSB), typ = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"OM SSB\", ylim = c(0, 1.1 * max(Hist@TSdata$SSB)))",
                                "abline(h = 0, col = \"grey\")",
+                               "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
                                "```\n",
                                "",
                                "```{r, fig.cap = \"Spawning biomass (SSB) relative to MSY from the operating model.\"}",
-                               "matplot(Year, t(Hist@TSdata$SSB/Hist@Ref$SSBMSY), typ = \"l\", col = \"black\", xlab = \"Year\", ylab = expression(OM~~SSB/SSB[MSY]), ylim = c(0, 1.1 * max(Hist@TSdata$SSB/Hist@Ref$SSBMSY)))",
-                               "abline(h = 0, col = \"grey\")",
+                               "matplot(Year, t(Hist@TSdata$SSB/Hist@Ref$SSBMSY), col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, typ = \"l\", xlab = \"Year\", ylab = expression(OM~~SSB/SSB[MSY]), ylim = c(0, 1.1 * max(Hist@TSdata$SSB/Hist@Ref$SSBMSY)))",
+                               "abline(h = c(0, MSY_ref), col = \"grey\")",
+                               "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
+                               "```\n",
+                               "",
+                               "```{r, fig.cap = \"Spawning biomass (SSB) relative to MSY in the most recent decade.\"}",
+                               "if(length(Year) > 10) {",
+                               "  Yr_ind <- Year > max(Year) - 10",
+                               "  matplot(Year[Yr_ind], t(Hist@TSdata$SSB[, Yr_ind, drop = FALSE]/Hist@Ref$SSBMSY), typ = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = expression(OM~~SSB/SSB[MSY]), ylim = c(0, 1.1 * max(Hist@TSdata$SSB[, Yr_ind, drop = FALSE]/Hist@Ref$SSBMSY)))",
+                               "  abline(h = c(0, MSY_ref), col = \"grey\")",
+                               "  if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
+                               "}",
                                "```\n",
                                "",
                                "```{r, fig.cap = \"Spawning depletion from the operating model.\"}",
-                               "matplot(Year, t(Hist@TSdata$SSB/Hist@Ref$SSB0), typ = \"l\", col = \"black\", xlab = \"Year\", ylab = expression(OM~~SSB/SSB[0]), ylim = c(0, 1.1 * max(Hist@TSdata$SSB/Hist@Ref$SSB0)))",
+                               "matplot(Year, t(Hist@TSdata$SSB/Hist@Ref$SSB0), typ = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = expression(OM~~SSB/SSB[0]), ylim = c(0, 1.1 * max(Hist@TSdata$SSB/Hist@Ref$SSB0)))",
                                "abline(h = 0, col = \"grey\")",
+                               "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
                                "```\n",
                                "",
                                "```{r, fig.cap = \"Recruitment from the operating model.\"}",
-                               "matplot(Year, t(Hist@TSdata$Rec), typ = \"l\", col = \"black\", xlab = \"Year\", ylab = \"OM Recruitment\", ylim = c(0, 1.1 * max(Hist@TSdata$Rec)))",
+                               "matplot(Year, t(Hist@TSdata$Rec), typ = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"OM Recruitment\", ylim = c(0, 1.1 * max(Hist@TSdata$Rec)))",
                                "abline(h = 0, col = \"grey\")",
+                               "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
                                "```\n",
                                "",
                                "```{r, fig.cap = \"Catch (total removals, including discards) from the operating model.\"}",
-                               "matplot(Year, t(Hist@TSdata$Removals), typ = \"l\", col = \"black\", xlab = \"Year\", ylab = \"OM Catch\", ylim = c(0, 1.1 * max(Hist@TSdata$Catch)))",
+                               "matplot(Year, t(Hist@TSdata$Removals), typ = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"OM Catch\", ylim = c(0, 1.1 * max(Hist@TSdata$Catch)))",
                                "abline(h = 0, col = \"grey\")",
+                               "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
                                "```\n",
                                "",
                                "### OM/SRA Comparison\n\n",
+                               "```{r, fig.cap = \"Apical F comparison between the OM and SRA.\"}",
+                               "matplot(Year, t(Hist_F), typ = \"o\", pch = 16, col = \"red\", xlab = \"Year\", ylab = \"Apical F\", ylim = c(0, 1.1 * max(c(Hist_F, OM@cpars$Find))))",
+                               "matlines(Year, t(OM@cpars$Find), col = \"black\")",
+                               "abline(h = 0, col = \"grey\")",
+                               "legend(\"topleft\", c(\"SRA\", \"OM\"), col = c(\"black\", \"red\"), pch = c(NA_integer_, 16), lwd = c(1, 1), bty = \"n\")",
+                               "```\n",
+                               "",
                                "```{r, fig.cap = \"Difference in apical F between the OM and SRA. Positive values indicate higher F in the OM.\"}",
                                "matplot(Year, t(Hist_F - OM@cpars$Find), typ = \"n\", xlab = \"Year\", ylab = \"Difference in apical F\")",
                                "abline(h = 0, col = \"grey\")",
                                "matlines(Year, t(Hist_F - OM@cpars$Find), col = \"black\")",
+                               "```\n",
+                               "",
+                               "```{r, fig.cap = \"SSB comparison between the OM and SRA.\"}",
+                               "matplot(Year, t(Hist@TSdata$SSB), typ = \"o\", col = \"red\", pch = 16, xlab = \"Year\", ylab = \"SSB\",",
+                               "        ylim = c(0, 1.1 * max(c(Hist@TSdata$SSB, x@SSB[sims, 1:OM@nyears]))))",
+                               "matlines(Year, t(x@SSB[sims, 1:OM@nyears, drop = FALSE]), col = \"black\")",
+                               "abline(h = 0, col = \"grey\")",
+                               "legend(\"topleft\", c(\"SRA\", \"OM\"), col = c(\"black\", \"red\"), pch = c(NA_integer_, 16), lwd = c(1, 1), bty = \"n\")",
                                "```\n",
                                "",
                                "```{r, fig.cap = \"Difference in spawning biomass (SSB), relative to SSB0, between the OM and SRA, calculated as $(SSB^{OM}_y - SSB^{SRA}_y)/SSB^{OM}_0$. Positive values indicate higher SSB in the OM.\"}",
@@ -318,11 +420,27 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
                                "matlines(Year, t((Hist@TSdata$SSB - x@SSB[sims, 1:OM@nyears, drop = FALSE])/Hist@Ref$SSB0), col = \"black\")",
                                "```\n",
                                "",
+                               "```{r, fig.cap = \"Recruitment comparison between the OM and SRA.\"}",
+                               "matplot(Year, t(Hist@TSdata$Rec), typ = \"o\", col = \"red\", pch = 16, xlab = \"Year\", ylab = \"Recruitment\",",
+                               "        ylim = c(0, 1.1 * max(c(Hist@TSdata$Rec, x@NAA[sims, 1:OM@nyears, 1]))))",
+                               "matlines(Year, t(x@NAA[, 1:OM@nyears, 1][sims, , drop = FALSE]), col = \"black\")",
+                               "abline(h = 0, col = \"grey\")",
+                               "legend(\"topleft\", c(\"SRA\", \"OM\"), col = c(\"black\", \"red\"), pch = c(NA_integer_, 16), lwd = c(1, 1), bty = \"n\")",
+                               "```\n",
+                               "",
                                "```{r, fig.cap = \"Difference in recruitment (relative to R0) between the OM and SRA, calculated as $(R^{OM}_y - R^{SRA}_y)/R^{OM}_0$. Positive values indicate higher recruitment in the OM.\"}",
                                "matplot(Year, t(Hist@TSdata$Rec/OM@cpars$R0 - x@NAA[, 1:OM@nyears, 1][sims, , drop = FALSE]/OM@cpars$R0), typ = \"n\", xlab = \"Year\", ylab = \"Difference in relative recruitment\")",
                                "abline(h = 0, col = \"grey\")",
                                "matlines(Year, t(Hist@TSdata$Rec/OM@cpars$R0 - x@NAA[, 1:OM@nyears, 1][sims, , drop = FALSE]/OM@cpars$R0),",
                                "         col = \"black\")",
+                               "```\n",
+                               "",
+                               "```{r, fig.cap = \"Comparison of total removals between the OM and SRA.\"}",
+                               "matplot(Year, t(Hist@TSdata$Removals), typ = \"o\", col = \"red\", pch = 16, xlab = \"Year\", ylab = \"Total removals\",",
+                               "        ylim = c(0, 1.1 * max(c(Hist@TSdata$Removals, data$Chist, na.rm = TRUE))))",
+                               "lines(Year, rowSums(data$Chist, na.rm = TRUE), col = \"black\")",
+                               "abline(h = 0, col = \"grey\")",
+                               "legend(\"topleft\", c(\"SRA\", \"OM\"), col = c(\"black\", \"red\"), pch = c(NA_integer_, 16), lwd = c(1, 1), bty = \"n\")",
                                "```\n",
                                "",
                                "```{r, fig.cap = \"Difference in annual catch (relative to observed), calculated as $C^{OM}_y/C^{obs}_y - 1$. Positive values indicate higher catch in the OM. Catch in the OM is the total removals (both landings and discards).\"}",
@@ -342,26 +460,20 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
             if(is.list(rmd)) rmd <- do.call(c, rmd)
 
             # Generate markdown report
-            filename_html <- paste0(filename, ".html")
-            filename_rmd <- paste0(filename, ".Rmd")
             if(!dir.exists(dir)) {
               message("Creating directory: \n", dir)
               dir.create(dir)
             }
-
-            message("Writing markdown file: ", file.path(dir, filename_rmd))
-
             write(rmd, file = file.path(dir, filename_rmd))
+            message("Generated markdown file: ", file.path(dir, filename_rmd))
 
             # Rendering markdown file
-            message("Rendering markdown file to HTML: ", file.path(dir, filename_html))
+            message("Rendering markdown file...")
+            output_filename <- do.call(rmarkdown::render, render_args)
+            message("Rendered file: ", output_filename)
 
-            output <- rmarkdown::render(file.path(dir, filename_rmd), "html_document", filename_html, dir,
-                                        output_options = list(df_print = "paged"), quiet = quiet, ...)
-            message("Rendering complete.")
-
-            if(open_file) browseURL(file.path(dir, filename_html))
-            invisible(output)
+            if(open_file) browseURL(output_filename)
+            invisible(output_filename)
           })
 
 
@@ -397,7 +509,8 @@ rmd_assess_fit2 <- function(year, obs, fit, fig.cap, label = fig.cap, match = FA
     "```\n")
 }
 
-rmd_fit_comps <- function(year, obs, fit, type = c("bubble", "annual", "bubble_residuals"), ages = "NULL", CAL_bins = "NULL", fig.cap) {
+rmd_fit_comps <- function(year, obs, fit, type = c("bubble", "annual", "bubble_residuals"), ages = "NULL", CAL_bins = "NULL", fig.cap,
+                          bubble_adj = "10") {
   type <- match.arg(type)
   if(type == "bubble") {
     arg <- paste0("\"bubble_data\", CAL_bins = ", CAL_bins, ", ages = ", ages)
@@ -408,7 +521,7 @@ rmd_fit_comps <- function(year, obs, fit, type = c("bubble", "annual", "bubble_r
   }
   c(paste0("```{r, fig.cap = \"", fig.cap, "\"}"),
     paste0("ind_valid <- rowSums(", obs, ", na.rm = TRUE) > 0"),
-    paste0("if(any(ind_valid)) plot_composition(", year, "[ind_valid], ", obs, "[ind_valid, ], ", fit, "[ind_valid, ], plot_type = ", arg, ")"),
+    paste0("if(any(ind_valid)) plot_composition(", year, "[ind_valid], ", obs, "[ind_valid, , drop = FALSE], ", fit, "[ind_valid, , drop = FALSE], plot_type = ", arg, ", bubble_adj = ", bubble_adj, ")"),
     "```\n")
 }
 
@@ -427,7 +540,7 @@ rmd_SRA_D <- function(fig.cap = "Histogram of historical depletion.") {
 rmd_SRA_Perr <- function(fig.cap = "Recruitment deviations among simulations.") {
   c(paste0("```{r, fig.cap = \"", fig.cap, "\"}"),
     "Perr <- OM@cpars$Perr_y[, max_age:(max_age+nyears-1), drop = FALSE]",
-    "matplot(Year_matrix, t(Perr), type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Recruitment deviations\",",
+    "matplot(Year, t(Perr), type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Recruitment deviations\",",
     "        ylim = c(0, 1.1 * max(Perr)))",
     "abline(h = 0, col = \"grey\")",
     "```\n")
@@ -435,7 +548,7 @@ rmd_SRA_Perr <- function(fig.cap = "Recruitment deviations among simulations.") 
 
 rmd_SRA_Find <- function(fig.cap = "Apical F from SRA model. These values may be subsequently re-scaled in the operating model in order to match the specified depletion") {
   c(paste0("```{r, fig.cap = \"", fig.cap, "\"}"),
-    "matplot(Year_matrix, t(OM@cpars$Find), type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Apical F\")",
+    "matplot(Year, t(OM@cpars$Find), type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Apical F\")",
     "abline(h = 0, col = \"grey\")",
     "```\n")
 }
@@ -447,7 +560,8 @@ rmd_SRA_sel <- function(fig.cap = "Operating model selectivity among simulations
     "  matplot(matrix(length_bin, ncol = nsim, nrow = length(length_bin)), vul, type = \"l\", col = \"black\",",
     "          xlab = \"Length\", ylab = \"Selectivity\", ylim = c(0, 1.1))",
     "} else {",
-    "  matplot(matrix(age, ncol = nsim, nrow = max_age), t(OM@cpars$V[, , nyears]), type = \"l\", col = \"black\",",
+    "  if(nsim == 1) V_plot <- matrix(OM@cpars$V[, , nyears], 1, byrow = TRUE) else V_plot <- OM@cpars$V[, , nyears]",
+    "  matplot(matrix(age, ncol = nsim, nrow = max_age), t(V_plot), type = \"l\", col = \"black\",",
     "          xlab = \"Age\", ylab = \"Selectivity (last historical year)\", ylim = c(0, 1.1))",
     "}",
     "abline(h = 0, col = \"grey\")",
@@ -459,76 +573,84 @@ rmd_SRA_fleet_output <- function(ff, f_name) {
   ans <- c(paste("### ", f_name[ff], "\n"),
            paste0("```{r, fig.cap = \"Selectivity of ", f_name[ff], ".\"}"),
            paste0("vul_ff <- do.call(cbind, lapply(report_list, function(x) x$vul_len[, ", ff, "]))"),
-           paste0("matplot(length_bin, vul_ff, type = \"l\", col = \"black\", xlab = \"Length\", ylim = c(0, 1), ylab = \"Selectivity of ", f_name[ff], "\")"),
+           paste0("matplot(length_bin, vul_ff, type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Length\", ylim = c(0, 1), ylab = \"Selectivity of ", f_name[ff], "\")"),
            "abline(h = 0, col = \"grey\")",
+           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
            "",
            paste0("```{r, fig.cap = \"Corresponding age-based selectivity of ", f_name[ff], " in last historical year.\"}"),
            paste0("vul_ff_age <- do.call(cbind, lapply(report_list, function(x) x$vul[nyears, , ", ff, "]))"),
-           paste0("matplot(age, vul_ff_age, type = \"l\", col = \"black\", xlab = \"Age\", ylim = c(0, 1), ylab = \"Selectivity of ", f_name[ff], "\")"),
+           paste0("matplot(age, vul_ff_age, type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Age\", ylim = c(0, 1), ylab = \"Selectivity of ", f_name[ff], "\")"),
            "abline(h = 0, col = \"grey\")",
+           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
            "",
            paste0("```{r, fig.cap = \"Fishing Mortality of ", f_name[ff], ".\"}"),
            paste0("FM <- do.call(cbind, lapply(report_list, function(x) x$F[, ", ff, "]))"),
-           paste0("matplot(Year_matrix, FM, type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Fishing Mortality of ", f_name[ff], "\")"),
+           paste0("matplot(Year, FM, type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Fishing Mortality of ", f_name[ff], "\")"),
            "abline(h = 0, col = \"grey\")",
+           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Observed (red) and predicted (black) catch from ", f_name[ff], ".\"}"),
+           paste0("```{r, fig.cap = \"Observed (black) and predicted (red) catch from ", f_name[ff], ".\"}"),
            paste0("if(any(data$Chist[, ", ff, "] > 0)) {"),
            paste0("  Cpred <- do.call(cbind, lapply(report_list, function(x) x$Cpred[, ", ff, "]))"),
            paste0("  Chist <- data$Chist[, ", ff, "]"),
            "  ylim <- c(0.9, 1.1) * range(c(Cpred, Chist), na.rm = TRUE)",
-           paste0("  matplot(Year_matrix, Cpred, type = \"o\", pch = 1, col = \"black\", xlab = \"Year\", ylab = \"Catch of ", f_name[ff], "\", ylim = ylim)"),
-           paste0("  lines(Year, Chist, col = \"red\", lwd = 3)"),
+           paste0("  plot(Year, Chist, type = \"o\", xlab = \"Year\", ylab = \"Catch of ", f_name[ff], "\", ylim = ylim)"),
+           paste0("  matlines(Year, Cpred, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)"),
            "} else {",
            paste0("  Cpred <- do.call(cbind, lapply(report_list, function(x) x$Cpred[, ", ff, "]/mean(x$Cpred[, ", ff, "])))"),
-           paste0("  matplot(Year_matrix, Cpred, type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Predicted relative catch of ", f_name[ff], "\")"),
+           paste0("  matlines(Year, Cpred, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Predicted relative catch of ", f_name[ff], "\")"),
            "}",
            "abline(h = 0, col = \"grey\")",
+           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Observed (red) and predicted (black) mean ages from ", f_name[ff], ".\"}"),
+           paste0("```{r, fig.cap = \"Observed (black) and predicted (red) mean ages from ", f_name[ff], ".\"}"),
            paste0("MApred <- do.call(cbind, lapply(report_list, function(x) x$CAApred[, , ", ff, "] %*% age/x$CN[, ", ff, "]))"),
            paste0("MAobs <- (data$CAA[, , ", ff, "] %*% age)/rowSums(data$CAA[, , ", ff, "], na.rm = TRUE)"),
            "ylim <- c(0.9, 1.1) * range(c(MApred, MAobs), na.rm = TRUE)",
-           "matplot(Year_matrix, MApred, type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Mean age\", ylim = ylim)",
+           "matplot(Year, MApred, type = \"l\", col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Mean age\", ylim = ylim)",
            paste0("if(any(data$CAA[, , ", ff, "] > 0, na.rm = TRUE)) {"),
-           paste0("  lines(Year, MAobs, col = \"red\", lwd = 3, typ = \"o\", pch = 16)"),
+           paste0("  lines(Year, MAobs, col = \"black\", typ = \"o\")"),
            "}",
+           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Observed (red) and predicted (black) mean lengths from ", f_name[ff], ".\"}"),
+           paste0("```{r, fig.cap = \"Observed (black) and predicted (red) mean lengths from ", f_name[ff], ".\"}"),
            paste0("MLpred <- do.call(cbind, lapply(report_list, function(x) x$mlen_pred[, ", ff, "]))"),
            paste0("if(any(data$CAL[, , ", ff, "] > 0, na.rm = TRUE)) {"),
            paste0("  MLobs <- (data$CAL[, , ", ff, "] %*% length_bin)/rowSums(data$CAL[, , ", ff, "], na.rm = TRUE)"),
            paste0("} else if(any(data$ML[, ", ff, "] > 0, na.rm = TRUE)) MLobs <- data$ML[, ", ff, "] else MLobs <- NA"),
            "ylim <- c(0.9, 1.1) * range(c(MLpred, MLobs), na.rm = TRUE)",
-           "matplot(Year_matrix, MLpred, type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Mean length\", ylim = ylim)",
-           "if(!all(is.na(MLobs))) lines(Year, MLobs, col = \"red\", lwd = 3, typ = \"o\", pch = 16)",
+           "matplot(Year, MLpred, type = \"l\", col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Mean length\", ylim = ylim)",
+           "if(!all(is.na(MLobs))) lines(Year, MLobs, col = \"black\", typ = \"o\")",
+           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Observed (red) and predicted (black) age composition from ", f_name[ff], ".\"}"),
+           paste0("```{r, fig.cap = \"Observed (black) and predicted (red) age composition from ", f_name[ff], ".\"}"),
            paste0("if(any(data$CAA[, , ", ff, "] > 0, na.rm = TRUE)) {"),
-           paste0("plot_composition_SRA(Year, x@CAA[, , , ", ff, "], data$CAA[, , ", ff, "])"),
+           paste0("if(nsim == 1) CAA_plot <- array(x@CAA[, , , ", ff, "], c(1, nyears, max_age)) else CAA_plot <- x@CAA[, , , ", ff, "]"),
+           paste0("plot_composition_SRA(Year, CAA_plot, data$CAA[, , ", ff, "], dat_col = scenario$col)"),
            "}",
            "```\n",
            paste0("```{r, fig.cap = \"Predicted age composition from fleet ", ff, ".\"}"),
-           paste0("if(all(is.na(data$CAA[, , ", ff, "]))) {"),
-           paste0("plot_composition_SRA(Year, x@CAA[, , , ", ff, "])"),
+           paste0("if(any(data$CAA[, , ", ff, "] > 0, na.rm = TRUE)) {"),
+           paste0("plot_composition_SRA(Year, CAA_plot, dat_col = scenario$col)"),
            "}",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Observed (red) and predicted (black) length composition from ", f_name[ff], ".\"}"),
+           paste0("```{r, fig.cap = \"Observed (black) and predicted (red) length composition from ", f_name[ff], ".\"}"),
            paste0("if(any(data$CAL[, , ", ff, "] > 0, na.rm = TRUE)) {"),
-           paste0("plot_composition_SRA(Year, x@CAL[, , , ", ff, "], data$CAL[, , ", ff, "], CAL_bins = data$length_bin)"),
+           paste0("if(nsim == 1) CAL_plot <- array(x@CAL[, , , ", ff, "], c(1, nyears, length(data$length_bin))) else CAL_plot <- x@CAL[, , , ", ff, "]"),
+           paste0("plot_composition_SRA(Year, CAL_plot, data$CAL[, , ", ff, "], CAL_bins = data$length_bin, dat_col = scenario$col)"),
            "}",
            "```\n",
            "",
            paste0("```{r, fig.cap = \"Predicted length composition from ", f_name[ff], ".\"}"),
-           paste0("if(all(is.na(data$CAL[, , ", ff, "]))) {"),
-           paste0("plot_composition_SRA(Year, x@CAL[, , , ", ff, "], data$CAL[, , ", ff, "], CAL_bins = data$length_bin)"),
+           paste0("if(any(data$CAL[, , ", ff, "] > 0, na.rm = TRUE)) {"),
+           paste0("plot_composition_SRA(Year, CAL_plot, CAL_bins = data$length_bin, dat_col = scenario$col)"),
            "}",
            "```\n")
 
@@ -541,40 +663,43 @@ rmd_SRA_survey_output <- function(sur, s_name) {
            paste0("```{r, fig.cap = \"Selectivity of ", s_name[sur], " in last historical year.\"}"),
            "if(!is.null(report_list[[1]]$s_vul)) {",
            paste0("s_vul_ff_age <- do.call(cbind, lapply(report_list, function(x) x$s_vul[nyears, , ", sur, "]))"),
-           paste0("matplot(age, s_vul_ff_age, type = \"l\", col = \"black\", xlab = \"Age\", ylim = c(0, 1), ylab = \"Selectivity of ", s_name[sur], "\")"),
+           paste0("matplot(age, s_vul_ff_age, type = \"l\", col = scenario$col2, xlab = \"Age\", ylim = c(0, 1), ylab = \"Selectivity of ", s_name[sur], "\")"),
            "abline(h = 0, col = \"grey\")",
+           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
            "}",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Observed (red) and predicted (black) index values for ", s_name[sur], ".\"}"),
+           paste0("```{r, fig.cap = \"Observed (black) and predicted (red) index values for ", s_name[sur], ".\"}"),
            paste0("Ipred <- do.call(cbind, lapply(report_list, function(x) x$Ipred[, ", sur, "]))"),
-           paste0("matplot(Year_matrix, Ipred, type = \"l\", col = \"black\", ylim = c(0, 1.1 * max(c(Ipred, data$Index[, ", sur, "]), na.rm = TRUE)), xlab = \"Year\", ylab = \"", s_name[sur], "\")"),
-           paste0("lines(Year, data$Index[, ", sur, "], col = \"red\", lwd = 3, typ = \"o\", pch = 16)"),
+           paste0("matplot(Year, Ipred, type = \"l\", col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, ylim = c(0, 1.1 * max(c(Ipred, data$Index[, ", sur, "]), na.rm = TRUE)), xlab = \"Year\", ylab = \"", s_name[sur], "\")"),
+           paste0("lines(Year, data$Index[, ", sur, "], col = \"black\", typ = \"o\")"),
            "abline(h = 0, col = \"grey\")",
+           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Observed (red) and predicted (black) index values for ", s_name[sur], ". Error bars indicate 95% confidence intervals for observed values.\"}"),
+           paste0("```{r, fig.cap = \"Observed (black) and predicted (red) index values for ", s_name[sur], ". Error bars indicate 95% confidence intervals for observed values.\"}"),
            paste0("Ipred <- do.call(cbind, lapply(report_list, function(x) x$Ipred[, ", sur, "]))"),
            paste0("II <- data$Index[, ", sur, "]"),
            "ind <- seq(min(which(!is.na(II))), max(which(!is.na(II))), 1)",
            paste0("err <- exp(log(II) + outer(data$I_sd[, ", sur, "], c(-1.96, 1.96)))"),
-           paste0("matplot(Year[ind], Ipred[ind, ], type = \"l\", col = \"black\", ylim = c(0, 1.1 * max(c(Ipred[ind, ], II[ind], err[ind, ]), na.rm = TRUE)), xlab = \"Year\", ylab = \"", s_name[sur], "\")"),
-           "points(Year[ind], II[ind], col = \"red\", lwd = 3, pch = 16)",
-           "arrows(Year[ind], y0 = err[ind, 1], y1 = err[ind, 2], col = \"red\", length = 0)",
+           paste0("matplot(Year[ind], Ipred[ind, ], type = \"l\", col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, ylim = c(0, 1.1 * max(c(Ipred[ind, ], II[ind], err[ind, ]), na.rm = TRUE)), xlab = \"Year\", ylab = \"", s_name[sur], "\")"),
+           "points(Year[ind], II[ind], lwd = 3, pch = 16)",
+           "arrows(Year[ind], y0 = err[ind, 1], y1 = err[ind, 2], length = 0, lwd = 1.5)",
            "abline(h = 0, col = \"grey\")",
+           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Observed (red) and predicted (black) age composition from ", s_name[sur], ".\"}"),
+           paste0("```{r, fig.cap = \"Observed (black) and predicted (red) age composition from ", s_name[sur], ".\"}"),
            paste0("if(!is.null(data$s_CAA) && any(data$s_CAA[, , ", sur, "] > 0, na.rm = TRUE)) {"),
            paste0("pred_sCAA <- lapply(report_list, function(x) x$s_CAA[,, ", sur, "]) %>% unlist() %>% array(dim = c(nyears, max_age, nsim)) %>% aperm(perm = c(3, 1, 2))"),
-           paste0("plot_composition_SRA(Year, pred_sCAA, data$s_CAA[, , ", sur, "])"),
+           paste0("plot_composition_SRA(Year, pred_sCAA, data$s_CAA[, , ", sur, "], dat_col = scenario$col)"),
            "}",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Observed (red) and predicted (black) length composition from ", s_name[sur], ".\"}"),
+           paste0("```{r, fig.cap = \"Observed (black) and predicted (red) length composition from ", s_name[sur], ".\"}"),
            paste0("if(!is.null(data$s_CAL) && any(data$s_CAL[, , ", sur, "] > 0, na.rm = TRUE)) {"),
            paste0("pred_sCAL <- lapply(report_list, function(x) x$s_CAL[,, ", sur, "]) %>% unlist() %>% array(dim = c(nyears, length(data$length_bin), nsim)) %>% aperm(perm = c(3, 1, 2))"),
-           paste0("plot_composition_SRA(Year, pred_sCAL, data$s_CAL[, , ", sur, "], CAL_bins = data$length_bin)"),
+           paste0("plot_composition_SRA(Year, pred_sCAL, data$s_CAL[, , ", sur, "], CAL_bins = data$length_bin, dat_col = scenario$col)"),
            "}",
            "```\n")
   ans
@@ -590,22 +715,25 @@ rmd_SRA_initD <- function(fig.cap = "Histogram of initial depletion among all si
 rmd_SRA_R_output <- function() {
   c("```{r, fig.cap = \"Estimated recruitment among all simulations.\"}",
     "R_out <- do.call(cbind, lapply(report_list, getElement, \"R\"))",
-    "matplot(Yearplusone_matrix, R_out, ylim = c(0, 1.1 * max(R_out)), type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Recruitment\")",
+    "matplot(Yearplusone, R_out, ylim = c(0, 1.1 * max(R_out)), type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Recruitment\")",
     "abline(h = 0, col = \"grey\")",
+	"if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
     "```\n")
 }
 
 rmd_SRA_SSB_output <- function() {
   c("```{r, fig.cap = \"Estimated spawning biomass among all simulations.\"}",
     "E <- do.call(cbind, lapply(report_list, getElement, \"E\"))",
-    "matplot(Yearplusone_matrix, E, ylim = c(0, 1.1 * max(E)), type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Spawning biomass\")",
+    "matplot(Yearplusone, E, ylim = c(0, 1.1 * max(E)), type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Spawning biomass\")",
     "abline(h = 0, col = \"grey\")",
+	"if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
     "```\n",
     "",
     "```{r, fig.cap = \"Estimated spawning depletion among all simulations. Unfished spawning biomass is the value calculated from first year life history parameters.\"}",
     "E_E0 <- do.call(cbind, lapply(report_list, function(x) x$E/x$E0_SR))",
-    "matplot(Yearplusone_matrix, E_E0, ylim = c(0, 1.1 * max(E_E0)), type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Spawning depletion\")",
+    "matplot(Yearplusone, E_E0, ylim = c(0, 1.1 * max(E_E0)), type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Spawning depletion\")",
     "abline(h = 0, col = \"grey\")",
+	"if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
     "```\n")
 }
 
@@ -614,21 +742,20 @@ rmd_log_rec_dev <- function() {
     "log_rec_dev2 <- do.call(cbind, lapply(report_list, getElement, \"log_rec_dev\"))",
     "matplot(Year, log_rec_dev2, type = \"n\", xlab = \"Year\", ylab = \"log-recruitment deviations\")",
     "abline(h = 0, col = \"grey\")",
-    "matlines(Year, log_rec_dev2, col = \"black\")",
+    "matlines(Year, log_rec_dev2, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
+	"if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
     "```\n")
 }
 
 
 plot_composition_SRA <- function(Year, SRA, dat = NULL, CAL_bins = NULL, ages = NULL, annual_ylab = "Frequency",
-                                 annual_yscale = c("proportions", "raw"), dat_linewidth = 3, dat_color = "red") {
+                                 annual_yscale = c("proportions", "raw"), N = if(is.null(dat)) NULL else round(rowSums(dat)), dat_linewidth = 2, dat_color = "black") {
   old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par))
   par(mfcol = c(4, 4), mar = rep(0, 4), oma = c(5.1, 5.1, 2.1, 2.1))
 
   annual_yscale <- match.arg(annual_yscale)
   if(is.null(CAL_bins)) data_type <- "age" else data_type <- "length"
-
-  #if(!is.null(dat) && !all(dim(dat) == dim(SRA))) stop("Dimensions of 'SRA' and 'dat' do not match.")
 
   if(data_type == 'length') {
     data_val <- CAL_bins
@@ -645,8 +772,8 @@ plot_composition_SRA <- function(Year, SRA, dat = NULL, CAL_bins = NULL, ages = 
   dat_plot <- dat
   if(annual_yscale == "proportions") {
     for(i in 1:length(Year)) {
-      SRA_plot[, i, ] <- SRA[, i, ]/max(SRA[, i, ])
-      if(!is.null(dat)) dat_plot[i, ] <- dat[i, ]/max(dat[i, ])
+      SRA_plot[, i, ] <- SRA[, i, ]/rowSums(SRA[, i, ])
+      if(!is.null(dat)) dat_plot[i, ] <- dat[i, ]/sum(dat[i, ])
     }
   }
   ylim <- c(0, 1.1 * max(SRA_plot, dat_plot, na.rm = TRUE))
@@ -674,20 +801,20 @@ plot_composition_SRA <- function(Year, SRA, dat = NULL, CAL_bins = NULL, ages = 
           xaxt <- 's'
         }
       }
-      matplot(data_val, t(SRA_plot[, i, ]), type = "l", col = "black", ylim = ylim, yaxp = yaxp, xaxt = xaxt, yaxt = yaxt, las = las)
-      abline(h = 0, col = 'grey')
-      if(!is.null(dat)) lines(data_val, dat_plot[i, ], lwd = dat_linewidth, col = dat_color)
-      legend("topright", legend = Year[i], bty = "n", xjust = 1)
-    }
-
-    if(i == length(Year)) {
+    } else {
       xaxt <- 's'
       if(i %% 16 %in% c(1:4)) yaxt <- 's' else yaxt <- 'n'
-      matplot(data_val, t(SRA_plot[, i, ]), type = "l", col = "black", ylim = ylim, yaxp = yaxp, xaxt = xaxt, yaxt = yaxt, las = las)
-      abline(h = 0, col = 'grey')
-      if(!is.null(dat)) lines(data_val, dat_plot[i, ], lwd = dat_linewidth, col = dat_color)
-      legend("topright", legend = Year[i], bty = "n", xjust = 1)
     }
+
+    if(dim(SRA_plot)[1] == 1) {
+      plot(data_val, SRA_plot[, i, ], type = "l", col = dat_color, ylim = ylim, yaxp = yaxp, xaxt = xaxt, yaxt = yaxt, las = las)
+    } else {
+      matplot(data_val, t(SRA_plot[, i, ]), type = "l", col = dat_color, ylim = ylim, yaxp = yaxp, xaxt = xaxt, yaxt = yaxt, las = las)
+    }
+    abline(h = 0, col = 'grey')
+    if(!is.null(dat)) lines(data_val, dat_plot[i, ], lwd = 1.5)
+    legend("topright", legend = c(Year[i], ifelse(is.null(N) || is.na(N[i]), "", paste0("N = ", N[i]))), bty = "n", xjust = 1)
+
     if(i %% 16 == 0 || i == length(Year)) {
       mtext(data_lab, side = 1, line = 3, outer = TRUE)
       mtext(annual_ylab, side = 2, line = 3.5, outer = TRUE)
@@ -697,7 +824,215 @@ plot_composition_SRA <- function(Year, SRA, dat = NULL, CAL_bins = NULL, ages = 
   invisible()
 }
 
+SRA_get_likelihoods <- function(x, LWT, f_name, s_name) {
+  f_nll <- rbind(x$nll_Catch + x$nll_Ceq, x$nll_CAA, x$nll_CAL, x$nll_ML)
+  f_nll[is.na(f_nll)] <- 0
+  f_nll <- cbind(f_nll, rowSums(f_nll))
+  f_nll <- rbind(f_nll, colSums(f_nll))
+  colnames(f_nll) <- c(f_name, "Sum")
+  rownames(f_nll) <- c("Catch", "CAA", "CAL", "ML", "Sum")
+
+  f_wt <- structure(rbind(LWT$Chist, LWT$CAA, LWT$CAL, LWT$ML), dimnames = list(rownames(f_nll)[1:4], f_name))
+
+  s_nll <- rbind(x$nll_Index, x$nll_s_CAA, x$nll_s_CAL)
+  s_nll[is.na(s_nll)] <- 0
+  s_nll <- cbind(s_nll, rowSums(s_nll))
+  s_nll <- rbind(s_nll, colSums(s_nll))
+  colnames(s_nll) <- c(s_name, "Sum")
+  rownames(s_nll) <- c("Index", "CAA", "CAL", "Sum")
+
+  s_wt <- structure(rbind(LWT$Index, LWT$s_CAA, LWT$s_CAL), dimnames = list(rownames(s_nll)[1:3], s_name))
+
+  tot <- matrix(c(x$nll_log_rec_dev, f_nll[5, length(f_name) + 1], s_nll[4, length(s_name) + 1]), ncol = 1)
+  tot <- rbind(colSums(tot), tot)
+  dimnames(tot) <- list(c("Total", "Recruitment Deviations", "Fleets", "Surveys"), "Negative log-likelihood")
+
+  res <- list(tot, f_nll, f_wt, s_nll, s_wt) %>% lapply(FUN = function(xx) xx %>% round(2) %>% as.data.frame())
+  return(res)
+}
+
+#' @rdname plot.SRA
+#' @export
+compare_SRA <- function(..., compare = TRUE, filename = "compare_SRA", dir = tempdir(), Year = NULL,
+                        f_name = NULL, s_name = NULL, MSY_ref = c(0.5, 1), bubble_adj = 10, scenario = list(), title = NULL,
+                        open_file = TRUE, quiet = TRUE, render_args) {
+
+  dots <- list(...)
+  # Update scenario
+  if(is.null(scenario$names)) scenario$names <- paste("Scenario", 1:length(dots))
+  if(is.null(scenario$col)) {
+    scenario$col <- gplots::rich.colors(length(dots))
+  }
+  scenario$col2 <- scenario$col
+
+  if(is.null(scenario$lwd)) scenario$lwd <- 1
+  if(is.null(scenario$lty)) scenario$lty <- 1:5
+
+  ####### Function arguments for rmarkdown::render
+  filename_rmd <- paste0(filename, ".Rmd")
+
+  if(missing(render_args)) render_args <- list()
+  render_args$input <- file.path(dir, filename_rmd)
+  if(is.null(render_args$output_format)) {
+    render_args$output_format <- "html_document"
+  }
+  if(is.null(render_args$output_options)) {
+    if(render_args$output_format == "html_document") {
+      render_args$output_options <- list(df_print = "paged")
+    } else {
+      render_args$output_options <- list(toc = TRUE, df_print = "kable")
+    }
+  }
+  if(is.null(render_args$quiet)) render_args$quiet <- quiet
+
+  ####### Assign variables
+  x <- dots[[1]] # Dummy variable
+  report_list <- lapply(dots, function(x) if(length(x@mean_fit) > 0) return(x@mean_fit$report) else stop("Error in SRA objects."))
+
+  nsim <- length(report_list)
+  data <- dots[[1]]@data
+
+  max_age <- dots[[1]]@OM@maxage
+  age <- 1:max_age
+  nyears <- dots[[1]]@OM@nyears
+  if(is.null(Year)) Year <- (dots[[1]]@OM@CurrentYr - nyears + 1):dots[[1]]@OM@CurrentYr
+  Yearplusone <- c(Year, max(Year) + 1)
+
+  nfleet <- vapply(dots, function(x) x@data$nfleet, numeric(1)) %>% unique()
+  nsurvey <- vapply(dots, function(x) x@data$nsurvey, numeric(1)) %>% unique()
+  length_bin <- dots[[1]]@data$length_bin
+
+  if(is.null(f_name)) f_name <- paste("Fleet", 1:nfleet)
+  if(is.null(s_name)) s_name <- paste("Survey", 1:nsurvey)
+
+  ####### Document header
+  if(is.null(title)) title <- "Comparisons of OM conditioning"
+  header <- c("---",
+              paste0("title: \"", title, "\""),
+              "subtitle: Output from Stock Reduction Analysis scoping function (SRA_scope)",
+              "date: \"`r Sys.Date()`\"",
+              "---",
+              "<style type=\"text/css\">",
+              "h1 { /* Header 1 */",
+              "  font-size: 24px;",
+              "}",
+              "</style>",
+              "",
+              "```{r setup, include = FALSE, echo = FALSE}",
+              "  knitr::opts_chunk$set(collapse = TRUE, echo = FALSE, message = FALSE,",
+              "  fig.width = 6, fig.height = 4.5, out.width = \"650px\", comment = \"#>\")",
+              "```\n")
 
 
+  ####### Output from all simulations {.tabset}
+  fleet_output <- lapply(1:nfleet, rmd_SRA_fleet_output, f_name = f_name)
 
+  if(any(data$Index > 0, na.rm = TRUE)) {
+    survey_output <- lapply(1:nsurvey, rmd_SRA_survey_output, s_name = s_name)
+  } else survey_output <- NULL
+
+  #### MSY comparisons
+  if(compare) {
+    message("Running runMSE() to get MSY reference points...")
+    Hist <- lapply(dots, function(x) {
+      if(identical(x@Misc[[1]], x@mean_fit$report)) {
+        Hist <- runMSE(x@OM, Hist = TRUE, silent = TRUE)
+      } else {
+        stop("Don't have OM for Hist object. Set argument compare = FALSE")
+      }
+      return(Hist)
+    })
+
+    SSB_MSY <- c("```{r, fig.cap = \"Spawning biomass (SSB) relative to MSY from the operating model.\"}",
+                 "SSB <- do.call(rbind, lapply(report_list, function(x) x$E[1:nyears]))",
+                 "SSBMSY <- vapply(Hist, function(x) x@Ref$SSBMSY[1], numeric(1))",
+                 "SSB_SSBMSY <- t(SSB/SSBMSY)",
+                 "matplot(Year, SSB_SSBMSY, typ = \"n\", xlab = \"Year\", ylab = expression(SSB/SSB[MSY]), ylim = c(0, 1.1 * max(SSB_SSBMSY)))",
+                 "matlines(Year, SSB_SSBMSY, col = scenario$col2)",
+                 "abline(h = c(0, MSY_ref), col = \"grey\")",
+                 "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty)",
+                 "```\n")
+
+    ref_pt_fn <- function(x) c(x@Ref$FMSY[1], x@Ref$MSY[1], x@Ref$SSBMSY_SSB0[1])
+    ref_pt <- do.call(cbind, lapply(Hist, ref_pt_fn)) %>%
+      structure(dimnames = list(c("FMSY", "MSY", "Spawning depletion at MSY"), scenario$names)) %>% as.data.frame()
+
+    if(render_args$output_format == "html_document") {
+      rmd_ref_pt <- paste0("## Reference points \n",
+                           "`r ref_pt`\n\n")
+    } else {
+      rmd_ref_pt <- paste0("## Reference points \n",
+                           "`r ref_pt %>% kable(format = \"markdown\")`\n\n")
+    }
+
+  } else {
+    SSB_MSY <- rmd_ref_pt <- ""
+  }
+
+  all_sims_output <- c("# Summary {.tabset}\n\n", fleet_output, survey_output, "### Model predictions\n",
+                       rmd_SRA_initD(), rmd_SRA_R_output(), rmd_SRA_SSB_output(), SSB_MSY, rmd_log_rec_dev())
+
+  #### Likelihoods
+  nll <- Map(SRA_get_likelihoods, x = report_list, LWT = lapply(dots, function(x) x@data$LWT),
+             MoreArgs = list(f_name = f_name, s_name = s_name))
+
+  summary_nll <- vapply(nll, function(x) x[[1]] %>% as.matrix(), numeric(4)) %>%
+    structure(dimnames = list(rownames(nll[[1]][[1]]), scenario$names)) %>% as.data.frame()
+
+  if(render_args$output_format == "html_document") {
+
+    nll_table_fn <- function(i, ii) {
+      c(paste0("#### ", scenario$names[i]),
+        paste0("`r nll[[", i, "]][[", ii, "]]`\n\n"))
+    }
+
+    nll_table <- c("## Likelihood components\n",
+                   "### Summary\n",
+                   "`r summary_nll`\n\n",
+                   "### Fleet likelihoods {.tabset}\n",
+                   do.call(c, lapply(1:length(dots), nll_table_fn, ii = 2)),
+                   "### Fleet weights {.tabset}\n",
+                   do.call(c, lapply(1:length(dots), nll_table_fn, ii = 3)),
+                   "### Survey likelihoods {.tabset}\n",
+                   do.call(c, lapply(1:length(dots), nll_table_fn, ii = 4)),
+                   "### Survey weights {.tabset}\n",
+                   do.call(c, lapply(1:length(dots), nll_table_fn, ii = 5)))
+  } else {
+
+    nll_table_fn <- function(i, ii) {
+      c(paste0("#### ", scenario$names[i]),
+        paste0("`r nll[[", i, "]][[", ii, "]] %>% kable(format = \"markdown\")`\n\n"))
+    }
+    nll_table <- c("## Likelihood components\n",
+                   "### Summary\n",
+                   "`r summary_nll %>% kable(format = \"markdown\")`\n\n",
+                   "### Fleet likelihoods\n",
+                   do.call(c, lapply(1:length(dots), nll_table_fn, ii = 2)),
+                   "### Fleet weights\n",
+                   do.call(c, lapply(1:length(dots), nll_table_fn, ii = 3)),
+                   "### Survey likelihoods\n",
+                   do.call(c, lapply(1:length(dots), nll_table_fn, ii = 4)),
+                   "### Survey weights\n",
+                   do.call(c, lapply(1:length(dots), nll_table_fn, ii = 5)))
+  }
+
+  rmd <- c(header, all_sims_output, nll_table, rmd_ref_pt, rmd_footer())
+  if(is.list(rmd)) rmd <- do.call(c, rmd)
+
+  # Generate markdown report
+  if(!dir.exists(dir)) {
+    message("Creating directory: \n", dir)
+    dir.create(dir)
+  }
+  write(rmd, file = file.path(dir, filename_rmd))
+  message("Generated markdown file: ", file.path(dir, filename_rmd))
+
+  # Rendering markdown file
+  message("Rendering markdown file...")
+  output_filename <- do.call(rmarkdown::render, render_args)
+  message("Rendered file: ", output_filename)
+
+  if(open_file) browseURL(output_filename)
+  invisible(output_filename)
+}
 

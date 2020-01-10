@@ -6,10 +6,22 @@
 \alias{Sub_cpars}
 \title{Stock-reduction analysis (SRA) for conditioning operating models}
 \usage{
-SRA_scope(OM, data = list(), condition = c("catch", "effort"),
-  selectivity = "logistic", s_selectivity = NULL, LWT = list(),
-  ESS = c(30, 30), max_F = 3, cores = 1L, integrate = FALSE,
-  mean_fit = FALSE, drop_nonconv = FALSE, ...)
+SRA_scope(
+  OM,
+  data = list(),
+  condition = c("catch", "effort"),
+  selectivity = "logistic",
+  s_selectivity = NULL,
+  LWT = list(),
+  comp_like = c("multinomial", "lognormal"),
+  ESS = c(30, 30),
+  max_F = 3,
+  cores = 1L,
+  integrate = FALSE,
+  mean_fit = FALSE,
+  drop_nonconv = FALSE,
+  ...
+)
 
 plot_SRA_scope(...)
 
@@ -25,13 +37,16 @@ steepness, maturity parameters (L50 and L50_95), standard deviation of recruitme
 
 \item{selectivity}{A character vector of length nfleet to indicate \code{"logistic"} or \code{"dome"} selectivity for each fleet in \code{Chist}.}
 
-\item{s_selectivity}{A character vector of length nsurvey to indicate \code{"logistic"} or \code{"dome"} selectivity for each fleet in \code{Chist}.
-Only used if any of \code{data$I_type = "est"}.}
+\item{s_selectivity}{A vector of length nsurvey to indicate \code{"logistic"} or \code{"dome"} selectivity for each survey in \code{Index}. Use a number
+for an age-specific index.
+Only used if any of the corresponding entries of \code{data$I_type = "est"} or if a number is specified here.}
 
 \item{LWT}{A named list of likelihood weights for the SRA model. See details.}
 
-\item{ESS}{A numeric vector of length two to cap the maximum effective samples size of the age and length compositions, respectively, for the
-multinomial likelihood function. The effective sample size of an age or length composition sample is the minimum of ESS or the number of observations
+\item{comp_like}{A string indicating either "multinomial" (default) or "lognormal" distributions for the composition data.}
+
+\item{ESS}{If \code{comp_like = "multinomial"}, a numeric vector of length two to cap the maximum effective samples size of the age and length compositions,
+respectively, for the multinomial likelihood function. The effective sample size of an age or length composition sample is the minimum of ESS or the number of observations
 (sum across columns). For more flexibility, set ESS to be very large and alter the arrays as needed.}
 
 \item{max_F}{The maximum F for any fleet in the scoping model (higher F's in the model are penalized in the objective function).}
@@ -107,6 +122,9 @@ The easiest way to turn off time-varying growth/M is by setting: \code{OM@Msd <-
 }
 \section{Data}{
 
+One of indices, age compositions, or length compositions should be provided in addition to the historical catch or effort. Not all arguments
+are needed to run the model (some have defaults, while others are ignored if not applicable depending on the data provided).
+
 The \code{data} list can include:
 
 \itemize{
@@ -114,12 +132,13 @@ The \code{data} list can include:
 Ideally, the first year of the catch series represents unfished conditions (see also \code{C_eq}).
 \item Ehist - A vector of historical effort, should be of length OM@nyears (see also \code{E_eq}).
 \item Index - A vector of values of an index (of length OM@nyears). If there are multiple surveys: a matrix of historical indices of abundances, with rows
-indexing years and columns indexing surveys.
+indexing years and columns indexing surveys. Age-specific indices should be numbers-specific while all others are weight-based.
 \item I_sd - A vector or matrix of standard deviations (lognormal distribution) for the indices corresponding to the entries in \code{Index}.
 If not provided, this function will use values from \code{OM@Iobs}.
 \item I_type - A character vector of length nsurvey to indicate the type of biomass for which each index follows. Either \code{"B"} for
 total biomass, or \code{"SSB"} for spawning biomass. If not provided, "B" is used. Use numbers if the index corresponds to a fleet in \code{Chist}.
-Use \code{"est"} to estimate survey selectivity, but this generally requires age \code{s_CAA} or length \code{s_CAL}compositions.
+Use \code{"est"} to set survey selectivity to be an independent component of the model, i.e., as an age-specific index or estimated separatel.
+Note, this generally requires age \code{s_CAA} or length \code{s_CAL}compositions.
 \item CAA - Fishery age composition matrix with nyears rows and OM@maxage columns. If multiple fleets: an array with dimension: nyears, OM@maxage, and nfleets.
 \item CAL - Fishery Length composition matrix with nyears rows and columns indexing the length bin. If multiple fleets: an array with dimension: nyears,
 length bins, and nfleets.
@@ -134,9 +153,10 @@ If not provided, default value is \code{0.1 * mean(ML)}.
 Zero (default) implies unfished conditions in year one. Otherwise, this is used to estimate depletion in the first year of the data.
 \item E_eq - The equilibrium effort for each fleet in \code{Ehist} prior to the first year of the operating model.
 Zero (default) implies unfished conditions in year one. Otherwise, this is used to estimate depletion in the first year of the data.
+\item abs_I - Optional, an integer vector to indicate which indices are in absolute magnitude. Use 1 to set q = 1, otherwise use 0 to estimate q.
+\item I_basis - Optional, an integer vector to indicate whether indices are biomass based (1) or abundance-based (0). By default, all are biomass-based.
 }
 
-One of indices, age compositions, or length compositions should be provided in addition to the historical catch.
 Selectivity is fixed to values sampled from \code{OM} if no age or length compositions are provided.
 }
 

@@ -60,6 +60,18 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
                    f_name = NULL, s_name = NULL, MSY_ref = c(0.5, 1), bubble_adj = 10, scenario = list(), title = NULL,
                    open_file = TRUE, quiet = TRUE, render_args, ...) {
 
+            # Run retrospective (dots$retrospective = TRUE with dots$nyr)
+            # Or directly provide a retrospective object (dots$retro)
+            dots <- list(...)
+            if(!is.null(dots$retrospective) && dots$retrospective) {
+              message("Running retrospective on mean fit object...")
+              if(is.null(dots$nyr)) {
+                retro <- retrospective(x)
+              } else retro <- retrospective(x, dots$nyr)
+            } else if(!is.null(dots$retro)) {
+              retro <- dots$retro
+            }
+
             # Update scenario
             if(is.null(scenario$col)) {
               scenario$col <- "red"
@@ -99,15 +111,29 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
             max_age <- OM@maxage
             age <- 1:max_age
             nyears <- OM@nyears
+            proyears <- OM@proyears
             if(is.null(Year)) Year <- (OM@CurrentYr - nyears + 1):OM@CurrentYr
             Yearplusone <- c(Year, max(Year) + 1)
 
-            nfleet <- x@data$nfleet
-            nsurvey <- x@data$nsurvey
-            length_bin <- x@data$length_bin
+            # Backwards compatibility
+            if(is.null(data$nsel_block)) {
+              data$nsel_block <- data$nfleet
+              data$sel_block <- matrix(1:data$nfleet, nyears, data$nfleet, byrow = TRUE)
+            }
+
+            nfleet <- data$nfleet
+            nsel_block <- data$nsel_block
+            nsurvey <- data$nsurvey
+            length_bin <- data$length_bin
 
             if(is.null(f_name)) f_name <- paste("Fleet", 1:nfleet)
-            if(is.null(s_name)) s_name <- paste("Survey", 1:nsurvey)
+            if(is.null(s_name)) {
+              if(nsurvey > 0) {
+                s_name <- paste("Survey", 1:nsurvey)
+              } else {
+                s_name <- "Survey"
+              }
+            }
 
             ####### Document header
             if(is.null(title)) title <- "Operating model (OM) conditioning for `r ifelse(nchar(OM@Name) > 0, OM@Name, substitute(OM))`"
@@ -124,7 +150,8 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
                         "",
                         "```{r setup, include = FALSE, echo = FALSE}",
                         "  knitr::opts_chunk$set(collapse = TRUE, echo = FALSE, message = FALSE,",
-                        "  fig.width = 6, fig.height = 4.5, out.width = \"650px\", comment = \"#>\")",
+                        paste0("  fig.width = 6, fig.height = 4.5, ", ifelse(render_args$output_format == "html_document", "", "dpi = 400, "),
+                               "out.width = \"650px\", comment = \"#>\")"),
                         "```\n")
 
             ####### Updated historical OM parameters
@@ -154,6 +181,12 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
               length_bin <- x@mean_fit$report$length_bin
               data_mean_fit <- x@mean_fit$obj$env$data
 
+              # Backwards compatibility
+              if(is.null(data_mean_fit$nsel_block)) {
+                data_mean_fit$nsel_block <- data$nfleet
+                data_mean_fit$sel_block <- matrix(1:data$nfleet, nyears, data$nfleet, byrow = TRUE)
+              }
+
               conv <- report$conv
 
               SD2 <- rbind(summary(SD, "report"), summary(SD, "fixed")) %>% as.data.frame()
@@ -164,7 +197,7 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
               } else {
                 sumry <- c("## Fit to mean parameters of the OM {.tabset}\n",
                            "### SRA Model Estimates\n",
-                           "`r SD2 %>% kable(format = \"markdown\")`\n\n")
+                           "`r SD2 %>% knitr::kable(format = \"markdown\")`\n\n")
               }
 
               # Life History section
@@ -231,8 +264,8 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
                 } else {
                   E_header <- "#### Effort \n"
                 }
-                E_matplot <- rmd_matplot(x = "matrix(Year, nyears, nfleet)", y = "data$Ehist", col = "rich.colors(nfleet)",
-                                         xlab = "Year", ylab = "Effort", legend.lab = "f_name", fig.cap = "Effort time series.", E_header)
+                E_matplot <- rmd_matplot(x = "matrix(Year, nyears, nfleet)", y = "data_mean_fit$Ehist", col = "rich.colors(nfleet)",
+                                         xlab = "Year", ylab = "Effort", legend.lab = "f_name", fig.cap = "Effort time series.", header = E_header)
               } else E_matplot <- NULL
 
               if(any(data$Index > 0, na.rm = TRUE)) {
@@ -270,9 +303,9 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
               data_section <- c(C_matplot, E_matplot, C_plots, I_plots, CAA_plots, CAL_plots, ML_plots, s_CAA_plots, s_CAL_plots)
 
               # Model output
-              sel_matplot <- rmd_matplot(x = "matrix(data_mean_fit$length_bin, nrow(report$vul_len), nfleet)", y = "report$vul_len", col = "rich.colors(nfleet)",
-                                         xlab = "Length", ylab = "Selectivity", legend.lab = "f_name",
-                                         fig.cap = "Selectivity by fleet.", header = "### Output \n")
+              sel_matplot <- rmd_matplot(x = "matrix(age, max_age, nfleet)", y = "matrix(report$vul[nyears, , ], max_age, nfleet)", col = "rich.colors(nfleet)",
+                                         xlab = "Age", ylab = "Selectivity", legend.lab = "f_name",
+                                         fig.cap = "Terminal year selectivity by fleet.", header = "### Output \n")
 
               F_matplot <- rmd_matplot(x = "matrix(Year, nyears, nfleet)", y = "report$F", col = "rich.colors(nfleet)",
                                        xlab = "Year", ylab = "Fishing Mortality (F)", legend.lab = "f_name",
@@ -301,43 +334,51 @@ setMethod("plot", signature(x = "SRA", y = "missing"),
               CAA_bubble <- rmd_bubble("Year", "CAA_all", fig.cap = "Predicted catch-at-age (summed over all fleets).", bubble_adj = as.character(bubble_adj))
 
               CAL_all <- apply(report$CALpred, c(1, 2), sum)
-              CAL_bubble <- rmd_bubble("Year", "CAL_all", CAL_bins = "data_mean_fit$length_bin",
-                                       fig.cap = "Predicted catch-at-length (summed over all fleets).", bubble_adj = as.character(bubble_adj))
+              if(sum(CAL_all, na.rm = TRUE) > 0) {
+                CAL_bubble <- rmd_bubble("Year", "CAL_all", CAL_bins = "data_mean_fit$length_bin",
+                                         fig.cap = "Predicted catch-at-length (summed over all fleets).", bubble_adj = as.character(bubble_adj))
+              } else CAL_bubble <- ""
 
-              ts_output <- c(sel_matplot, F_matplot, rmd_SSB(), SSB_plot, rmd_SSB_SSB0(FALSE), rmd_R(),
+              ts_output <- c(sel_matplot, F_matplot, rmd_SSB(), SSB_plot, rmd_SSB_SSB0(FALSE), rmd_R(), rmd_SRA_SR(),
                              rmd_residual("log_rec_dev", fig.cap = "Time series of recruitment deviations.", label = "log-Recruitment deviations"),
                              rmd_residual("log_rec_dev", "log_rec_dev_SE", fig.cap = "Time series of recruitment deviations with 95% confidence intervals.",
                                           label = "log-Recruitment deviations", conv_check = TRUE),
                              rmd_N(), N_bubble, CAA_bubble, CAL_bubble)
 
-              nll <- SRA_get_likelihoods(report, data$LWT, f_name, s_name)
-              if(render_args$output_format == "html_document") {
-                nll_table <- c("### Likelihood components\n",
-                               "#### Summary\n",
-                               "`r nll[[1]]`\n\n",
-                               "#### Fleet likelihoods\n",
-                               "`r nll[[2]]`\n\n",
-                               "#### Fleet weights\n",
-                               "`r nll[[3]]`\n\n",
-                               "#### Survey likelihoods\n",
-                               "`r nll[[4]]`\n\n",
-                               "#### Survey weights\n",
-                               "`r nll[[5]]`\n\n")
-              } else {
-                nll_table <- c("### Likelihood components\n",
-                               "#### Summary\n",
-                               "`r nll[[1]] %>% kable(format = \"markdown\")`\n\n",
-                               "#### Fleet likelihoods\n",
-                               "`r nll[[2]] %>% kable(format = \"markdown\")`\n\n",
-                               "#### Fleet weights\n",
-                               "`r nll[[3]] %>% kable(format = \"markdown\")`\n\n",
-                               "#### Survey likelihoods\n",
-                               "`r nll[[4]] %>% kable(format = \"markdown\")`\n\n",
-                               "#### Survey weights\n",
-                               "`r nll[[5]] %>% kable(format = \"markdown\")`\n\n")
-              }
+              if(!is.null(data$LWT)) { # Backwards compatibility
+                nll <- SRA_get_likelihoods(report, data$LWT, f_name, s_name)
+                if(render_args$output_format == "html_document") {
+                  nll_table <- c("### Likelihood components\n",
+                                 "#### Summary\n",
+                                 "`r nll[[1]]`\n\n",
+                                 "#### Fleet likelihoods\n",
+                                 "`r nll[[2]]`\n\n",
+                                 "#### Fleet weights\n",
+                                 "`r nll[[3]]`\n\n",
+                                 "#### Survey likelihoods\n",
+                                 "`r nll[[4]]`\n\n",
+                                 "#### Survey weights\n",
+                                 "`r nll[[5]]`\n\n")
+                } else {
+                  nll_table <- c("### Likelihood components\n",
+                                 "#### Summary\n",
+                                 "`r nll[[1]] %>% knitr::kable(format = \"markdown\")`\n\n",
+                                 "#### Fleet likelihoods\n",
+                                 "`r nll[[2]] %>% knitr::kable(format = \"markdown\")`\n\n",
+                                 "#### Fleet weights\n",
+                                 "`r nll[[3]] %>% knitr::kable(format = \"markdown\")`\n\n",
+                                 "#### Survey likelihoods\n",
+                                 "`r nll[[4]] %>% knitr::kable(format = \"markdown\")`\n\n",
+                                 "#### Survey weights\n",
+                                 "`r nll[[5]] %>% knitr::kable(format = \"markdown\")`\n\n")
+                }
+              } else nll_table <- NULL
 
-              mean_fit_rmd <- c(sumry, LH_section, data_section, ts_output, nll_table)
+              if(exists("retro", inherits = FALSE)) {
+                ret <- rmd_SRA_retrospective(render_args)
+              } else ret <- NULL
+
+              mean_fit_rmd <- c(sumry, LH_section, data_section, ts_output, nll_table, ret)
             } else mean_fit_rmd <- c("## Fit to mean parameters of OM {.tabset}\n",
                                      "No model found. Re-run `SRA_scope()` with `mean_fit = TRUE`.\n\n")
 
@@ -537,12 +578,33 @@ rmd_SRA_D <- function(fig.cap = "Histogram of historical depletion.") {
     "```\n")
 }
 
-rmd_SRA_Perr <- function(fig.cap = "Recruitment deviations among simulations.") {
+rmd_SRA_Perr <- function(fig.cap = "Historical recruitment deviations among simulations.") {
   c(paste0("```{r, fig.cap = \"", fig.cap, "\"}"),
     "Perr <- OM@cpars$Perr_y[, max_age:(max_age+nyears-1), drop = FALSE]",
     "matplot(Year, t(Perr), type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Recruitment deviations\",",
     "        ylim = c(0, 1.1 * max(Perr)))",
     "abline(h = 0, col = \"grey\")",
+    "```\n",
+    "",
+    "```{r, fig.cap = \"Future recruitment deviations (up to 5 simulations).\"}",
+    "Perr_future <- OM@cpars$Perr_y[, (max_age+nyears):(max_age+nyears+proyears-1)]",
+    "matplot(Year, t(Perr), type = \"l\", col = \"black\", xlab = \"Year\", ylab = \"Recruitment deviations\",",
+    "        xlim = c(min(Year), max(Year) + proyears), ylim = c(0, 1.1 * max(c(Perr, Perr_future))))",
+    "matlines(max(Year) + 1:proyears, t(Perr_future[1:min(5, nrow(OM@cpars$Perr_y)), ]), type = \"l\")",
+    "abline(h = 0, col = \"grey\")",
+    "```\n",
+    "",
+    "```{r, fig.cap = \"Annual mean and median of future recruitment deviations.\"}",
+    "matplot(Year, t(Perr), type = \"n\", xlab = \"Year\", ylab = \"Recruitment deviations\",",
+    "        xlim = c(min(Year), max(Year) + proyears), ylim = c(0, 1.1 * max(c(Perr, Perr_future))))",
+    "abline(h = c(0, 1), col = \"grey\")",
+    "matlines(Year, t(Perr), type = \"l\", col = \"black\")",
+    "lines(max(Year) + 1:proyears, apply(Perr_future, 2, mean), col = \"red\")",
+    "lines(max(Year) + 1:proyears, apply(Perr_future, 2, median), lty = 2)",
+    "legend(\"topleft\", c(\"Mean\", \"Median\"), col = c(\"red\", \"black\"), lty = c(1, 2))",
+    "```\n",
+    "```{r, fig.cap = \"Histogram of recruitment autocorrelation.\"}",
+    "if(!is.null(OM@cpars$AC)) hist(OM@cpars$AC, main = \"\", xlab = \"Recruitment Autocorrelation\")",
     "```\n")
 }
 
@@ -555,10 +617,10 @@ rmd_SRA_Find <- function(fig.cap = "Apical F from SRA model. These values may be
 
 rmd_SRA_sel <- function(fig.cap = "Operating model selectivity among simulations.") {
   c(paste0("```{r, fig.cap = \"", fig.cap, "\"}"),
-    "if(nfleet == 1) {",
+    "if(nsel_block == 1) {",
     "  vul <- do.call(cbind, lapply(report_list, getElement, \"vul_len\"))",
     "  matplot(matrix(length_bin, ncol = nsim, nrow = length(length_bin)), vul, type = \"l\", col = \"black\",",
-    "          xlab = \"Length\", ylab = \"Selectivity\", ylim = c(0, 1.1))",
+    "          xlab = \"Length\", ylab = \"Selectivity (last historical year)\", ylim = c(0, 1.1))",
     "} else {",
     "  if(nsim == 1) V_plot <- matrix(OM@cpars$V[, , nyears], 1, byrow = TRUE) else V_plot <- OM@cpars$V[, , nyears]",
     "  matplot(matrix(age, ncol = nsim, nrow = max_age), t(V_plot), type = \"l\", col = \"black\",",
@@ -572,22 +634,41 @@ rmd_SRA_fleet_output <- function(ff, f_name) {
   if(ff == 1) header <- "## SRA output {.tabset}\n" else header <- NULL
   ans <- c(paste("### ", f_name[ff], "\n"),
            paste0("```{r, fig.cap = \"Selectivity of ", f_name[ff], ".\"}"),
-           paste0("vul_ff <- do.call(cbind, lapply(report_list, function(x) x$vul_len[, ", ff, "]))"),
-           paste0("matplot(length_bin, vul_ff, type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Length\", ylim = c(0, 1), ylab = \"Selectivity of ", f_name[ff], "\")"),
-           "abline(h = 0, col = \"grey\")",
-           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
+           paste0("bl <- unique(data$sel_block[, ", ff, "])"),
+           "vul_bb <- list()",
+           "bl_col <- gplots::rich.colors(length(bl))",
+           "Year_legend <- character(length(bl))",
+           "for(bb in 1:length(bl)) {",
+           "  vul_bb[[bb]] <- do.call(cbind, lapply(report_list, function(x) x$vul_len[, bl[bb]]))",
+           paste0("  Year_legend[bb] <- Year[data$sel_block[, ", ff, "] == bl[bb]] %>% range() %>% paste(collapse = \"-\")"),
+           "}",
+           "test <- vapply(vul_bb, function(x) all(!is.na(x)), logical(1))",
+           "if(all(test)) {",
+           paste0("  matplot(length_bin, length_bin, type = \"n\", xlab = \"Length\", ylim = c(0, 1), ylab = \"Selectivity of Fleet ", ff, "\")"),
+           "  abline(h = 0, col = \"grey\")",
+           "  for(bb in 1:length(bl)) {",
+           "    matlines(length_bin, vul_bb[[bb]], type = \"l\", col = bl_col[bb], lty = scenario$lty, lwd = scenario$lwd)",
+           "  }",
+           "  if(length(bl) > 1) legend(\"topright\", Year_legend, col = bl_col, lwd = 1)",
+           #"if(!is.null(scenario$names)) legend("topleft", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
+           "}",
            "```\n",
            "",
-           paste0("```{r, fig.cap = \"Corresponding age-based selectivity of ", f_name[ff], " in last historical year.\"}"),
-           paste0("vul_ff_age <- do.call(cbind, lapply(report_list, function(x) x$vul[nyears, , ", ff, "]))"),
-           paste0("matplot(age, vul_ff_age, type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Age\", ylim = c(0, 1), ylab = \"Selectivity of ", f_name[ff], "\")"),
+           paste0("```{r, fig.cap = \"Corresponding age-based selectivity of ", f_name[ff], ".\"}"),
+           paste0("matplot(age, age, type = \"n\", xlab = \"Age\", ylim = c(0, 1), ylab = \"Selectivity of Fleet ", ff, "\")"),
            "abline(h = 0, col = \"grey\")",
-           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
+           "",
+           "for(bb in 1:length(bl)) {",
+           paste0("  vul_bb_age <- do.call(rbind, lapply(report_list, function(x) x$vul[data$sel_block[, ", ff, "] == bl[bb], , ", ff, "])) %>% t()"),
+           "  matlines(age, vul_bb_age, type = \"l\", col = bl_col[bb], lty = scenario$lty, lwd = scenario$lwd)",
+           "}",
+           "if(length(bl) > 1) legend(\"topleft\", Year_legend, col = bl_col, lwd = 1)",
+           #"if(!is.null(scenario$names)) legend("topleft", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
            "",
            paste0("```{r, fig.cap = \"Fishing Mortality of ", f_name[ff], ".\"}"),
            paste0("FM <- do.call(cbind, lapply(report_list, function(x) x$F[, ", ff, "]))"),
-           paste0("matplot(Year, FM, type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Fishing Mortality of ", f_name[ff], "\")"),
+           paste0("matplot(Year, FM, type = \"l\", col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd, ylim = c(0, 1.1 * max(FM)), xlab = \"Year\", ylab = \"Fishing Mortality of ", f_name[ff], "\")"),
            "abline(h = 0, col = \"grey\")",
            "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col2, lty = scenario$lty, lwd = scenario$lwd)",
            "```\n",
@@ -601,7 +682,7 @@ rmd_SRA_fleet_output <- function(ff, f_name) {
            paste0("  matlines(Year, Cpred, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)"),
            "} else {",
            paste0("  Cpred <- do.call(cbind, lapply(report_list, function(x) x$Cpred[, ", ff, "]/mean(x$Cpred[, ", ff, "])))"),
-           paste0("  matlines(Year, Cpred, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Predicted relative catch of ", f_name[ff], "\")"),
+           paste0("  matplot(Year, Cpred, col = scenario$col, type = \"l\", lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Predicted relative catch of ", f_name[ff], "\")"),
            "}",
            "abline(h = 0, col = \"grey\")",
            "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
@@ -623,10 +704,12 @@ rmd_SRA_fleet_output <- function(ff, f_name) {
            paste0("if(any(data$CAL[, , ", ff, "] > 0, na.rm = TRUE)) {"),
            paste0("  MLobs <- (data$CAL[, , ", ff, "] %*% length_bin)/rowSums(data$CAL[, , ", ff, "], na.rm = TRUE)"),
            paste0("} else if(any(data$ML[, ", ff, "] > 0, na.rm = TRUE)) MLobs <- data$ML[, ", ff, "] else MLobs <- NA"),
-           "ylim <- c(0.9, 1.1) * range(c(MLpred, MLobs), na.rm = TRUE)",
-           "matplot(Year, MLpred, type = \"l\", col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Mean length\", ylim = ylim)",
-           "if(!all(is.na(MLobs))) lines(Year, MLobs, col = \"black\", typ = \"o\")",
-           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
+           "if(!all(is.na(MLpred))) {",
+           "  ylim <- c(0.9, 1.1) * range(c(MLpred, MLobs), na.rm = TRUE)",
+           "  matplot(Year, MLpred, type = \"l\", col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, xlab = \"Year\", ylab = \"Mean length\", ylim = ylim)",
+           "  if(!all(is.na(MLobs))) lines(Year, MLobs, col = \"black\", typ = \"o\")",
+           "  if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
+           "}",
            "```\n",
            "",
            paste0("```{r, fig.cap = \"Observed (black) and predicted (red) age composition from ", f_name[ff], ".\"}"),
@@ -678,15 +761,16 @@ rmd_SRA_survey_output <- function(sur, s_name) {
            "```\n",
            "",
            paste0("```{r, fig.cap = \"Observed (black) and predicted (red) index values for ", s_name[sur], ". Error bars indicate 95% confidence intervals for observed values.\"}"),
-           paste0("Ipred <- do.call(cbind, lapply(report_list, function(x) x$Ipred[, ", sur, "]))"),
-           paste0("II <- data$Index[, ", sur, "]"),
-           "ind <- seq(min(which(!is.na(II))), max(which(!is.na(II))), 1)",
-           paste0("err <- exp(log(II) + outer(data$I_sd[, ", sur, "], c(-1.96, 1.96)))"),
-           paste0("matplot(Year[ind], Ipred[ind, ], type = \"l\", col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, ylim = c(0, 1.1 * max(c(Ipred[ind, ], II[ind], err[ind, ]), na.rm = TRUE)), xlab = \"Year\", ylab = \"", s_name[sur], "\")"),
-           "points(Year[ind], II[ind], lwd = 3, pch = 16)",
-           "arrows(Year[ind], y0 = err[ind, 1], y1 = err[ind, 2], length = 0, lwd = 1.5)",
-           "abline(h = 0, col = \"grey\")",
-           "if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
+           "if(!is.null(data$I_sd)) {",
+           paste0("  II <- data$Index[, ", sur, "]"),
+           "  ind <- seq(min(which(!is.na(II))), max(which(!is.na(II))), 1)",
+           paste0("  err <- exp(log(II) + outer(data$I_sd[, ", sur, "], c(-1.96, 1.96)))"),
+           paste0("  matplot(Year[ind], Ipred[ind, ], type = \"l\", col = scenario$col, lty = scenario$lty, lwd = scenario$lwd, ylim = c(0, 1.1 * max(c(Ipred[ind, ], II[ind], err[ind, ]), na.rm = TRUE)), xlab = \"Year\", ylab = \"", s_name[sur], "\")"),
+           "  points(Year[ind], II[ind], lwd = 3, pch = 16)",
+           "  arrows(Year[ind], y0 = err[ind, 1], y1 = err[ind, 2], length = 0, lwd = 1.5)",
+           "  abline(h = 0, col = \"grey\")",
+           "  if(!is.null(scenario$names)) legend(\"topleft\", scenario$names, col = scenario$col, lty = scenario$lty, lwd = scenario$lwd)",
+           "}",
            "```\n",
            "",
            paste0("```{r, fig.cap = \"Observed (black) and predicted (red) age composition from ", s_name[sur], ".\"}"),
@@ -747,6 +831,30 @@ rmd_log_rec_dev <- function() {
     "```\n")
 }
 
+rmd_SRA_SR <- function() {
+  c("```{r, fig.cap = \"Stock-recruit relationship and estimated recruitment.\"}",
+    "if(OM@SRrel == 1) {",
+    "  expectedR <- report$Arec * report$E[1:nyears] / (1 + report$Brec * report$E[1:nyears])",
+    "} else {",
+    "  expectedR <- report$Arec * report$E[1:nyears] * exp(-report$Brec * report$E[1:nyears])",
+    "}",
+    "plot_SR(report$E[1:nyears], expectedR, report$R0, report$E0_SR, report$R[2:(nyears+1)])",
+    "```\n")
+}
+
+rmd_SRA_retrospective <- function(render_args) {
+  if(render_args$output_format == "html_document") {
+    x <- "summary(retro) %>% as.data.frame()"
+  } else {
+    x <- "summary(retro) %>% as.data.frame() %>% knitr::kable(format = \"markdown\")"
+  }
+
+  c("### Retrospective\n",
+    "```{r}",
+    x,
+    "plot(retro)",
+    "```\n")
+}
 
 plot_composition_SRA <- function(Year, SRA, dat = NULL, CAL_bins = NULL, ages = NULL, annual_ylab = "Frequency",
                                  annual_yscale = c("proportions", "raw"), N = if(is.null(dat)) NULL else round(rowSums(dat)), dat_linewidth = 2, dat_color = "black") {
@@ -778,44 +886,28 @@ plot_composition_SRA <- function(Year, SRA, dat = NULL, CAL_bins = NULL, ages = 
   }
   ylim <- c(0, 1.1 * max(SRA_plot, dat_plot, na.rm = TRUE))
   yaxp <- c(0, max(pretty(ylim, n = 4)), 4)
-  if(max(SRA_plot, dat_plot, na.rm = TRUE) == 1) yaxp <- c(0, 1, 4)
+  if(max(c(SRA_plot, dat_plot), na.rm = TRUE) == 1) yaxp <- c(0, 1, 4)
 
   las <- 1
 
   for(i in 1:length(Year)) {
-
-    if(i < length(Year)) {
-      if(i %% 16 %in% c(1:4)) { # First column
-        yaxt <- 's'
-
-        # First three rows
-        if(i %% 4 %in% c(1:3)) {
-          xaxt <- 'n'
-        } else {
-          xaxt <- 's'
-        }
-      } else { # All other columns
-        if(i %% 4 %in% c(1:3)) { # First three rows
-          xaxt <- yaxt <- 'n'
-        } else {
-          xaxt <- 's'
-        }
-      }
-    } else {
-      xaxt <- 's'
-      if(i %% 16 %in% c(1:4)) yaxt <- 's' else yaxt <- 'n'
-    }
+    yaxt <- ifelse(i %% 16 %in% c(1:4), "s", "n") # TRUE = first column
+    xaxt <- ifelse(i < length(Year) & i %% 4 %in% c(1:3), "n", "s") # TRUE = first three rows
 
     if(dim(SRA_plot)[1] == 1) {
-      plot(data_val, SRA_plot[, i, ], type = "l", col = dat_color, ylim = ylim, yaxp = yaxp, xaxt = xaxt, yaxt = yaxt, las = las)
+      plot(data_val, SRA_plot[, i, ], type = "n", ylim = ylim, yaxp = yaxp, xaxt = xaxt, yaxt = yaxt, las = las)
+      abline(h = 0, col = 'grey')
+      lines(data_val, SRA_plot[, i, ], col = dat_color)
     } else {
-      matplot(data_val, t(SRA_plot[, i, ]), type = "l", col = dat_color, ylim = ylim, yaxp = yaxp, xaxt = xaxt, yaxt = yaxt, las = las)
+      matplot(data_val, t(SRA_plot[, i, ]), type = "n", ylim = ylim, yaxp = yaxp, xaxt = xaxt, yaxt = yaxt, las = las)
+      abline(h = 0, col = 'grey')
+      matlines(data_val, t(SRA_plot[, i, ]), col = dat_color)
     }
     abline(h = 0, col = 'grey')
     if(!is.null(dat)) lines(data_val, dat_plot[i, ], lwd = 1.5)
     legend("topright", legend = c(Year[i], ifelse(is.null(N) || is.na(N[i]), "", paste0("N = ", N[i]))), bty = "n", xjust = 1)
 
-    if(i %% 16 == 0 || i == length(Year)) {
+    if(i %% 16 == 1) {
       mtext(data_lab, side = 1, line = 3, outer = TRUE)
       mtext(annual_ylab, side = 2, line = 3.5, outer = TRUE)
     }
@@ -902,6 +994,12 @@ compare_SRA <- function(..., compare = TRUE, filename = "compare_SRA", dir = tem
   nsurvey <- vapply(dots, function(x) x@data$nsurvey, numeric(1)) %>% unique()
   length_bin <- dots[[1]]@data$length_bin
 
+  # Backwards compatibility
+  if(is.null(data$nsel_block)) {
+    data$nsel_block <- data$nfleet
+    data$sel_block <- matrix(1:data$nfleet, nyears, data$nfleet, byrow = TRUE)
+  }
+
   if(is.null(f_name)) f_name <- paste("Fleet", 1:nfleet)
   if(is.null(s_name)) s_name <- paste("Survey", 1:nsurvey)
 
@@ -920,7 +1018,8 @@ compare_SRA <- function(..., compare = TRUE, filename = "compare_SRA", dir = tem
               "",
               "```{r setup, include = FALSE, echo = FALSE}",
               "  knitr::opts_chunk$set(collapse = TRUE, echo = FALSE, message = FALSE,",
-              "  fig.width = 6, fig.height = 4.5, out.width = \"650px\", comment = \"#>\")",
+              paste0("  fig.width = 6, fig.height = 4.5, ", ifelse(render_args$output_format == "html_document", "", "dpi = 400, "),
+                     "out.width = \"650px\", comment = \"#>\")"),
               "```\n")
 
 
@@ -962,7 +1061,7 @@ compare_SRA <- function(..., compare = TRUE, filename = "compare_SRA", dir = tem
                            "`r ref_pt`\n\n")
     } else {
       rmd_ref_pt <- paste0("## Reference points \n",
-                           "`r ref_pt %>% kable(format = \"markdown\")`\n\n")
+                           "`r ref_pt %>% knitr::kable(format = \"markdown\")`\n\n")
     }
 
   } else {
@@ -1001,11 +1100,11 @@ compare_SRA <- function(..., compare = TRUE, filename = "compare_SRA", dir = tem
 
     nll_table_fn <- function(i, ii) {
       c(paste0("#### ", scenario$names[i]),
-        paste0("`r nll[[", i, "]][[", ii, "]] %>% kable(format = \"markdown\")`\n\n"))
+        paste0("`r nll[[", i, "]][[", ii, "]] %>% knitr::kable(format = \"markdown\")`\n\n"))
     }
     nll_table <- c("## Likelihood components\n",
                    "### Summary\n",
-                   "`r summary_nll %>% kable(format = \"markdown\")`\n\n",
+                   "`r summary_nll %>% knitr::kable(format = \"markdown\")`\n\n",
                    "### Fleet likelihoods\n",
                    do.call(c, lapply(1:length(dots), nll_table_fn, ii = 2)),
                    "### Fleet weights\n",

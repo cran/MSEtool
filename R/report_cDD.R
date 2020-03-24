@@ -44,13 +44,14 @@ summary_cDD <- function(Assessment, state_space = FALSE) {
   model_name <- "Continuous Delay-Differential"
   if(state_space) model_name <- paste(model_name, "(State-Space)")
   output <- list(model = model_name, current_status = current_status, input_parameters = input_parameters,
-                 derived_quantities = derived, model_estimates = model_estimates)
+                 derived_quantities = derived, model_estimates = model_estimates,
+                 log_likelihood = matrix(NLL, ncol = 1, dimnames = list(names(NLL), "Neg.LL")))
   return(output)
 }
 
 
 
-rmd_cDD <- function(Assessment, state_space = FALSE) {
+rmd_cDD <- function(Assessment, state_space = FALSE, ...) {
   if(state_space) {
     ss <- rmd_summary("Continuous Delay-Differential (State-Space)")
   } else ss <- rmd_summary("Continuous Delay-Differential")
@@ -285,7 +286,7 @@ retrospective_cDD <- function(Assessment, nyr, state_space = FALSE) {
 
 summary_cDD_SS <- function(Assessment) summary_cDD(Assessment, TRUE)
 
-rmd_cDD_SS <- function(Assessment) rmd_cDD(Assessment, TRUE)
+rmd_cDD_SS <- function(Assessment, ...) rmd_cDD(Assessment, TRUE, ...)
 
 profile_likelihood_cDD_SS <- profile_likelihood_cDD
 

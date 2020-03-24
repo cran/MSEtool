@@ -8,31 +8,43 @@
 <meta name="generator" content="pandoc" />
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2020-01-09" />
+<meta name="date" content="2020-03-23" />
 
 <title>Description of the surplus production model</title>
 
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
 
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
-code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
 pre.sourceCode { margin: 0; }
 @media screen {
 div.sourceCode { overflow: auto; }
 }
 @media print {
-code.sourceCode { white-space: pre-wrap; }
-code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
   { counter-reset: source-line 0; }
@@ -52,7 +64,7 @@ pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-le
 div.sourceCode
   {   }
 @media screen {
-code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -119,9 +131,6 @@ padding-right: 2em;
 font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 font-size: 14px;
 line-height: 1.35;
-}
-#header {
-text-align: center;
 }
 #TOC {
 clear: both;
@@ -290,7 +299,8 @@ code > span.st { color: #d14; }
 code > span.co { color: #888888; font-style: italic; } 
 code > span.ot { color: #007020; } 
 code > span.al { color: #ff0000; font-weight: bold; } 
-code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61717; background-color: #e3d2d2; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
 </style>
 
 
@@ -305,19 +315,19 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 
 <h1 class="title toc-ignore">Description of the surplus production model</h1>
 <h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2020-01-09</h4>
+<h4 class="date">2020-03-23</h4>
 
 
 <div id="TOC">
 <ul>
 <li><a href="#introduction"><span class="toc-section-number">1</span> Introduction</a></li>
-<li><a href="#surplus-production-sp-model"><span class="toc-section-number">2</span> Surplus-production (SP) model</a><ul>
-<li><a href="#dynamics-equations"><span class="toc-section-number">2.1</span> Dynamics equations</a></li>
-<li><a href="#derived-parameters"><span class="toc-section-number">2.2</span> Derived parameters</a></li>
-<li><a href="#state-space-version-sp_ss"><span class="toc-section-number">2.3</span> State-space version (SP_SS)</a></li>
-<li><a href="#prior-for-r"><span class="toc-section-number">2.4</span> Prior for r</a></li>
-</ul></li>
-<li><a href="#references"><span class="toc-section-number">3</span> References</a></li>
+<li><a href="#dynamics-equations"><span class="toc-section-number">2</span> Dynamics equations</a></li>
+<li><a href="#derived-parameters"><span class="toc-section-number">3</span> Derived parameters</a></li>
+<li><a href="#schaefer-model"><span class="toc-section-number">4</span> Schaefer model</a></li>
+<li><a href="#fox-model"><span class="toc-section-number">5</span> Fox model</a></li>
+<li><a href="#state-space-version-sp_ss"><span class="toc-section-number">6</span> State-space version (SP_SS)</a></li>
+<li><a href="#prior-for-r"><span class="toc-section-number">7</span> Prior for r</a></li>
+<li><a href="#references"><span class="toc-section-number">8</span> References</a></li>
 </ul>
 </div>
 
@@ -352,34 +362,41 @@ pre { /* Code block */
 }
 </style>
 <p><br></p>
-<div id="introduction" class="section level1">
-<h1><span class="header-section-number">1</span> Introduction</h1>
+<div id="introduction" class="section level1" number="1">
+<h1 number="1"><span class="header-section-number">1</span> Introduction</h1>
 <p>In MSEtool, assessment models are of class <code>Assess</code>. This appendix provides a brief description and references for the <code>Assess</code> objects. Further details regarding parameterization, e.g., fixing parameters, and tuning, e.g., adjusting start parameters, are provided in the function documentation.</p>
 <p>For LaTeX equation rendering, it is recommended that this vignette be viewed in a HTML browser. This can be done with the <code>browseVignettes</code> function in R:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">browseVignettes</span>(<span class="st">&quot;MSEtool&quot;</span>)</span></code></pre></div>
 </div>
-<div id="surplus-production-sp-model" class="section level1">
-<h1><span class="header-section-number">2</span> Surplus-production (SP) model</h1>
-<div id="dynamics-equations" class="section level2">
-<h2><span class="header-section-number">2.1</span> Dynamics equations</h2>
+<div id="dynamics-equations" class="section level1" number="2">
+<h1 number="2"><span class="header-section-number">2</span> Dynamics equations</h1>
 <p>The surplus production model uses the Fletcher (1978) formulation. The biomass <span class="math inline">\(B_t\)</span> in year <span class="math inline">\(t\)</span> is <span class="math display">\[B_t = B_{t-1} + P_{t-1} - C_{t-1},\]</span> where <span class="math inline">\(C_t\)</span> is the observed catch and <span class="math inline">\(P_t\)</span> is the surplus production given by: <span class="math display">\[P_t = \gamma \times MSY \times \left(\dfrac{B_t}{K}-\left[\dfrac{B_t}{K}\right]^n\right), \]</span> where <span class="math inline">\(K\)</span> is the carrying capacity, <span class="math inline">\(MSY\)</span> is the estimated maximum sustainable yield, and <span class="math inline">\(n\)</span> is the parameter that controls shape of the production curve, and <span class="math inline">\(\gamma\)</span> is <span class="math display">\[\gamma = \dfrac{1}{n-1}n^{n/(n-1)}.\]</span></p>
 <p>By conditioning the model on observed catch, the predicted index <span class="math inline">\(\hat{I}_t\)</span> is <span class="math display">\[\hat{I}_t = \hat{q} \hat{B}_t \]</span> and the harvest rate is <span class="math display">\[\hat{F}_t = \dfrac{C_t}{\hat{B}_t}.\]</span> The dynamics equations above use an annual time step. Optionally, smaller time steps are used in the model to approximate continuous production and fishing. Given the biomass in the start of the year and assuming a constant fishing mortality over the time steps within a year, the fishing mortality that produces the observed annual catch is solved iteratively.</p>
 <p>The likelihood of the observed index <span class="math inline">\(I_t\)</span>, assuming a lognormal distribution, is <span class="math display">\[\log(I_t) \sim N(\log[\hat{I}_t], \sigma^2).\]</span></p>
 </div>
-<div id="derived-parameters" class="section level2">
-<h2><span class="header-section-number">2.2</span> Derived parameters</h2>
+<div id="derived-parameters" class="section level1" number="3">
+<h1 number="3"><span class="header-section-number">3</span> Derived parameters</h1>
 <p>From estimates of leading parameters <span class="math inline">\(F_{MSY}\)</span> and <span class="math inline">\(MSY\)</span>, the biomass <span class="math inline">\(B_{MSY}\)</span> at <span class="math inline">\(MSY\)</span> is <span class="math display">\[B_{MSY} = \dfrac{MSY}{F_{MSY}},\]</span> the carrying capacity <span class="math inline">\(K\)</span> is <span class="math display">\[K = n^{1/(n-1)} \times B_{MSY} ,\]</span> and the intrinsic rate of population increase <span class="math inline">\(r\)</span> is <span class="math display">\[ r = n \times F_{MSY}.\]</span> The production parameter <span class="math inline">\(n\)</span> is typically fixed and the model has a symmetric productive curve (<span class="math inline">\(B_{MSY}/K = 0.5\)</span>) when <span class="math inline">\(n = 2\)</span>.</p>
 </div>
-<div id="state-space-version-sp_ss" class="section level2">
-<h2><span class="header-section-number">2.3</span> State-space version (SP_SS)</h2>
+<div id="schaefer-model" class="section level1" number="4">
+<h1 number="4"><span class="header-section-number">4</span> Schaefer model</h1>
+<p>The production parameter <span class="math inline">\(n\)</span> is typically fixed and the Schaefer model with a symmetric productive curve (<span class="math inline">\(B_{MSY}/K = 0.5\)</span>) is produced when <span class="math inline">\(n = 2\)</span>.</p>
+</div>
+<div id="fox-model" class="section level1" number="5">
+<h1 number="5"><span class="header-section-number">5</span> Fox model</h1>
+<p>The Fox model is the limiting case of the Fletcher parameterization as <span class="math inline">\(n \rightarrow 1\)</span>, where</p>
+<p><span class="math display">\[K = e \times B_{MSY}\]</span> <span class="math display">\[r = F_{MSY}\]</span> <span class="math display">\[P_t = -e \times MSY \times \dfrac{B_t}{K} \times \log\left(\dfrac{B_t}{K}\right) \]</span></p>
+</div>
+<div id="state-space-version-sp_ss" class="section level1" number="6">
+<h1 number="6"><span class="header-section-number">6</span> State-space version (SP_SS)</h1>
 <p>In the state-state version, annual biomass deviates are estimated as random effects. Similar to Meyer and Millar (1999), the biomass <span class="math inline">\(B_t\)</span> in year <span class="math inline">\(t\)</span> is <span class="math display">\[B_t = (B_{t-1} + P_{t-1} - C_{t-1})\exp(\delta_t - 0.5 \tau^2),\]</span> where <span class="math inline">\(\delta_t \sim N(0, \tau^2)\)</span> are biomass deviations in lognormal space and <span class="math inline">\(\tau\)</span> is the standard deviation of the biomass deviations.</p>
 <p>The log-likelihood of the estimated deviations <span class="math inline">\(\hat{\delta}_t\)</span> is <span class="math display">\[\hat{\delta}_t \sim N(0, \tau^2).\]</span></p>
 </div>
-<div id="prior-for-r" class="section level2">
-<h2><span class="header-section-number">2.4</span> Prior for r</h2>
+<div id="prior-for-r" class="section level1" number="7">
+<h1 number="7"><span class="header-section-number">7</span> Prior for r</h1>
 <p>To generate the prior for the intrinsic rate of increase, natural mortality <span class="math inline">\(M_a\)</span> and steepness <span class="math inline">\(h\)</span> are sampled from a distribution. Natural mortality is modelled to be age-invariant and is sampled from a lognormal distribution. Assuming either a Beverton-Holt or Ricker stock-recruit relationship, steepness is sampled from a transformed beta or transformed lognormal distribution, respectively.</p>
 <p>For each pair of sampled M and h values, the corresponding value of <span class="math inline">\(r\)</span> is obtained by solving a modified Euler-Lotka equation: <span class="math display">\[\Sigma_{a=1}^A l_a m_a \exp(-r \times a) = 1.\]</span></p>
-<p>Equation 12 is modified to include the <span class="math inline">\(\alpha\)</span> term from the stock-recruit relationship (Stanley et al. 2009). In this way, the recruits-per-spawner at low stock sizes, i.e., as spawning biomass approaches zero, is considered for calculating <span class="math inline">\(r\)</span>.</p>
+<p>Equation 15 is modified to include the <span class="math inline">\(\alpha\)</span> term from the stock-recruit relationship (Stanley et al. 2009). In this way, the recruits-per-spawner at low stock sizes, i.e., as spawning biomass approaches zero, is considered for calculating <span class="math inline">\(r\)</span>.</p>
 <p>The numbers-per-recruit at age <span class="math inline">\(a\)</span> is <span class="math display">\[
 l_a =
 \begin{cases}
@@ -393,9 +410,8 @@ l_a =
 <p>The recruits per spawner at the origin of the stock-recruit relationship <span class="math inline">\(\alpha\)</span> is <span class="math display">\[\alpha = \dfrac{4h}{(1-h)\phi_0}, \]</span> or <span class="math display">\[\alpha = \dfrac{(5h)^{1.25}}{\phi_0},\]</span> for a Beverton-Holt and Ricker stock-recruit relationship, respectively, where unfished recruits-per-spawner <span class="math inline">\(\phi_0\)</span> is <span class="math display">\[\phi_0 = \Sigma_{a=1}^A l_a w_a m_a.\]</span></p>
 <p>A normal distribution is assumed for the prior with the mean and standard deviation calculated from the values of <span class="math inline">\(r\)</span> calculated using the above procedure.</p>
 </div>
-</div>
-<div id="references" class="section level1">
-<h1><span class="header-section-number">3</span> References</h1>
+<div id="references" class="section level1" number="8">
+<h1 number="8"><span class="header-section-number">8</span> References</h1>
 <p>Fletcher, R.I. 1978. On the restructuring of the Pella-Tomlinson system. Fishery Bulletin 76:515-521.</p>
 <p>Meyer, R., and Millar, R.B. 1999. BUGS in Bayesian stock assessments. Canadian Journal of Fisheries and Aquatic Science 56:1078-1086.</p>
 <p>Stanley, R.D., M. McAllister, P. Starr and N. Olsen. 2009. Stock assessment for bocaccio (Sebastes paucispinis) in British Columbia waters. DFO Can. Sci. Advis. Sec. Res. Doc. 2009/055. xiv + 200 p. </p>

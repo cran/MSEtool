@@ -8,31 +8,43 @@
 <meta name="generator" content="pandoc" />
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2020-01-09" />
+<meta name="date" content="2020-03-23" />
 
 <title>Description of the SCA model</title>
 
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
 
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
-code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
 pre.sourceCode { margin: 0; }
 @media screen {
 div.sourceCode { overflow: auto; }
 }
 @media print {
-code.sourceCode { white-space: pre-wrap; }
-code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
   { counter-reset: source-line 0; }
@@ -52,7 +64,7 @@ pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-le
 div.sourceCode
   {   }
 @media screen {
-code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -119,9 +131,6 @@ padding-right: 2em;
 font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 font-size: 14px;
 line-height: 1.35;
-}
-#header {
-text-align: center;
 }
 #TOC {
 clear: both;
@@ -290,7 +299,8 @@ code > span.st { color: #d14; }
 code > span.co { color: #888888; font-style: italic; } 
 code > span.ot { color: #007020; } 
 code > span.al { color: #ff0000; font-weight: bold; } 
-code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61717; background-color: #e3d2d2; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
 </style>
 
 
@@ -305,17 +315,20 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 
 <h1 class="title toc-ignore">Description of the SCA model</h1>
 <h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2020-01-09</h4>
+<h4 class="date">2020-03-23</h4>
 
 
 <div id="TOC">
 <ul>
 <li><a href="#introduction"><span class="toc-section-number">1</span> Introduction</a></li>
-<li><a href="#statistical-catch-at-age-model-sca-and-sca2"><span class="toc-section-number">2</span> Statistical catch-at-age model (SCA and SCA2)</a><ul>
-<li><a href="#dynamics-equations"><span class="toc-section-number">2.1</span> Dynamics equations</a><ul>
+<li><a href="#statistical-catch-at-age-model-sca-and-sca2"><span class="toc-section-number">2</span> Statistical catch-at-age model (SCA and SCA2)</a>
+<ul>
+<li><a href="#dynamics-equations"><span class="toc-section-number">2.1</span> Dynamics equations</a>
+<ul>
 <li><a href="#sca-with-popes-approximation-sca_pope"><span class="toc-section-number">2.1.1</span> SCA with Pope’s approximation (SCA_Pope)</a></li>
 </ul></li>
-<li><a href="#estimation-of-recruitment-and-reference-points"><span class="toc-section-number">2.2</span> Estimation of recruitment and reference points</a><ul>
+<li><a href="#estimation-of-recruitment-and-reference-points"><span class="toc-section-number">2.2</span> Estimation of recruitment and reference points</a>
+<ul>
 <li><a href="#stock-recruit-function-in-assessment-model-sca"><span class="toc-section-number">2.2.1</span> Stock-recruit function in assessment model (SCA)</a></li>
 <li><a href="#no-stock-recruit-function-in-assessment-model-sca2"><span class="toc-section-number">2.2.2</span> No stock-recruit function in assessment model (SCA2)</a></li>
 <li><a href="#likelihood-of-recruitment-deviations"><span class="toc-section-number">2.2.3</span> Likelihood of recruitment deviations</a></li>
@@ -356,16 +369,16 @@ pre { /* Code block */
 }
 </style>
 <p><br></p>
-<div id="introduction" class="section level1">
-<h1><span class="header-section-number">1</span> Introduction</h1>
+<div id="introduction" class="section level1" number="1">
+<h1 number="1"><span class="header-section-number">1</span> Introduction</h1>
 <p>In MSEtool, assessment models are of class <code>Assess</code>. This appendix provides a brief description and references for the <code>Assess</code> objects. Further details regarding parameterization, e.g., fixing parameters, and tuning, e.g., adjusting start parameters, are provided in the function documentation.</p>
 <p>For LaTeX equation rendering, it is recommended that this vignette be viewed in a HTML browser. This can be done with the <code>browseVignettes</code> function in R:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">browseVignettes</span>(<span class="st">&quot;MSEtool&quot;</span>)</span></code></pre></div>
 </div>
-<div id="statistical-catch-at-age-model-sca-and-sca2" class="section level1">
-<h1><span class="header-section-number">2</span> Statistical catch-at-age model (SCA and SCA2)</h1>
-<div id="dynamics-equations" class="section level2">
-<h2><span class="header-section-number">2.1</span> Dynamics equations</h2>
+<div id="statistical-catch-at-age-model-sca-and-sca2" class="section level1" number="2">
+<h1 number="2"><span class="header-section-number">2</span> Statistical catch-at-age model (SCA and SCA2)</h1>
+<div id="dynamics-equations" class="section level2" number="2.1">
+<h2 number="2.1"><span class="header-section-number">2.1</span> Dynamics equations</h2>
 <p>The statistical catch-at-age model uses a time series of total catch (in weight), index, and catch-at-age observations, as well as information on weight, maturity, natural mortality at age.</p>
 <p>The population abundance <span class="math inline">\(N_{a,t}\)</span> of age <span class="math inline">\(a\)</span> in year <span class="math inline">\(t\)</span> is <span class="math display">\[ N_{a,t} =
 \begin{cases}
@@ -390,8 +403,8 @@ pre { /* Code block */
 <p>If a lognormal distribution for the observed proportions at age is assumed, then the likelihood is <span class="math display">\[\log(p_{a,t}) \sim N(\log[\hat{p}_{a,t}], 0.01/\hat{p}_{a,t}).\]</span></p>
 <p>The likelihood of the observed catch <span class="math inline">\(Y_t\)</span>, assuming a lognormal distribution, is <span class="math display">\[\log(Y_t) \sim N(\log[\hat{Y}_t], \omega^2).\]</span></p>
 <p>The likelihood of the observed index <span class="math inline">\(I_t\)</span>, assuming a lognormal distribution, is <span class="math display">\[\log(I_t) \sim N(\log[\hat{I}_t], \sigma^2)\]</span></p>
-<div id="sca-with-popes-approximation-sca_pope" class="section level3">
-<h3><span class="header-section-number">2.1.1</span> SCA with Pope’s approximation (SCA_Pope)</h3>
+<div id="sca-with-popes-approximation-sca_pope" class="section level3" number="2.1.1">
+<h3 number="2.1.1"><span class="header-section-number">2.1.1</span> SCA with Pope’s approximation (SCA_Pope)</h3>
 <p>A variant of the SCA is the SCA_Pope function, which fixes the predicted catches to the observed catches and uses Pope’s approximation to calculate the annual harvest rate in the midpoint of the year.</p>
 <p>The abundance at age is</p>
 <p><span class="math display">\[ N_{a,t} =
@@ -405,14 +418,14 @@ pre { /* Code block */
 <p>By conditioning the model on catch in weight <span class="math inline">\(Y_t\)</span>, the estimated annual harvest rate <span class="math inline">\(\hat{u}_t\)</span> is <span class="math display">\[\hat{u}_t = Y_t / \widehat{VB^{mid}}_t .\]</span> The estimated catch at age <span class="math inline">\(\hat{C}_{a,t}\)</span> is <span class="math display">\[\hat{C}_{a,t} = \hat{v}_a \hat{u}_t \hat{N}_{a,t} \exp(-0.5 M_a).\]</span></p>
 </div>
 </div>
-<div id="estimation-of-recruitment-and-reference-points" class="section level2">
-<h2><span class="header-section-number">2.2</span> Estimation of recruitment and reference points</h2>
+<div id="estimation-of-recruitment-and-reference-points" class="section level2" number="2.2">
+<h2 number="2.2"><span class="header-section-number">2.2</span> Estimation of recruitment and reference points</h2>
 <p>There are two variants of the statistical catch-at-age model for estimation of recruitment and reference points. In function <code>SCA</code>, productivity parameters <span class="math inline">\(R_0\)</span> and <span class="math inline">\(h\)</span> are estimated in the assessment model. Annual recruitment is estimated as deviations from the resulting stock-recruitment relationship within the model. MSY reference points are derived from the estimates of <span class="math inline">\(R_0\)</span> and <span class="math inline">\(h\)</span>.</p>
 <p>In <code>SCA2</code>, no stock-recruit relationship is assumed in the assessment model, i.e., annual recruitment is estimated as deviations from the mean recruitment over the observed time series, similar to Cadigan (2016). After the assessment, a stock-recruit function can be fitted post-hoc to the recruitment and spawning stock biomass estimates from the assessment model to obtain MSY reference points.</p>
-<div id="stock-recruit-function-in-assessment-model-sca" class="section level3">
-<h3><span class="header-section-number">2.2.1</span> Stock-recruit function in assessment model (SCA)</h3>
-<div id="beverton-holt-stock-recruit-function" class="section level4">
-<h4><span class="header-section-number">2.2.1.1</span> Beverton-Holt stock-recruit function</h4>
+<div id="stock-recruit-function-in-assessment-model-sca" class="section level3" number="2.2.1">
+<h3 number="2.2.1"><span class="header-section-number">2.2.1</span> Stock-recruit function in assessment model (SCA)</h3>
+<div id="beverton-holt-stock-recruit-function" class="section level4" number="2.2.1.1">
+<h4 number="2.2.1.1"><span class="header-section-number">2.2.1.1</span> Beverton-Holt stock-recruit function</h4>
 <p>Recruitment <span class="math inline">\(R_t\)</span> in year <span class="math inline">\(t\)</span> is <span class="math display">\[ R_t = \dfrac{\alpha E_{t-1}}{1 + \beta E_{t-1}} \exp(\delta_t - 0.5 \tau^2),\]</span> where <span class="math inline">\(\delta_t \sim N(0, \tau^2)\)</span> are recruitment deviations from the stock-recruit relationship in lognormal space and <span class="math inline">\(\tau\)</span> is the standard deviation of the recruitment deviations. Parameters <span class="math inline">\(\alpha\)</span> and <span class="math inline">\(\beta\)</span> are defined as <span class="math display">\[ \begin{align}
 \alpha &amp;= \dfrac{4hR_0}{(1-h)B_0}\\
 \beta &amp;= \dfrac{5h-1}{(1-h)B_0},
@@ -425,26 +438,26 @@ l_a =
 \end{cases}.
 \]</span></p>
 </div>
-<div id="ricker-stock-recruit-function" class="section level4">
-<h4><span class="header-section-number">2.2.1.2</span> Ricker stock-recruit function</h4>
+<div id="ricker-stock-recruit-function" class="section level4" number="2.2.1.2">
+<h4 number="2.2.1.2"><span class="header-section-number">2.2.1.2</span> Ricker stock-recruit function</h4>
 <p>Recruitment <span class="math inline">\(R_t\)</span> in year <span class="math inline">\(t\)</span> is <span class="math display">\[ R_t = \alpha E_{t-1} \exp(-\beta E_{t-1}) \exp(\delta_t - 0.5 \tau^2),\]</span> where <span class="math display">\[ \begin{align}
 \alpha &amp;= \dfrac{(5h)^{1.25} R_0}{B_0}\\
 \beta &amp;= \dfrac{5}{4B_0}\log(5h).
 \end{align}\]</span></p>
 </div>
 </div>
-<div id="no-stock-recruit-function-in-assessment-model-sca2" class="section level3">
-<h3><span class="header-section-number">2.2.2</span> No stock-recruit function in assessment model (SCA2)</h3>
+<div id="no-stock-recruit-function-in-assessment-model-sca2" class="section level3" number="2.2.2">
+<h3 number="2.2.2"><span class="header-section-number">2.2.2</span> No stock-recruit function in assessment model (SCA2)</h3>
 <p>Recruitment <span class="math inline">\(R_t\)</span> in year <span class="math inline">\(t\)</span> is <span class="math display">\[R_t = \bar{R} \exp(\delta_t - 0.5 \tau^2), \]</span> where <span class="math inline">\(\delta_t \sim N(0, \tau^2)\)</span> are recruitment deviations in lognormal space from the estimated mean recruitment <span class="math inline">\(\bar{R}\)</span> and <span class="math inline">\(\tau\)</span> is the standard deviation of the recruitment deviations. Typically, <span class="math inline">\(\tau\)</span> is set to 1 so that recruitment is estimated almost as free parameters (Cadigan, 2016).</p>
 </div>
-<div id="likelihood-of-recruitment-deviations" class="section level3">
-<h3><span class="header-section-number">2.2.3</span> Likelihood of recruitment deviations</h3>
+<div id="likelihood-of-recruitment-deviations" class="section level3" number="2.2.3">
+<h3 number="2.2.3"><span class="header-section-number">2.2.3</span> Likelihood of recruitment deviations</h3>
 <p>The likelihood of the estimated log-recruitment deviations <span class="math inline">\(\hat{\delta}_t\)</span> is <span class="math display">\[\hat{\delta}_t \sim N(0, \tau^2).\]</span></p>
 </div>
 </div>
 </div>
-<div id="references" class="section level1">
-<h1><span class="header-section-number">3</span> References</h1>
+<div id="references" class="section level1" number="3">
+<h1 number="3"><span class="header-section-number">3</span> References</h1>
 <p>Cadigan, N.G. 2016. A state-space stock assessment model for northern cod, including under-reported catches and variable natural mortality rates. Canadian Journal of Fisheries and Aquatic Science 72:296-308.</p>
 </div>
 

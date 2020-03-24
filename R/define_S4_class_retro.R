@@ -5,7 +5,7 @@
 #' @description Perform a retrospective analysis, successive removals of most recent years of data to evaluate resulting
 #' parameter estimates.
 #'
-#' @param x An S4 object of class \linkS4class{Assessment}.
+#' @param x An S4 object of class \linkS4class{Assessment} of \linkS4class{SRA}.
 #' @param nyr The maximum number of years to remove for the retrospective analysis.
 #' @param figure Indicates whether plots will be drawn.
 #' @param ... More arguments.
@@ -47,6 +47,24 @@ setMethod("retrospective", signature(x = "Assessment"),
           })
 
 
+#' @rdname retrospective
+#' @aliases retrospective,SRA-method
+#' @exportMethod retrospective
+setMethod("retrospective", signature(x = "SRA"),
+          function(x, nyr = 5, figure = TRUE) {
+            if(figure) {
+              old.warning <- options()$warn
+              options(warn = -1)
+              on.exit(options(warn = old.warning))
+
+              old_par <- par(no.readonly = TRUE)
+              on.exit(par(old_par), add = TRUE)
+            }
+            res <- SRA_retro(x, nyr)
+            if(figure) plot(res)
+            return(res)
+          })
+
 #' Class-\code{retro}
 #'
 #' An S4 class that contains output from \link{retrospective}.
@@ -73,8 +91,9 @@ retro <- setClass("retro", slots = c(Model = "character", Name = "character", TS
 #' @aliases plot,Assessment,retro-method
 #' @exportMethod plot
 setMethod("plot", signature(x = "Assessment", y = "retro"),
-          function(x, y, filename = paste0("report_", x@Model), dir = tempdir(), open_file = TRUE, quiet = TRUE, ...) {
-            report(x, y, filename = filename, dir = dir, open_file = open_file, quiet = quiet, ...)
+          function(x, y, filename = paste0("report_", x@Model), dir = tempdir(), open_file = TRUE, quiet = TRUE,
+                   render_args = list(), ...) {
+            report(x, y, filename = filename, dir = dir, open_file = open_file, quiet = quiet, render_args = render_args, ...)
           })
 
 #' @name plot.retro

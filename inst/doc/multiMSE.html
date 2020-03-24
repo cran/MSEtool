@@ -8,31 +8,43 @@
 <meta name="generator" content="pandoc" />
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 
 <meta name="author" content="Tom Carruthers (t.carruthers@oceans.ubc.ca)" />
 
-<meta name="date" content="2020-01-09" />
+<meta name="date" content="2020-03-23" />
 
 <title>User guide for multiMSE</title>
 
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
 
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
-code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
 pre.sourceCode { margin: 0; }
 @media screen {
 div.sourceCode { overflow: auto; }
 }
 @media print {
-code.sourceCode { white-space: pre-wrap; }
-code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
   { counter-reset: source-line 0; }
@@ -52,7 +64,7 @@ pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-le
 div.sourceCode
   {   }
 @media screen {
-code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -119,9 +131,6 @@ padding-right: 2em;
 font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 font-size: 14px;
 line-height: 1.35;
-}
-#header {
-text-align: center;
 }
 #TOC {
 clear: both;
@@ -290,7 +299,8 @@ code > span.st { color: #d14; }
 code > span.co { color: #888888; font-style: italic; } 
 code > span.ot { color: #007020; } 
 code > span.al { color: #ff0000; font-weight: bold; } 
-code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61717; background-color: #e3d2d2; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
 </style>
 
 
@@ -306,13 +316,14 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 <h1 class="title toc-ignore">User guide for multiMSE</h1>
 <h3 class="subtitle">Multi-stock, multi-fleet and MICE dynamics using MSEtool</h3>
 <h4 class="author">Tom Carruthers (<a href="mailto:t.carruthers@oceans.ubc.ca" class="email">t.carruthers@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2020-01-09</h4>
+<h4 class="date">2020-03-23</h4>
 
 
 <div id="TOC">
 <ul>
 <li><a href="#introduction"><span class="toc-section-number">1</span> Introduction</a></li>
-<li><a href="#the-multi-operating-model-object-class-mom"><span class="toc-section-number">2</span> The multi operating model object (class MOM)</a><ul>
+<li><a href="#the-multi-operating-model-object-class-mom"><span class="toc-section-number">2</span> The multi operating model object (class MOM)</a>
+<ul>
 <li><a href="#stocks-fleets-obs-and-imps"><span class="toc-section-number">2.1</span> Stocks, Fleets, Obs and Imps</a></li>
 <li><a href="#catch-fractions-by-fleet-for-each-stock"><span class="toc-section-number">2.2</span> Catch fractions by fleet for each stock</a></li>
 <li><a href="#specifying-inter-stock-relationships"><span class="toc-section-number">2.3</span> Specifying inter-stock relationships</a></li>
@@ -320,7 +331,8 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 <li><a href="#single-fleet-mom"><span class="toc-section-number">2.5</span> Single Fleet MOM</a></li>
 <li><a href="#a-unique-fleet-for-each-stock"><span class="toc-section-number">2.6</span> A unique fleet for each stock</a></li>
 </ul></li>
-<li><a href="#specifying-mps-and-various-use-cases"><span class="toc-section-number">3</span> Specifying MPs and various use cases</a><ul>
+<li><a href="#specifying-mps-and-various-use-cases"><span class="toc-section-number">3</span> Specifying MPs and various use cases</a>
+<ul>
 <li><a href="#complex-mps-for-stock-complexes"><span class="toc-section-number">3.1</span> Complex: MPs for stock complexes</a></li>
 <li><a href="#by-stock-stock-specific-mps"><span class="toc-section-number">3.2</span> By stock: Stock-specific MPs</a></li>
 <li><a href="#by-fleet-fleet-and-stock-specific-mps"><span class="toc-section-number">3.3</span> By fleet: fleet and stock specific MPs</a></li>
@@ -328,7 +340,8 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 </ul></li>
 <li><a href="#running-an-multi-mse"><span class="toc-section-number">4</span> Running an multi MSE</a></li>
 <li><a href="#understanding-the-mmse-object"><span class="toc-section-number">5</span> Understanding the MMSE object</a></li>
-<li><a href="#other-options"><span class="toc-section-number">6</span> Other options</a><ul>
+<li><a href="#other-options"><span class="toc-section-number">6</span> Other options</a>
+<ul>
 <li><a href="#sex---specific-multistock-operating-models"><span class="toc-section-number">6.1</span> Sex - specific multistock operating models</a></li>
 <li><a href="#sequential-hermaphroditism"><span class="toc-section-number">6.2</span> Sequential Hermaphroditism</a></li>
 <li><a href="#custom-tac-allocations"><span class="toc-section-number">6.3</span> Custom TAC allocations</a></li>
@@ -366,8 +379,8 @@ pre { /* Code block */
 }
 </style>
 <p><br></p>
-<div id="introduction" class="section level1">
-<h1><span class="header-section-number">1</span> Introduction</h1>
+<div id="introduction" class="section level1" number="1">
+<h1 number="1"><span class="header-section-number">1</span> Introduction</h1>
 <p>Management Strategy Evaluation can be a complex business even for single-stock and single-fleet operating models. Population dynamics, fleet dynamics, observation processes (e.g. catch over reporting), implementation error (e.g. catch-limit overages) and appropriate management procedures (MPs) all need to be specified.</p>
 <p>In most fisheries settings, single-stock, single-fleet operating models are sufficient. Unless management advice is explicitly given on a fleet-by-fleet basis (e.g. two TACs each specific to recreational and commercial fisheries) then the fleet dynamics can be pooled into an aggregate fishery. Unless (A) the dynamics of one stock interact with another stock (e.g. a predator and prey) or (B) stocks with varying dynamics are managed as a complex (e.g. one TAC for all sculpins as in Alaska) then MPs can be tested for one individual stock at a time.</p>
 <p>There are situations when managers wish to evaluate the robustness of a proposed management plan among fleets and/or stocks, acknowledging that there are interactions between these. To this end, MSEtool includes the function <code>multiMSE()</code>, a version of <code>DLMtool::runMSE()</code> that conducts MSE for multiple fleets/stocks and allows users to prescribe interactions between stocks using R models (including sex-specific population dyanmics and hermaphroditism).</p>
@@ -383,8 +396,8 @@ pre { /* Code block */
 <span id="cb1-3"><a href="#cb1-3"></a></span>
 <span id="cb1-4"><a href="#cb1-4"></a>MSEtool<span class="op">::</span><span class="kw">userguide</span>()</span></code></pre></div>
 </div>
-<div id="the-multi-operating-model-object-class-mom" class="section level1">
-<h1><span class="header-section-number">2</span> The multi operating model object (class MOM)</h1>
+<div id="the-multi-operating-model-object-class-mom" class="section level1" number="2">
+<h1 number="2"><span class="header-section-number">2</span> The multi operating model object (class MOM)</h1>
 <p>The <code>MOM</code> object is not terribly different from a standard DLMtool/MSEtool OM object.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">library</span>(DLMtool)    <span class="co"># load DLMtool library</span></span>
 <span id="cb2-2"><a href="#cb2-2"></a><span class="kw">DLMextra</span>()          <span class="co"># download lots of cool DLMtool/MSEtool objects from GitHub</span></span>
@@ -395,8 +408,8 @@ pre { /* Code block */
 <span id="cb3-2"><a href="#cb3-2"></a><span class="co">#&gt;  [1] &quot;Name&quot;       &quot;Agency&quot;     &quot;Region&quot;     &quot;Sponsor&quot;    &quot;Latitude&quot;   &quot;Longitude&quot;  &quot;nsim&quot;       &quot;proyears&quot;   &quot;interval&quot;   &quot;pstar&quot;      &quot;maxF&quot;       &quot;reps&quot;       &quot;cpars&quot;      &quot;seed&quot;       &quot;Source&quot;     &quot;Stocks&quot;     &quot;Fleets&quot;     &quot;Obs&quot;        &quot;Imps&quot;       &quot;CatchFrac&quot;  &quot;Allocation&quot; &quot;Efactor&quot;    &quot;Complexes&quot;  &quot;SexPars&quot;    &quot;Rel&quot;</span></span>
 <span id="cb3-3"><a href="#cb3-3"></a>class?MOM           <span class="co"># check out the help file on MOM objects</span></span></code></pre></div>
 <p>The big difference between objects of class <code>OM</code> in DLMtool and those of class <code>MOM</code> is that instead of including a slot for each parameter of the stock (<code>Stock</code>), fleet (<code>Fleet</code>), observation (<code>Obs</code>) and implementation (<code>Imp</code>) models for <code>OM</code> objects, <code>MOM</code> objects include these in four slots that are lists of entire <code>Stock</code>, <code>Fleet</code>, <code>Obs</code> and <code>Imp</code> objects - after all it’s multi-fleet and/or multi stock, right?!</p>
-<div id="stocks-fleets-obs-and-imps" class="section level2">
-<h2><span class="header-section-number">2.1</span> Stocks, Fleets, Obs and Imps</h2>
+<div id="stocks-fleets-obs-and-imps" class="section level2" number="2.1">
+<h2 number="2.1"><span class="header-section-number">2.1</span> Stocks, Fleets, Obs and Imps</h2>
 <p>There are four new slots in an MOM object (compared with an <code>OM</code> object): <code>MOM@Stocks</code>, <code>MOM@Fleets</code>, <code>MOM@Obs</code>, and <code>MOM@Imps</code>.</p>
 <ul>
 <li><code>MOM@Stocks</code> is a list of stock objects (nstocks long)</li>
@@ -445,8 +458,8 @@ pre { /* Code block */
 <span id="cb9-4"><a href="#cb9-4"></a><span class="co">#&gt; [1] 0.05 1.00</span></span></code></pre></div>
 <p>But how do we attribute the magnitude of historical exploitation among the various fleets?</p>
 </div>
-<div id="catch-fractions-by-fleet-for-each-stock" class="section level2">
-<h2><span class="header-section-number">2.2</span> Catch fractions by fleet for each stock</h2>
+<div id="catch-fractions-by-fleet-for-each-stock" class="section level2" number="2.2">
+<h2 number="2.2"><span class="header-section-number">2.2</span> Catch fractions by fleet for each stock</h2>
 <p>To allow <code>multiMSE()</code> to run we <em>need</em> an extra Thing 1, and <em>should</em> have an additional Thing 2 after that.</p>
 <p>Thing 1 is the current (most recent year) catch fractions among fleets for each stock. This information is required to calculate the relative catchabilities among the fleets.</p>
 <p>Catch fractions are a list (nstock long) of matrices. Suppose we want 80% of current bluefin catches to come from fleet 1, 1% from fleet 2 and 19% from fleet 3, and also 60% of herring catches to come from Fleet 2, 5% from fleet 1 and the remaining 35% of herring catches from Fleet 3, this is how you would specify that:</p>
@@ -468,8 +481,8 @@ pre { /* Code block */
 <p>The observant types among you will have noticed that we now need to specify the number of MSE simulations we are going to be doing (<code>nsim</code>). For now this is just 12 for demonstration purposes, but ultimately this would be &gt;148 for a real MSE.</p>
 <p>The reason we have done this is to allow for uncertainty in the catch fractions - the user could make catch fractions vary among fleets by simulation. For now, these are the same among simulations, which is the simplest thing, albeit a bit boring.</p>
 </div>
-<div id="specifying-inter-stock-relationships" class="section level2">
-<h2><span class="header-section-number">2.3</span> Specifying inter-stock relationships</h2>
+<div id="specifying-inter-stock-relationships" class="section level2" number="2.3">
+<h2 number="2.3"><span class="header-section-number">2.3</span> Specifying inter-stock relationships</h2>
 <p>You’ll remember that I said there was a Thing 2 that we should add to our multi operating model. Ask yourself why we are modelling bluefin and herring together?</p>
 <p>Because we want to look at an interaction between these stocks. If we didn’t, we would just model these stocks individually, and there would be only one stock in the Stocks slot and only one list of fleets in the Fleets slot (the remaining reason for modelling many stock without interactions is if they are managed by a single MP as a stock complex - we’ll come to this in a bit).</p>
 <p>If we didn’t expect to set fleet-specific advice AND we weren’t modelling bluefin and herring interactions, we should just be using the regular <code>runMSE()</code> from DLMtool and MSEtool and calculate the aggregate fleet dynamics (aggregate size vulnerability and trend in apical fishing mortality rate, for example).</p>
@@ -501,25 +514,25 @@ pre { /* Code block */
 <span id="cb11-22"><a href="#cb11-22"></a><span class="co">#&gt; </span></span>
 <span id="cb11-23"><a href="#cb11-23"></a><span class="co">#&gt; Residuals:</span></span>
 <span id="cb11-24"><a href="#cb11-24"></a><span class="co">#&gt;       Min        1Q    Median        3Q       Max </span></span>
-<span id="cb11-25"><a href="#cb11-25"></a><span class="co">#&gt; -0.042252 -0.009332  0.000859  0.010491  0.042929 </span></span>
+<span id="cb11-25"><a href="#cb11-25"></a><span class="co">#&gt; -0.035809 -0.010039 -0.000749  0.009548  0.042183 </span></span>
 <span id="cb11-26"><a href="#cb11-26"></a><span class="co">#&gt; </span></span>
 <span id="cb11-27"><a href="#cb11-27"></a><span class="co">#&gt; Coefficients:</span></span>
 <span id="cb11-28"><a href="#cb11-28"></a><span class="co">#&gt;              Estimate Std. Error t value Pr(&gt;|t|)    </span></span>
-<span id="cb11-29"><a href="#cb11-29"></a><span class="co">#&gt; (Intercept) 2.019e-01  3.485e-03   57.94   &lt;2e-16 ***</span></span>
-<span id="cb11-30"><a href="#cb11-30"></a><span class="co">#&gt; B_1         3.621e-10  1.102e-11   32.85   &lt;2e-16 ***</span></span>
+<span id="cb11-29"><a href="#cb11-29"></a><span class="co">#&gt; (Intercept) 1.993e-01  3.023e-03   65.93   &lt;2e-16 ***</span></span>
+<span id="cb11-30"><a href="#cb11-30"></a><span class="co">#&gt; B_1         3.622e-10  9.561e-12   37.88   &lt;2e-16 ***</span></span>
 <span id="cb11-31"><a href="#cb11-31"></a><span class="co">#&gt; ---</span></span>
 <span id="cb11-32"><a href="#cb11-32"></a><span class="co">#&gt; Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</span></span>
 <span id="cb11-33"><a href="#cb11-33"></a><span class="co">#&gt; </span></span>
-<span id="cb11-34"><a href="#cb11-34"></a><span class="co">#&gt; Residual standard error: 0.01755 on 98 degrees of freedom</span></span>
-<span id="cb11-35"><a href="#cb11-35"></a><span class="co">#&gt; Multiple R-squared:  0.9168, Adjusted R-squared:  0.9159 </span></span>
-<span id="cb11-36"><a href="#cb11-36"></a><span class="co">#&gt; F-statistic:  1079 on 1 and 98 DF,  p-value: &lt; 2.2e-16</span></span>
+<span id="cb11-34"><a href="#cb11-34"></a><span class="co">#&gt; Residual standard error: 0.01523 on 98 degrees of freedom</span></span>
+<span id="cb11-35"><a href="#cb11-35"></a><span class="co">#&gt; Multiple R-squared:  0.9361, Adjusted R-squared:  0.9354 </span></span>
+<span id="cb11-36"><a href="#cb11-36"></a><span class="co">#&gt; F-statistic:  1435 on 1 and 98 DF,  p-value: &lt; 2.2e-16</span></span>
 <span id="cb11-37"><a href="#cb11-37"></a></span>
 <span id="cb11-38"><a href="#cb11-38"></a>Rel &lt;-<span class="st"> </span><span class="kw">list</span>(bfB_hM)</span></code></pre></div>
 <div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a><span class="kw">plot</span>(dat<span class="op">$</span>B_<span class="dv">1</span>, dat<span class="op">$</span>M_<span class="dv">2</span>,<span class="dt">pch=</span><span class="dv">19</span>, <span class="dt">xlab =</span> <span class="st">&quot;Bluefin biomass&quot;</span>, <span class="dt">ylab =</span> <span class="st">&quot;Herring natural mortality&quot;</span>)</span>
 <span id="cb12-2"><a href="#cb12-2"></a><span class="kw">lines</span>(dat<span class="op">$</span>B_<span class="dv">1</span>, <span class="kw">predict</span>(bfB_hM,<span class="dt">newdat=</span>dat), <span class="dt">col =</span> <span class="st">&#39;red&#39;</span>, <span class="dt">lwd =</span> <span class="dv">2</span>)</span>
 <span id="cb12-3"><a href="#cb12-3"></a><span class="kw">points</span>(dat<span class="op">$</span>B_<span class="dv">1</span>, <span class="kw">simulate</span>(bfB_hM,<span class="dt">nsim=</span><span class="dv">1</span>,<span class="dt">newdat=</span>dat)[, <span class="dv">1</span>], <span class="dt">col =</span> <span class="st">&#39;green&#39;</span>)</span>
 <span id="cb12-4"><a href="#cb12-4"></a><span class="kw">legend</span>(<span class="st">&#39;topleft&#39;</span>,<span class="dt">legend =</span> <span class="kw">c</span>(<span class="st">&quot;made up data&quot;</span>, <span class="st">&quot;best fit&quot;</span>, <span class="st">&quot;simulated&quot;</span>), <span class="dt">text.col =</span> <span class="kw">c</span>(<span class="st">&#39;black&#39;</span>,<span class="st">&#39;red&#39;</span>,<span class="st">&#39;green&#39;</span>))</span></code></pre></div>
-<p><img src="data:image/png;base64,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" /><!-- --></p>
+<p><img src="data:image/png;base64,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" /><!-- --></p>
 <p>That is a lot to take in.</p>
 <p>We derived a rough level of unfished bluefin biomass, made up some data (normally we would hope to have collected these) with log-normal error in herring M. We then fitted an R model (red line) and also demonstrated that we could use the <code>simulate()</code> R function to simulate (green points) some new data based on that fit. Lastly, we placed our fitted model in a mysterious slot <code>Rel</code>. More on that in a minute.</p>
 <p>Here are the important things to know about inter-stock relationships listed in the ‘Rel’ slot:</p>
@@ -555,8 +568,8 @@ pre { /* Code block */
 <p>The idea behind the <code>Rel</code> slot of the <code>MOM</code> object is to open up the option of including ecosystem driven relationships in a terse ‘models of intermediate complexity’ (MICE) format.</p>
 <p>A note of caution before you go hog-wild with the <code>Rel</code> slot: it is probably fairly easy to set up a set of relationships and stock depletions that are impossible to solve in the intialization of the operating models in <code>multiMSE</code>. I haven’t had this issue yet, but do give some thought about the proposed relationships before you, for example, make herring M = 5 when bluefin depletion is 0.1 and then specify bluefin depletion as 0.1 and herring at 0.8 …</p>
 </div>
-<div id="constructing-the-mom-object" class="section level2">
-<h2><span class="header-section-number">2.4</span> Constructing the MOM object</h2>
+<div id="constructing-the-mom-object" class="section level2" number="2.4">
+<h2 number="2.4"><span class="header-section-number">2.4</span> Constructing the MOM object</h2>
 <p>Now we have six lists:</p>
 <ul>
 <li>Stocks</li>
@@ -581,8 +594,8 @@ pre { /* Code block */
 <span id="cb14-8"><a href="#cb14-8"></a>MOM_1S &lt;-<span class="st"> </span><span class="kw">new</span>(<span class="st">&#39;MOM&#39;</span>, Stocks, Fleets, Obs, Imps, CatchFrac, <span class="dt">nsim=</span>nsim)</span></code></pre></div>
 <p><code>Stocks</code> is just a list 1 stock object long. <code>CatchFrac</code> is a list 1 stock long of catch fractions by simulation and fleet. For any hierarchical list (Fleets, Obs, Imps) there is just one position (one stock) in which you have to place a list of Fleet, Obs and Imp objects.</p>
 </div>
-<div id="single-fleet-mom" class="section level2">
-<h2><span class="header-section-number">2.5</span> Single Fleet MOM</h2>
+<div id="single-fleet-mom" class="section level2" number="2.5">
+<h2 number="2.5"><span class="header-section-number">2.5</span> Single Fleet MOM</h2>
 <p>If you want to model multiple stocks but are happy with aggregate fleet dynamics for each stock, that is fairly straight forward:</p>
 <div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a><span class="co">#                     Stock 1    Stock 2</span></span>
 <span id="cb15-2"><a href="#cb15-2"></a>Stocks &lt;-<span class="st">    </span><span class="kw">list</span>( Bluefin_tuna, Herring )</span>
@@ -594,8 +607,8 @@ pre { /* Code block */
 <span id="cb15-8"><a href="#cb15-8"></a>MOM_1F &lt;-<span class="st"> </span><span class="kw">new</span>(<span class="st">&#39;MOM&#39;</span>, Stocks, Fleets, Obs, Imps, <span class="dt">Rel =</span> Rel, <span class="dt">nsim=</span>nsim)</span></code></pre></div>
 <p>Note we no longer have to specify <code>CatchFrac</code> as we do not have to calculate fleet-specific catchabilties using observed recent catch fractions.</p>
 </div>
-<div id="a-unique-fleet-for-each-stock" class="section level2">
-<h2><span class="header-section-number">2.6</span> A unique fleet for each stock</h2>
+<div id="a-unique-fleet-for-each-stock" class="section level2" number="2.6">
+<h2 number="2.6"><span class="header-section-number">2.6</span> A unique fleet for each stock</h2>
 <p>If you wish to model many stocks but in each case you are able to aggregate fleet dynamics (a single fleet), then you do exactly as above for the single fleet case but put a stock specific-fleet in position 1:</p>
 <div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1"></a><span class="co">#                     Stock 1    Stock 2  Stock 3</span></span>
 <span id="cb16-2"><a href="#cb16-2"></a>Stocks &lt;-<span class="st">    </span><span class="kw">list</span>( Bluefin_tuna, Herring, Mackerel )</span>
@@ -609,8 +622,8 @@ pre { /* Code block */
 <p>One way or another we have our multi operating model, now we need some MPs to test…</p>
 </div>
 </div>
-<div id="specifying-mps-and-various-use-cases" class="section level1">
-<h1><span class="header-section-number">3</span> Specifying MPs and various use cases</h1>
+<div id="specifying-mps-and-various-use-cases" class="section level1" number="3">
+<h1 number="3"><span class="header-section-number">3</span> Specifying MPs and various use cases</h1>
 <p>Let us assume you have specified a multi operating model with more than one stock and more than one fleet. There is a surprisingly large number of options for managing this simulated resource:</p>
 <ul>
 <li>‘complex’: an single MP is specified that provides a single recommendation that is applied to all stocks (i.e. a stock complex) and all fleets (e.g. a single TAC is shared across stocks and fleets)</li>
@@ -618,8 +631,8 @@ pre { /* Code block */
 <li>‘by fleet’ an MP is specified for each stock and each fleet based on stock-fleet specific data (e.g. based on fleet-specific data a TAC is provided for each fleet for a particular stock)</li>
 <li>‘multi MP’ a single MP is specified that takes all the individual data by stock and fleet and provides an individual recomemndation for each fleet and stock.</li>
 </ul>
-<div id="complex-mps-for-stock-complexes" class="section level2">
-<h2><span class="header-section-number">3.1</span> Complex: MPs for stock complexes</h2>
+<div id="complex-mps-for-stock-complexes" class="section level2" number="3.1">
+<h2 number="3.1"><span class="header-section-number">3.1</span> Complex: MPs for stock complexes</h2>
 <p>To configure management of this type you need only provide a vector of MP names:</p>
 <div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a></span>
 <span id="cb17-2"><a href="#cb17-2"></a><span class="kw">avail</span>(<span class="st">&#39;MP&#39;</span>)</span>
@@ -636,8 +649,8 @@ pre { /* Code block */
 </ul>
 <p>A future priority is the development of Linear Programming tools to provide plausible predictions of the distribution of catches among stocks and fleets given boundary constraints on fishing mortality rates and profitability.</p>
 </div>
-<div id="by-stock-stock-specific-mps" class="section level2">
-<h2><span class="header-section-number">3.2</span> By stock: Stock-specific MPs</h2>
+<div id="by-stock-stock-specific-mps" class="section level2" number="3.2">
+<h2 number="3.2"><span class="header-section-number">3.2</span> By stock: Stock-specific MPs</h2>
 <p>To specify an MP for each stock, you just list a vector by stock:</p>
 <div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1"></a></span>
 <span id="cb18-2"><a href="#cb18-2"></a>MPs_bs&lt;-<span class="kw">list</span>( <span class="kw">c</span>(<span class="st">&quot;DCAC&quot;</span>, <span class="st">&quot;DBSRA&quot;</span>, <span class="st">&quot;DD&quot;</span>),      <span class="co"># Stock 1</span></span>
@@ -658,8 +671,8 @@ pre { /* Code block */
 <li>TAC advice is divided between the fleets according to <code>CatchFrac</code>.</li>
 </ul>
 </div>
-<div id="by-fleet-fleet-and-stock-specific-mps" class="section level2">
-<h2><span class="header-section-number">3.3</span> By fleet: fleet and stock specific MPs</h2>
+<div id="by-fleet-fleet-and-stock-specific-mps" class="section level2" number="3.3">
+<h2 number="3.3"><span class="header-section-number">3.3</span> By fleet: fleet and stock specific MPs</h2>
 <p>Although not very likely, it is possible that users wish to take the individual data of a particular stock and fleet and provide management advice for that fleet and stock.</p>
 <p>Believe it or not, the following describes just two management systems that will be tested by closed-loop projection:</p>
 <div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1"></a><span class="co">#                       Fleet 1             Fleet 2</span></span>
@@ -668,8 +681,8 @@ pre { /* Code block */
 <span id="cb21-4"><a href="#cb21-4"></a>              <span class="kw">list</span>(<span class="kw">c</span>(<span class="st">&quot;CurE&quot;</span>,  <span class="st">&quot;DD&quot;</span>),    <span class="kw">c</span>(<span class="st">&quot;AvC&quot;</span>,<span class="st">&quot;SPMSY&quot;</span>)) )  <span class="co"># Stock 2</span></span></code></pre></div>
 <p>Management system 2 involved the simultaneous tesing of DBSRA (Stock 1, Fleet 1), AvC (Stock 1, Fleet2), DD (Stock 2, Fleet 1) and SPMSY (Stock 2, Fleet 2).</p>
 </div>
-<div id="multi-fleet-andor-multi-stock-management-plans" class="section level2">
-<h2><span class="header-section-number">3.4</span> Multi-fleet and/or Multi-stock management plans</h2>
+<div id="multi-fleet-andor-multi-stock-management-plans" class="section level2" number="3.4">
+<h2 number="3.4"><span class="header-section-number">3.4</span> Multi-fleet and/or Multi-stock management plans</h2>
 <p>It is conceivable that managers would like to control fishery exploitation holistically, for example accounting for the depletion levels of various stocks on the management of any individual stock. In this case, stock and fleet specific data must be submitted to an MP that then provides advice individually for all stock and fleets.</p>
 <p>To do this users need a special class of MP called <code>MMP</code> (multi management procedure) and the user then just specifies a vector of MMPs similarly to the case of ‘complex’ above:</p>
 <div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1"></a></span>
@@ -707,8 +720,8 @@ pre { /* Code block */
 <p>MMPs can be considered as a multi-stock, multi-fleet management plans.</p>
 </div>
 </div>
-<div id="running-an-multi-mse" class="section level1">
-<h1><span class="header-section-number">4</span> Running an multi MSE</h1>
+<div id="running-an-multi-mse" class="section level1" number="4">
+<h1 number="4"><span class="header-section-number">4</span> Running an multi MSE</h1>
 <p>Let’s take the fantastical bluefin-herring MOM operating model object (<code>MOM_BH</code>) that we created above and run a multi MSE for some stock-specific MPs and plot the results:</p>
 <div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1"></a></span>
 <span id="cb24-2"><a href="#cb24-2"></a>MPs_BH &lt;-<span class="st"> </span><span class="kw">list</span>( <span class="kw">c</span>(<span class="st">&quot;DCAC&quot;</span>, <span class="st">&quot;DBSRA&quot;</span>, <span class="st">&quot;AvC&quot;</span>, <span class="st">&quot;MCD&quot;</span>),  <span class="co"># Bluefin</span></span>
@@ -718,16 +731,16 @@ pre { /* Code block */
 <span id="cb24-6"><a href="#cb24-6"></a></span>
 <span id="cb24-7"><a href="#cb24-7"></a><span class="kw">plot</span>(MMSE_BH)</span></code></pre></div>
 </div>
-<div id="understanding-the-mmse-object" class="section level1">
-<h1><span class="header-section-number">5</span> Understanding the MMSE object</h1>
+<div id="understanding-the-mmse-object" class="section level1" number="5">
+<h1 number="5"><span class="header-section-number">5</span> Understanding the MMSE object</h1>
 <p>The MMSE object produced from multiMSE has a number of slots. The easiest way to understand these is to interrogate the help documentation:</p>
 <div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1"></a></span>
 <span id="cb25-2"><a href="#cb25-2"></a>class?MMSE</span></code></pre></div>
 </div>
-<div id="other-options" class="section level1">
-<h1><span class="header-section-number">6</span> Other options</h1>
-<div id="sex---specific-multistock-operating-models" class="section level2">
-<h2><span class="header-section-number">6.1</span> Sex - specific multistock operating models</h2>
+<div id="other-options" class="section level1" number="6">
+<h1 number="6"><span class="header-section-number">6</span> Other options</h1>
+<div id="sex---specific-multistock-operating-models" class="section level2" number="6.1">
+<h2 number="6.1"><span class="header-section-number">6.1</span> Sex - specific multistock operating models</h2>
 <p>Many fish population exhibit sex-specific dynamics that may have impacts on the performance of candidate management procedures, such as sexual dimorphism and single-sex spawing biomass limitations. Other sex-specific phenomenon that may be important include sequential hermaphroditism and sex-specific vulnerability to exploitation.</p>
 <p>In this example we place a female ‘stock’ in position 1, a male ‘stock’ in position 2 and use the the SexPars slot of the <code>MOM</code> object to calculate stock-recruitment according to a user-specified fraction of Spawning Stock Biomass originating from these stocks.</p>
 <div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1"></a></span>
@@ -799,8 +812,8 @@ pre { /* Code block */
 <span id="cb30-8"><a href="#cb30-8"></a><span class="co">#&gt; [4,]    0    0  0.0    1</span></span></code></pre></div>
 <p>Total SSB for male and female mackerel is now calculated from all of female SSB and 10% of male SSB.</p>
 </div>
-<div id="sequential-hermaphroditism" class="section level2">
-<h2><span class="header-section-number">6.2</span> Sequential Hermaphroditism</h2>
+<div id="sequential-hermaphroditism" class="section level2" number="6.2">
+<h2 number="6.2"><span class="header-section-number">6.2</span> Sequential Hermaphroditism</h2>
 <p>Assuming you have specified sex-specific stock-recruitment using SexPars, you have the option of adding sequential hermaphroditism with the SexPars$Herm list.</p>
 <p>To specify protogyny (Female - Male) where stock 1 is male and stock 2 is female, you include a vector <code>H_1_2</code> that is the fraction male (Stock 1) at age:</p>
 <div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1"></a></span>
@@ -814,8 +827,8 @@ pre { /* Code block */
 <span id="cb32-3"><a href="#cb32-3"></a>MOMsex<span class="op">@</span>SexPars<span class="op">$</span>Herm&lt;-<span class="kw">list</span>(<span class="dt">H_1_2 =</span> H_<span class="dv">1</span>_<span class="dv">2</span>, <span class="dt">H_3_11 =</span> H_<span class="dv">3</span>_<span class="dv">11</span>) </span></code></pre></div>
 <p>Has two sequential hermaphroditic relationships, one as before exchanges between ‘stocks’ 1 and 2 and the vector is the fraction at age of ‘stock’ 1. The second is between ‘stocks’ 3 and 11 and the vector is the fraction at age of ‘stock’ 3.</p>
 </div>
-<div id="custom-tac-allocations" class="section level2">
-<h2><span class="header-section-number">6.3</span> Custom TAC allocations</h2>
+<div id="custom-tac-allocations" class="section level2" number="6.3">
+<h2 number="6.3"><span class="header-section-number">6.3</span> Custom TAC allocations</h2>
 <p>Recall, that when more than one fleet is specified, fleet-specific catchabilities are calculated from the fraction of current stock catches for each fleet. This is the <code>CatchFrac</code> slot of an MOM object, e.g:</p>
 <div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1"></a>nsim =<span class="st"> </span><span class="dv">12</span></span>
 <span id="cb33-2"><a href="#cb33-2"></a><span class="co">#                  Fleet1  Fleet2   Fleet3</span></span>
@@ -859,8 +872,8 @@ pre { /* Code block */
 <span id="cb34-16"><a href="#cb34-16"></a></span>
 <span id="cb34-17"><a href="#cb34-17"></a>MOM_BH_A &lt;-<span class="st"> </span><span class="kw">new</span>(<span class="st">&#39;MOM&#39;</span>, Stocks, Fleets, Obs, Imps, CatchFrac, <span class="dt">Allocation=</span>Allocation, <span class="dt">nsim=</span>nsim)</span></code></pre></div>
 </div>
-<div id="custom-effort-allocations" class="section level2">
-<h2><span class="header-section-number">6.4</span> Custom effort allocations</h2>
+<div id="custom-effort-allocations" class="section level2" number="6.4">
+<h2 number="6.4"><span class="header-section-number">6.4</span> Custom effort allocations</h2>
 <p>When specifying effort control MPs, by default future effort recomemdnations are scaled as a multiple of effort in the current year (e.g. this was 1 in 2018, so an MP halving effort would make this 0.5 for all fleets).</p>
 <p>If users wish to control the relative effort of the various fleets in the future they can do this similarly to the <code>Allocation</code> slot above.</p>
 <div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1"></a><span class="co">#                        Fleet1  Fleet2   Fleet3</span></span>
@@ -877,8 +890,8 @@ pre { /* Code block */
 <p>This relatively basic effort distribution code will be improved in later package versions, but for now allows users to investigate alternative management regimes in which fleets can be reduced, increased or removed completely.</p>
 </div>
 </div>
-<div id="acknowledgements" class="section level1">
-<h1><span class="header-section-number">7</span> Acknowledgements</h1>
+<div id="acknowledgements" class="section level1" number="7">
+<h1 number="7"><span class="header-section-number">7</span> Acknowledgements</h1>
 <p>MSEtool development is funded by the Canadian Department of Fisheries and Oceans and benefits from ongoing collaborations with the Natural Resources Defense Council and number of Canadian government scientists including Robyn Forrest, Sean Anderson and Daniel Duplisea.</p>
 <p>The multiMSE function relies heavily on very efficient and robust OMx operating model code developed by Adrian Hordyk in the DLMtool package.</p>
 <p>The <a href="http://www.datalimitedtoolkit.org">DLMtool</a> package was developed at the University of British Columbia in collaboration with the Natural Resources Defense Council. DLMtool development has been funded by the Gordon and Betty Moore Foundation, the Packard Foundation, U.S. National Oceanic and Atmospheric Administration, Fisheries and Oceans Canada, the Walton Foundation, Resources Legacy Fund, the Natural Resources Defense Council, the United Nations Food and Agricultural Organization and the California Department of Fish and Wildlife.</p>

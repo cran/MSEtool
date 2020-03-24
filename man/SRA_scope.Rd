@@ -2,14 +2,13 @@
 % Please edit documentation in R/SRA_scope.R
 \name{SRA_scope}
 \alias{SRA_scope}
-\alias{plot_SRA_scope}
 \alias{Sub_cpars}
 \title{Stock-reduction analysis (SRA) for conditioning operating models}
 \usage{
 SRA_scope(
   OM,
   data = list(),
-  condition = c("catch", "effort"),
+  condition = c("catch", "catch2", "effort"),
   selectivity = "logistic",
   s_selectivity = NULL,
   LWT = list(),
@@ -20,10 +19,10 @@ SRA_scope(
   integrate = FALSE,
   mean_fit = FALSE,
   drop_nonconv = FALSE,
+  drop_highF = FALSE,
+  control = list(iter.max = 2e+05, eval.max = 4e+05),
   ...
 )
-
-plot_SRA_scope(...)
 
 Sub_cpars(OM, sims = 1:OM@nsim)
 }
@@ -33,7 +32,8 @@ steepness, maturity parameters (L50 and L50_95), standard deviation of recruitme
 
 \item{data}{A list of data inputs. See Data section below.}
 
-\item{condition}{String to indicate whether the SRA model is conditioned on catch or effort.}
+\item{condition}{String to indicate whether the SRA model is conditioned on "catch" (where F is estimated), "catch2" (where F is solved internally using Newton's method),
+or "effort".}
 
 \item{selectivity}{A character vector of length nfleet to indicate \code{"logistic"} or \code{"dome"} selectivity for each fleet in \code{Chist}.}
 
@@ -49,7 +49,7 @@ Only used if any of the corresponding entries of \code{data$I_type = "est"} or i
 respectively, for the multinomial likelihood function. The effective sample size of an age or length composition sample is the minimum of ESS or the number of observations
 (sum across columns). For more flexibility, set ESS to be very large and alter the arrays as needed.}
 
-\item{max_F}{The maximum F for any fleet in the scoping model (higher F's in the model are penalized in the objective function).}
+\item{max_F}{The maximum F for any fleet in the scoping model (higher F's in the model are penalized in the objective function). See also `drop_highF`.}
 
 \item{cores}{Integer for the number of CPU cores for the stock reduction analysis.}
 
@@ -58,6 +58,10 @@ respectively, for the multinomial likelihood function. The effective sample size
 \item{mean_fit}{Logical, whether to run an additional with mean values of life history parameters from the OM.}
 
 \item{drop_nonconv}{Logical, whether to drop non-converged fits of the SRA model.}
+
+\item{drop_highF}{Logical, whether to drop fits of the SRA model where F hits `max_F`. Only applies if `drop_nonconv` is also `TRUE.`}
+
+\item{control}{A named list of arguments (e.g, max. iterations, etc.) for optimization, to be passed to \code{\link[stats]{nlminb}}.}
 
 \item{...}{Other arguments to pass in for starting values of parameters and fixing parameters. See details.}
 
@@ -79,15 +83,17 @@ For \code{SRA_scope}, additional arguments can be passed to the model via \code{
 
 \itemize{
 \item vul_par: A matrix of 3 rows and nfleet columns for starting values for fleet selectivity. The three rows correspond
-to L5 (length of 5 percent selectivity), LFS (length of full selectivity) and Vmaxlen (selectivity at length Linf). By default,
+to LFS (length of full selectivity), L5 (length of 5 percent selectivity), and Vmaxlen (selectivity at length Linf). By default,
 the starting values are values from the OM object.
-\item s_vul_par: A matrix of 3 rows and nsurvey columns for starting values for fleet selectivity. Same setup as vul_par.
+\item s_vul_par: A matrix of 3 rows and nsurvey columns for starting values for fleet selectivity. Same setup as vul_par. These values are only
+used if \code{s_selectivity = "est"} for the corresponding fleet. Otherwise, placeholders should be used to complete the matrix.
 \item map_vul_par: The map argument for vul_par in TMB, see \link[TMB]{MakeADFun}, which indicates whether selectivity parameters are fixed
 or estimated. A matrix of the same dimension as vul_par. If an entry is \code{NA}, the corresponding parameter is fixed in the model to the starting
 value. Otherwise, an integer for each independent parameter. By default, selectivity is fixed if there are no age or length composition for that fleet
 or survey, otherwise estimated.
-\item map_s_vul_par: The map argument for the survey selectivity parameters (same dimension as s_vul_par).
+\item map_s_vul_par: The map argument for the survey selectivity parameters (same dimension as s_vul_par). Placeholder parameters should have a map value of NA.
 \item map_log_rec_dev: A vector of length OM@nyears that indexes which recruitment deviates are fixed (using NA) or estimated (a separate integer).
+\item plusgroup: Logical for whether the maximum age is a plusgroup or not.
 }
 
 Survey selectivity is estimated only if \code{s_CAA} or \code{s_CAL} is provided. Otherwise, the selectivity should
@@ -105,8 +111,6 @@ By default, all likelihood weights are equal to one if not specified by the user
 multinomial sample size. For \code{CAA}, \code{CAL}, \code{s_CAA}, and \code{s_CAL}, the arrays should be set up so that
 the annual number of observations (summed over columns) should be equal to the presumed effective sample size. Argument \code{ESS} provides a shortcut
 to cap the the effective sample size.
-
-\code{plot_SRA_scope} is now deprecated in favor of \link{plot.SRA}.
 
 Parameters that were used in the fitting model are placed in objects in \code{OM@cpars}.
 
@@ -154,7 +158,9 @@ Zero (default) implies unfished conditions in year one. Otherwise, this is used 
 \item E_eq - The equilibrium effort for each fleet in \code{Ehist} prior to the first year of the operating model.
 Zero (default) implies unfished conditions in year one. Otherwise, this is used to estimate depletion in the first year of the data.
 \item abs_I - Optional, an integer vector to indicate which indices are in absolute magnitude. Use 1 to set q = 1, otherwise use 0 to estimate q.
-\item I_basis - Optional, an integer vector to indicate whether indices are biomass based (1) or abundance-based (0). By default, all are biomass-based.
+\item I_units - Optional, an integer vector to indicate whether indices are biomass based (1) or abundance-based (0). By default, all are biomass-based.
+\item age_error - Optional, a square matrix of maxage rows and columns to specify ageing error. The aa-th column assigns a proportion of the true age in the
+a-th row to observed age. Thus, all \code{rowSums(age_error)} should be 1. Default is an identity matrix (no ageing error).
 }
 
 Selectivity is fixed to values sampled from \code{OM} if no age or length compositions are provided.

@@ -102,7 +102,8 @@ match_R_years <- function(RR) {
 
 
 #' @importFrom rmarkdown render
-report <- function(Assessment, retro = NULL, filename = paste0("report_", Assessment@Model), dir = tempdir(), open_file = TRUE, quiet = TRUE, ...) {
+report <- function(Assessment, retro = NULL, filename = paste0("report_", Assessment@Model), dir = tempdir(), open_file = TRUE, quiet = TRUE,
+                   render_args = list(), ...) {
   name <- ifelse(nchar(Assessment@Name) > 0, Assessment@Name, substitute(Assessment))
 
   # Generate markdown report
@@ -117,28 +118,30 @@ report <- function(Assessment, retro = NULL, filename = paste0("report_", Assess
 
   if(Assessment@Model == "SCA2") Assessment@info$data$SR_type <- Assessment@info$SR
   f <- get(paste0("rmd_", Assessment@Model))
-  rmd_model <- f(Assessment)
+  rmd_model <- f(Assessment, ...)
 
   if(!is.null(retro)) {
-    rmd_ret <- c("## Retrospective\n",
-                 "```{r}",
-                 "as.data.frame(summary(retro))",
-                 "plot(retro)",
-                 "```\n")
+    rmd_ret <- rmd_retrospective()
   } else rmd_ret <- ""
 
   rmd <- c(rmd_head(name), rmd_model, rmd_ret, rmd_footer())
   write(rmd, file = file.path(dir, filename_rmd))
 
-  # Rendering markdown file
-  message("Rendering markdown file to HTML: ", file.path(dir, filename_html))
+  # Render markdown file
   assign_Assessment_slots(Assessment)
 
-  output <- rmarkdown::render(file.path(dir, filename_rmd), "html_document", filename_html, dir,
-                              output_options = list(df_print = "paged"), quiet = quiet, ...)
+  if(is.null(render_args$input)) render_args$input <- file.path(dir, filename_rmd)
+  if(is.null(render_args$output_format)) render_args$output_format <- "html_document"
+  if(is.null(render_args$output_options) && render_args$output_format == "html_document") {
+    render_args$output_options <- list(df_print = "paged")
+  }
+  render_args$quiet <- quiet
+
+  message("Rendering markdown file...")
+  output <- do.call(rmarkdown::render, render_args)
   message("Rendering complete.")
 
-  if(open_file) browseURL(file.path(dir, filename_html))
+  if(open_file) browseURL(output)
   invisible(output)
 }
 
@@ -625,6 +628,7 @@ plot_residuals <- function(Year, res, res_sd = NULL, res_sd_CI = 0.95,
 #' (larger number = larger bubbles).
 #' @param fit_linewidth Argument \code{lwd} for fitted line.
 #' @param fit_color Color of fitted line.
+#' @param bubble_color Colors for negative and positive residuals, respectively, for bubble plots.
 #' @return Plots depending on \code{plot_type}.
 #' @author Q. Huynh
 #' @export plot_composition
@@ -641,7 +645,7 @@ plot_residuals <- function(Year, res, res_sd = NULL, res_sd_CI = 0.95,
 plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c('annual', 'bubble_data', 'bubble_residuals', 'mean'),
                              N = rowSums(obs), CAL_bins = NULL, ages = NULL, ind = 1:nrow(obs),
                              annual_ylab = "Frequency", annual_yscale = c("proportions", "raw"),
-                             bubble_adj = 5, fit_linewidth = 3, fit_color = "red") {
+                             bubble_adj = 5, bubble_color = c("black", "white"), fit_linewidth = 3, fit_color = "red") {
   plot_type <- match.arg(plot_type)
   annual_yscale <- match.arg(annual_yscale)
   if(is.null(CAL_bins)) data_type <- "age" else data_type <- "length"
@@ -703,17 +707,16 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
 
     resid <- N * (obs_prob - fit_prob) / sqrt(N * fit_prob)
     diameter_max <- bubble_adj / pmin(10, max(abs(resid), na.rm = TRUE))
-    plot(NULL, NULL, typ = 'n', xlim = range(Year), xlab = "Year",
-         ylim = range(data_val), ylab = data_lab)
+    plot(NULL, NULL, typ = 'n', xlim = range(Year), xlab = "Year", ylim = range(data_val), ylab = data_lab)
 
     Year_mat <- matrix(Year, ncol = ncol(resid), nrow = nrow(resid))
     data_mat <- matrix(data_val, ncol = ncol(resid), nrow = nrow(resid), byrow = TRUE)
     isPositive <- resid > 0
-    points(Year_mat[!isPositive], data_mat[!isPositive], cex = pmin(0.5 * diameter_max * abs(resid[!isPositive]), diameter_max), pch = 21, bg = "grey80")
-    points(Year_mat[isPositive], data_mat[isPositive], cex = pmin(0.5 * diameter_max * resid[isPositive], diameter_max), pch = 21, bg = "white")
+    points(Year_mat[!isPositive], data_mat[!isPositive], cex = pmin(0.5 * diameter_max * abs(resid[!isPositive]), diameter_max), pch = 21, bg = bubble_color[1])
+    points(Year_mat[isPositive], data_mat[isPositive], cex = pmin(0.5 * diameter_max * resid[isPositive], diameter_max), pch = 21, bg = bubble_color[2])
     legend("topleft", legend = c("<-10", "-1", "1", ">10"),
            pt.cex = c(diameter_max, 0.5 * diameter_max, 0.5 * diameter_max, diameter_max),
-           pt.bg = c("grey80", "grey80", "white", "white"), pch = 21, horiz = TRUE)
+           pt.bg = rep(bubble_color, each = 2), pch = 21, horiz = TRUE)
 
     return(invisible())
   }
@@ -752,29 +755,9 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
     if(max(obs_prob_all, fit_prob_all, na.rm = TRUE) == 1) yaxp <- c(0, 1, 4)
 
     las <- 1
-    type <- "o"
     for(i in 1:length(Year)) {
-      if(i < length(Year)) {
-        if(i %% 16 %in% c(1:4)) { # First column
-          yaxt <- "s"
-
-          # First three rows
-          if(i %% 4 %in% c(1:3)) {
-            xaxt <- "n"
-          } else {
-            xaxt <- "s"
-          }
-        } else { # All other columns
-          if(i %% 4 %in% c(1:3)) { # First three rows
-            xaxt <- yaxt <- "n"
-          } else {
-            xaxt <- "s"
-          }
-        }
-      } else {
-        xaxt <- "s"
-        if(i %% 16 %in% c(1:4)) yaxt <- "s" else yaxt <- "n"
-      }
+      yaxt <- ifelse(i %% 16 %in% c(1:4), "s", "n") # TRUE = first column
+      xaxt <- ifelse(i < length(Year) & i %% 4 %in% c(1:3), "n", "s") # TRUE = first three rows
 
       plot(data_val, obs_prob[i, ], typ = "n", ylim = ylim, yaxp = yaxp, xaxt = xaxt, yaxt = yaxt, las = las)
       abline(h = 0, col = "grey")
@@ -782,7 +765,7 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
       if(!is.null(fit)) lines(data_val, fit_prob[i, ], lwd = fit_linewidth, col = fit_color)
       legend("topright", legend = c(Year[i], ifelse(is.null(N), "", paste0("N = ", N[i]))), bty = "n", xjust = 1)
 
-      if(i %% 16 == 0 || i == length(Year)) {
+      if(i %% 16 == 1) {
         mtext(data_lab, side = 1, line = 3, outer = TRUE)
         mtext(annual_ylab, side = 2, line = 3.5, outer = TRUE)
       }

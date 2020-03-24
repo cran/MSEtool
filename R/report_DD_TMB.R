@@ -61,12 +61,13 @@ summary_DD_TMB <- function(Assessment, state_space = FALSE) {
   if(state_space) model_name <- paste(model_name, "(State-Space)")
   output <- list(model = model_name,
                  current_status = current_status, input_parameters = input_parameters,
-                 derived_quantities = derived, model_estimates = model_estimates)
+                 derived_quantities = derived, model_estimates = model_estimates,
+                 log_likelihood = matrix(NLL, ncol = 1, dimnames = list(names(NLL), "Neg.LL")))
   return(output)
 }
 
 
-rmd_DD_TMB <- function(Assessment, state_space = FALSE) {
+rmd_DD_TMB <- function(Assessment, state_space = FALSE, ...) {
   if(state_space) {
     ss <- rmd_summary("Delay-Difference (State-Space)")
   } else ss <- rmd_summary("Delay-Difference")
@@ -261,7 +262,7 @@ retrospective_DD_TMB <- function(Assessment, nyr, state_space = FALSE) {
 
 summary_DD_SS <- function(Assessment) summary_DD_TMB(Assessment, TRUE)
 
-rmd_DD_SS <- function(Assessment) rmd_DD_TMB(Assessment, TRUE)
+rmd_DD_SS <- function(Assessment, ...) rmd_DD_TMB(Assessment, TRUE, ...)
 
 profile_likelihood_DD_SS <- profile_likelihood_DD_TMB
 

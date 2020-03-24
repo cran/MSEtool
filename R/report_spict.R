@@ -30,11 +30,12 @@ summary_spict <- function(Assessment) {
 
   output <- list(model = "SPiCT", current_status = current_status,
                  input_parameters = input_parameters, derived_quantities = derived,
-                 model_estimates = model_estimates)
+                 model_estimates = model_estimates,
+                 log_likelihood = matrix(NLL, ncol = 1, dimnames = list("Total", "Neg.LL")))
   return(output)
 }
 
-rmd_spict <- function(Assessment) {
+rmd_spict <- function(Assessment, ...) {
   ss <- rmd_summary("SPiCT")
 
   # Data section

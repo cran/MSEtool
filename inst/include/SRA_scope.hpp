@@ -16,8 +16,8 @@ Type SRA_scope(objective_function<Type> *obj) {
   DATA_MATRIX(E_hist);    // Effort by year and fleet
   DATA_VECTOR(E_eq);      // Equilibrium effort by fleet
 
-  DATA_STRING(condition); // Indicates whether the model will condition on effort or catch
-  DATA_INTEGER(nll_C);    // Indicates whether there is a likelihood for the catch if condition = "effort"
+  DATA_STRING(condition); // Indicates whether the model will condition on 'effort', 'catch' (estimated F's), 'catch2' (internally optimize for F)
+  DATA_INTEGER(nll_C);    // Indicates whether there is a likelihood for the catch. TRUE when (a) condition = 'catch' or (b) 'effort' with nfleet > 1
 
   DATA_MATRIX(I_hist);    // Index by year and survey
   DATA_MATRIX(sigma_I);   // Standard deviation of index by year and survey
@@ -37,6 +37,9 @@ Type SRA_scope(objective_function<Type> *obj) {
   DATA_VECTOR(length_bin);// Vector of length bins
   DATA_MATRIX(mlen);      // Vector of annual mean lengths by year and fleet
 
+  DATA_IMATRIX(sel_block); // Assigns selectivity by year and fleet
+  DATA_INTEGER(nsel_block); // The number of selectivity "blocks"
+
   DATA_INTEGER(n_y);      // Number of years in model
   DATA_INTEGER(max_age);  // Maximum age (plus-group)
   DATA_INTEGER(nfleet);   // Number of fleets
@@ -53,38 +56,42 @@ Type SRA_scope(objective_function<Type> *obj) {
   DATA_IVECTOR(s_vul_type); // Same but for surveys
   DATA_IVECTOR(I_type);   // Integer vector indicating the basis of the indices for fleet (1-nfleet) or surveys B (-1) or SSB (-2) or estimated (0)
   DATA_IVECTOR(abs_I);    // Boolean, whether index is an absolute (fix q = 1) or relative terms (estimate q)
-  DATA_IVECTOR(I_basis);  // Boolean, whether index is biomass based (= 1) or abundance-based (0)
+  DATA_IVECTOR(I_units);  // Boolean, whether index is biomass based (= 1) or abundance-based (0)
+
+  DATA_MATRIX(age_error); // Ageing error matrix
 
   DATA_STRING(SR_type);   // String indicating whether Beverton-Holt or Ricker stock-recruit is used
   DATA_MATRIX(LWT_C);     // LIkelihood weights for catch, CAA, CAL, ML, C_eq
-  DATA_MATRIX(LWT_Index); // LIkelihood weights for the index
-  DATA_STRING(comp_like);
+  DATA_MATRIX(LWT_Index); // Likelihood weights for the index
+  DATA_STRING(comp_like); // Whether to use "multinomial" or "lognormal" distribution for age/lengthc comps
 
   DATA_SCALAR(max_F);     // Maximum F in the model
-  DATA_SCALAR(rescale);   // Catch rescaler, needed in case q = 1
+  DATA_SCALAR(rescale);   // R0 rescaler
   DATA_INTEGER(ageM);     // Age of maturity used for averaging E0 and EPR0
 
-  DATA_IVECTOR(est_early_rec_dev);
-  DATA_IVECTOR(est_rec_dev); // Indicator whether to estimate rec_dev
-  DATA_IVECTOR(yindF);
+  DATA_IVECTOR(est_early_rec_dev); // Indicates years in which log_early_rec_dev are estimated. Then, lognormal bias correction estimates are added..
+  DATA_IVECTOR(est_rec_dev); // Indicates years in which log_rec_dev are estimated.
+  DATA_IVECTOR(yind_F);   // When condition = "catch", the year in F's are estimated and all other F parameters are deviations from this F
+  DATA_INTEGER(nit_F);    // When condition = "catch2", the number of iterations for Newton-Raphson method to solve for F
+  DATA_INTEGER(plusgroup) // Boolean, whether the maximum age in the plusgroup is modeled.
 
-  PARAMETER(log_R0);
-  PARAMETER(transformed_h);
-  PARAMETER_MATRIX(vul_par);            // Matrix of vul_par
-  PARAMETER_MATRIX(s_vul_par);
-  PARAMETER_VECTOR(log_q_effort);
-  PARAMETER_MATRIX(log_F);
-  PARAMETER_VECTOR(log_F_equilibrium);  // Equilibrium U by fleet
+  PARAMETER(log_R0);                    // Unfished recruitment
+  PARAMETER(transformed_h);             // Steepness
+  PARAMETER_MATRIX(vul_par);            // Matrix of vul_par 3 rows and nsel_block columns
+  PARAMETER_MATRIX(s_vul_par);          // Matrix of selectivity parameters, 3 rows and nsurvey columns
+  PARAMETER_VECTOR(log_q_effort);       // log_q for F when condition = "effort"
+  PARAMETER_MATRIX(log_F);              // log_F_deviations when condition = "catch"
+  PARAMETER_VECTOR(log_F_equilibrium);  // Equilibrium F by fleet when condition != "effort"
 
-  PARAMETER_VECTOR(log_sigma_mlen);
-  PARAMETER(log_tau);
-  PARAMETER_VECTOR(log_early_rec_dev);
-  PARAMETER_VECTOR(log_rec_dev);
+  PARAMETER_VECTOR(log_sigma_mlen);     // Std. dev. of mean lengths
+  PARAMETER(log_tau);                   // Std. dev. of rec devs
+  PARAMETER_VECTOR(log_early_rec_dev);  // Rec devs for first year abundance
+  PARAMETER_VECTOR(log_rec_dev);        // Rec devs for all other years in the model
 
   int nlbin = length_bin.size();
   Type bin_width = length_bin(1) - length_bin(0);
 
-  Type R0 = exp(log_R0);
+  Type R0 = exp(log_R0)/rescale;
   Type h;
   if(SR_type == "BH") {
     h = 0.8 * invlogit(transformed_h);
@@ -98,10 +105,10 @@ Type SRA_scope(objective_function<Type> *obj) {
   // Vulnerability (length-based) and F parameters
   Type penalty = 0;
   Type prior = 0.;
-  vector<Type> LFS(nfleet);
-  vector<Type> L5(nfleet);
-  vector<Type> Vmaxlen(nfleet);
-  array<Type> vul = calc_vul(vul_par, vul_type, len_age, LFS, L5, Vmaxlen, Linf);
+  vector<Type> LFS(nsel_block);
+  vector<Type> L5(nsel_block);
+  vector<Type> Vmaxlen(nsel_block);
+  array<Type> vul = calc_vul(vul_par, vul_type, len_age, LFS, L5, Vmaxlen, Linf, nfleet, sel_block, nsel_block, prior);
 
   vector<Type> q_effort(nfleet);
   vector<Type> sigma_mlen(nfleet);
@@ -114,29 +121,13 @@ Type SRA_scope(objective_function<Type> *obj) {
   for(int ff=0;ff<nfleet;ff++) {
     sigma_mlen(ff) = exp(log_sigma_mlen(ff));
     q_effort(ff) = exp(log_q_effort(ff));
-    if(condition == "catch" && C_eq(ff)>0) F_equilibrium(ff) = exp(log_F_equilibrium(ff));
+    if(condition != "effort" && C_eq(ff)>0) F_equilibrium(ff) = exp(log_F_equilibrium(ff));
     if(condition == "effort" && E_eq(ff)>0) F_equilibrium(ff) = q_effort(ff) * E_eq(ff);
     if(condition == "catch") {
-      Type tmp = max_F - exp(log_F(yindF(ff),ff));
-      F(yindF(ff),ff) = CppAD::CondExpLt(tmp, Type(0), max_F - posfun(tmp, Type(0), penalty), exp(log_F(yindF(ff),ff)));
-
-      for(int y=0;y<n_y;y++) {
-        if(y != yindF(ff)) {
-          Type Ftmp = F(yindF(ff),ff) * exp(log_F(y,ff));
-          Type tmp2 = max_F - Ftmp;
-          F(y,ff) = CppAD::CondExpLt(tmp2, Type(0), max_F - posfun(tmp2, Type(0), penalty), Ftmp);
-        }
-      }
-
-    } else {
-      for(int y=0;y<n_y;y++) {
-        Type tmp = max_F - q_effort(ff) * E_hist(y,ff);
-        F(y,ff) = CppAD::CondExpLt(tmp, Type(0), max_F - posfun(tmp, Type(0), penalty),
-          q_effort(ff) * E_hist(y,ff));
-      }
+      Type tmp = max_F - exp(log_F(yind_F(ff),ff));
+      F(yind_F(ff),ff) = CppAD::CondExpLt(tmp, Type(0), max_F - posfun(tmp, Type(0), penalty), exp(log_F(yind_F(ff),ff)));
     }
   }
-
 
   ////// Equilibrium reference points and per-recruit quantities - calculate annually
   vector<vector<Type> > NPR_unfished(n_y);
@@ -147,7 +138,7 @@ Type SRA_scope(objective_function<Type> *obj) {
 
   Type E0_SR = 0;
   for(int y=0;y<n_y;y++) {
-    NPR_unfished(y) = calc_NPR0(M, max_age, y);
+    NPR_unfished(y) = calc_NPR0(M, max_age, y, plusgroup);
 
     EPR0(y) = sum_EPR(NPR_unfished(y), wt, mat, max_age, y);
     E0(y) = R0 * EPR0(y);
@@ -178,6 +169,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   matrix<Type> N(n_y+1, max_age);
 
   vector<Type> C_eq_pred(nfleet);
+  array<Type> CAAtrue(n_y, max_age, nfleet);   // Catch (in numbers) at year and age at the mid-point of the season
   array<Type> CAApred(n_y, max_age, nfleet);   // Catch (in numbers) at year and age at the mid-point of the season
   array<Type> CALpred(n_y, nlbin, nfleet);
   matrix<Type> mlen_pred(n_y, nfleet);
@@ -206,7 +198,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   E.setZero();
 
   // Equilibrium quantities (leading into first year of model)
-  vector<Type> NPR_equilibrium = calc_NPR(F_equilibrium, vul, nfleet, M, max_age, 0);
+  vector<Type> NPR_equilibrium = calc_NPR(F_equilibrium, vul, nfleet, M, max_age, 0, plusgroup);
   Type EPR_eq = sum_EPR(NPR_equilibrium, wt, mat, max_age, 0);
   Type R_eq;
 
@@ -249,28 +241,47 @@ Type SRA_scope(objective_function<Type> *obj) {
       R(y+1) = Ricker_SR(E(y), h, R0, E0_SR);
     }
 
-    if(y<n_y-1) {
-      if(est_rec_dev(y+1)) R(y+1) *= exp(log_rec_dev(y+1) - 0.5 * tau * tau);
-    }
+    if(y<n_y-1 && est_rec_dev(y+1)) R(y+1) *= exp(log_rec_dev(y+1) - 0.5 * tau * tau);
+
     N(y+1,0) = R(y+1);
-    ALK(y) = generate_ALK(length_bin, len_age, CV_LAA, max_age, nlbin, bin_width, y);
+    if(Type(max_age) != Linf) ALK(y) = generate_ALK(length_bin, len_age, CV_LAA, max_age, nlbin, bin_width, y);
+
+    if(condition == "catch") {
+      for(int ff=0;ff<nfleet;ff++) {
+        if(y != yind_F(ff)) {
+          Type tmp = max_F - F(yind_F(ff),ff) * exp(log_F(y,ff));
+          F(y,ff) = CppAD::CondExpLt(tmp, Type(0), max_F - posfun(tmp, Type(0), penalty), F(yind_F(ff),ff) * exp(log_F(y,ff)));
+        }
+      }
+    } else if(condition == "catch2") {
+      F.row(y) = Newton_SRA_F(C_hist, N, M, wt, VB, vul, max_F, y, max_age, nfleet, nit_F, penalty);
+    } else {
+      for(int ff=0;ff<nfleet;ff++) {
+        Type tmp = max_F - q_effort(ff) * E_hist(y,ff);
+        F(y,ff) = CppAD::CondExpLt(tmp, Type(0), max_F - posfun(tmp, Type(0), penalty), q_effort(ff) * E_hist(y,ff));
+      }
+    }
 
     for(int a=0;a<max_age;a++) {
       for(int ff=0;ff<nfleet;ff++) Z(y,a) += vul(y,a,ff) * F(y,ff);
       Type mean_N = N(y,a) * (1 - exp(-Z(y,a))) / Z(y,a);
 
       if(a<max_age-1) N(y+1,a+1) = N(y,a) * exp(-Z(y,a));
-      if(a==max_age-1) N(y+1,a) += N(y,a) * exp(-Z(y,a));
+      if(plusgroup && a==max_age-1) N(y+1,a) += N(y,a) * exp(-Z(y,a));
 
       for(int ff=0;ff<nfleet;ff++) {
-        CAApred(y,a,ff) = vul(y,a,ff) * F(y,ff) * mean_N;
-        CN(y,ff) += CAApred(y,a,ff);
-        Cpred(y,ff) += CAApred(y,a,ff) * wt(y,a);
+        CAAtrue(y,a,ff) = vul(y,a,ff) * F(y,ff) * mean_N;
+        CN(y,ff) += CAAtrue(y,a,ff);
+        Cpred(y,ff) += CAAtrue(y,a,ff) * wt(y,a);
 
-        for(int len=0;len<nlbin;len++) {
-          CALpred(y,len,ff) += CAApred(y,a,ff) * ALK(y)(a,len);
-          mlen_pred(y,ff) += CAApred(y,a,ff) * ALK(y)(a,len) * length_bin(len);
+        if(Type(max_age) != Linf) {
+          for(int len=0;len<nlbin;len++) {
+            CALpred(y,len,ff) += CAAtrue(y,a,ff) * ALK(y)(a,len);
+            mlen_pred(y,ff) += CAAtrue(y,a,ff) * ALK(y)(a,len) * length_bin(len);
+          }
         }
+
+        for(int aa=0;aa<max_age;aa++) CAApred(y,aa,ff) += CAAtrue(y,a,ff) * age_error(a,aa); // a = true, aa = observed ages
 
         VB(y+1,ff) += vul(y+1,a,ff) * N(y+1,a) * wt(y+1,a);
       }
@@ -278,7 +289,7 @@ Type SRA_scope(objective_function<Type> *obj) {
       B(y+1) += N(y+1,a) * wt(y+1,a);
       E(y+1) += N(y+1,a) * wt(y+1,a) * mat(y+1,a);
     }
-    for(int ff=0;ff<nfleet;ff++) mlen_pred(y,ff) /= CN(y,ff);
+    if(Type(max_age) != Linf) for(int ff=0;ff<nfleet;ff++) mlen_pred(y,ff) /= CN(y,ff);
   }
 
   // Calculate nuisance parameters and likelihood
@@ -287,34 +298,35 @@ Type SRA_scope(objective_function<Type> *obj) {
   vector<Type> s_L5(nsurvey);
   vector<Type> s_Vmaxlen(nsurvey);
 
-  array<Type> s_CAApred(n_y, max_age, nsurvey);
-  array<Type> s_CALpred(n_y, nlbin, nsurvey);
-  matrix<Type> s_CN(n_y, nsurvey);
-  matrix<Type> B_sur(n_y, nsurvey); // Biomass vulnerable to the survey
+  array<Type> s_CAAtrue(n_y, max_age, nsurvey); // True abundance at age vulnerable to survey
+  array<Type> s_CAApred(n_y, max_age, nsurvey); // Predicted abundance (after ageing error) at age vulnerable to survey
+  array<Type> s_CALpred(n_y, nlbin, nsurvey); // Abundance at length vulnerable to survey
+  matrix<Type> s_CN(n_y, nsurvey); // Total abundance vulnerable to the survey
+  matrix<Type> s_BN(n_y, nsurvey); // Biomass or abundance vulnerable to the survey
 
   s_CAApred.setZero();
   s_CALpred.setZero();
   s_CN.setZero();
-  B_sur.setZero();
+  s_BN.setZero();
 
-  array<Type> s_vul = calc_vul_sur(s_vul_par, s_vul_type, len_age, s_LFS, s_L5, s_Vmaxlen, Linf, mat, I_type, vul);
+  array<Type> s_vul = calc_vul_sur(s_vul_par, s_vul_type, len_age, s_LFS, s_L5, s_Vmaxlen, Linf, mat, I_type, vul, prior);
   vector<Type> q(nsurvey);
   for(int sur=0;sur<nsurvey;sur++) {
     for(int y=0;y<n_y;y++) {
       for(int a=0;a<max_age;a++) {
-        s_CAApred(y,a,sur) = s_vul(y,a,sur) * N(y,a);
-        s_CN(y,sur) += s_CAApred(y,a,sur);
+        s_CAAtrue(y,a,sur) = s_vul(y,a,sur) * N(y,a);
+        s_CN(y,sur) += s_CAAtrue(y,a,sur);
 
-        if(I_basis(sur)) {
-          B_sur(y,sur) += s_CAApred(y,a,sur) * wt(y,a);
-        }
-        if(!R_IsNA(asDouble(s_CAL_n(y,sur))) && s_CAL_n(y,sur) > 0) {
-          for(int len=0;len<nlbin;len++) s_CALpred(y,len,sur) += s_CAApred(y,a,sur) * ALK(y)(a,len);
+        for(int aa=0;aa<max_age;aa++) s_CAApred(y,aa,sur) += s_CAAtrue(y,a,sur) * age_error(a,aa);
+
+        if(I_units(sur)) s_BN(y,sur) += s_CAAtrue(y,a,sur) * wt(y,a); // Biomass vulnerable to survey
+        if(Type(max_age) != Linf && !R_IsNA(asDouble(s_CAL_n(y,sur))) && s_CAL_n(y,sur) > 0) {
+          for(int len=0;len<nlbin;len++) s_CALpred(y,len,sur) += s_CAAtrue(y,a,sur) * ALK(y)(a,len);
         }
       }
     }
-    if(!I_basis(sur)) B_sur.col(sur) = s_CN.col(sur);
-    q(sur) = calc_q(I_hist, B_sur, sur, sur, Ipred, abs_I, rescale);
+    if(!I_units(sur)) s_BN.col(sur) = s_CN.col(sur); // Abundance vulnerable to survey
+    q(sur) = calc_q(I_hist, s_BN, sur, sur, Ipred, abs_I);
   }
 
   vector<Type> nll_Catch(nfleet);
@@ -338,9 +350,11 @@ Type SRA_scope(objective_function<Type> *obj) {
 
   for(int sur=0;sur<nsurvey;sur++) {
     for(int y=0;y<n_y;y++) {
-      if(!R_IsNA(asDouble(I_hist(y,sur)))) nll_Index(sur) -= dnorm(log(I_hist(y,sur)), log(Ipred(y,sur)), sigma_I(y,sur), true);
+      if(LWT_Index(sur,0) > 0 && !R_IsNA(asDouble(I_hist(y,sur)))) {
+        nll_Index(sur) -= dnorm(log(I_hist(y,sur)), log(Ipred(y,sur)), sigma_I(y,sur), true);
+      }
 
-      if(!R_IsNA(asDouble(s_CAA_n(y,sur))) && s_CAA_n(y,sur) > 0) {
+      if(LWT_Index(sur,1) > 0 && !R_IsNA(asDouble(s_CAA_n(y,sur))) && s_CAA_n(y,sur) > 0) {
         if(comp_like == "multinomial") {
           nll_s_CAA(sur) -= comp_multinom(s_CAA_hist, s_CAApred, s_CN, s_CAA_n, y, max_age, sur);
         } else {
@@ -348,11 +362,11 @@ Type SRA_scope(objective_function<Type> *obj) {
         }
       }
 
-      if(!R_IsNA(asDouble(s_CAL_n(y,sur))) && s_CAL_n(y,sur) > 0) {
+      if(LWT_Index(sur,2) > 0 && !R_IsNA(asDouble(s_CAL_n(y,sur))) && s_CAL_n(y,sur) > 0) {
         if(comp_like == "multinomial") {
           nll_s_CAL(sur) -= comp_multinom(s_CAL_hist, s_CALpred, s_CN, s_CAL_n, y, nlbin, sur);
         } else {
-          nll_s_CAL(sur) = comp_lognorm(s_CAL_hist, s_CALpred, s_CN, s_CAL_n, y, nlbin, sur);
+          nll_s_CAL(sur) -= comp_lognorm(s_CAL_hist, s_CALpred, s_CN, s_CAL_n, y, nlbin, sur);
         }
       }
     }
@@ -364,7 +378,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   for(int ff=0;ff<nfleet;ff++) {
     for(int y=0;y<n_y;y++) {
       if(C_hist(y,ff)>0 || E_hist(y,ff)>0) {
-        if(!R_IsNA(asDouble(CAA_n(y,ff))) && CAA_n(y,ff) > 0) {
+        if(LWT_C(ff,1) > 0 && !R_IsNA(asDouble(CAA_n(y,ff))) && CAA_n(y,ff) > 0) {
           if(comp_like == "multinomial") {
             nll_CAA(ff) -= comp_multinom(CAA_hist, CAApred, CN, CAA_n, y, max_age, ff);
           } else {
@@ -372,16 +386,16 @@ Type SRA_scope(objective_function<Type> *obj) {
           }
         }
 
-        if(!R_IsNA(asDouble(CAL_n(y,ff))) && CAL_n(y,ff) > 0) {
+        if(LWT_C(ff,2) > 0 && !R_IsNA(asDouble(CAL_n(y,ff))) && CAL_n(y,ff) > 0) {
           if(comp_like == "multinomial") {
             nll_CAL(ff) -= comp_multinom(CAL_hist, CALpred, CN, CAL_n, y, nlbin, ff);
           } else {
-            nll_CAL(ff) = comp_lognorm(CAL_hist, CALpred, CN, CAL_n, y, nlbin, ff);
+            nll_CAL(ff) -= comp_lognorm(CAL_hist, CALpred, CN, CAL_n, y, nlbin, ff);
           }
         }
 
-        if(condition == "catch" || nll_C) nll_Catch(ff) -= dnorm(log(C_hist(y,ff)), log(Cpred(y,ff)), Type(0.01), true);
-        if(!R_IsNA(asDouble(mlen(y,ff))) && mlen(y,ff) > 0) {
+        if(nll_C && LWT_C(ff,0) > 0) nll_Catch(ff) -= dnorm(log(C_hist(y,ff)), log(Cpred(y,ff)), Type(0.01), true);
+        if(LWT_C(ff,3) > 0 && !R_IsNA(asDouble(mlen(y,ff))) && mlen(y,ff) > 0) {
           nll_ML(ff) -= dnorm(mlen(y,ff), mlen_pred(y,ff), sigma_mlen(ff), true);
         }
       }
@@ -392,8 +406,9 @@ Type SRA_scope(objective_function<Type> *obj) {
     nll_CAL(ff) *= LWT_C(ff,2);
     nll_ML(ff) *= LWT_C(ff,3);
 
-    if(condition == "catch" && C_eq(ff) > 0) nll_Ceq(ff) = -1 * LWT_C(ff,4) * dnorm(log(C_eq(ff)), log(C_eq_pred(ff)), Type(0.01), true);
-
+    if(LWT_C(ff,4) > 0 && C_eq(ff) > 0 && condition != "effort") {
+      nll_Ceq(ff) = -1 * LWT_C(ff,4) * dnorm(log(C_eq(ff)), log(C_eq_pred(ff)), Type(0.01), true);
+    }
   }
 
   for(int y=0;y<n_y;y++) {
@@ -426,10 +441,9 @@ Type SRA_scope(objective_function<Type> *obj) {
   REPORT(L5);
   REPORT(Vmaxlen);
   REPORT(log_q_effort);
-  REPORT(log_F);
   REPORT(log_F_equilibrium);
 
-  REPORT(log_sigma_mlen);
+  if(nll_ML.sum() != 0) REPORT(log_sigma_mlen);
   REPORT(log_tau);
   REPORT(log_early_rec_dev);
   REPORT(log_rec_dev);
@@ -437,7 +451,8 @@ Type SRA_scope(objective_function<Type> *obj) {
   REPORT(R0);
   REPORT(h);
   REPORT(tau);
-  REPORT(sigma_mlen);
+  if(nll_ML.sum() != 0) REPORT(sigma_mlen);
+  if(condition == "catch") REPORT(log_F);
   REPORT(F_equilibrium);
   REPORT(vul);
   REPORT(F);
@@ -454,7 +469,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   REPORT(E0_SR);
   REPORT(EPR0_SR);
 
-  REPORT(ALK);
+  if(nll_CAL.sum() != 0 || nll_s_CAL.sum() != 0 || nll_ML.sum() != 0) REPORT(ALK);
   REPORT(N);
   REPORT(CAApred);
   REPORT(CALpred);
@@ -473,7 +488,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   REPORT(R_eq);
 
   REPORT(C_eq_pred);
-  REPORT(q);
+  if(nll_Index.sum() != 0) REPORT(q);
 
   REPORT(nll_Catch);
   REPORT(nll_Index);
@@ -489,15 +504,22 @@ Type SRA_scope(objective_function<Type> *obj) {
   REPORT(penalty);
   REPORT(prior);
 
-  REPORT(s_CAApred);
-  REPORT(s_CALpred);
-  REPORT(s_vul);
-  REPORT(s_L5);
-  REPORT(s_LFS);
-  REPORT(s_Vmaxlen);
+  if(age_error.trace() != Type(max_age)) {
+    REPORT(CAAtrue);
+    REPORT(s_CAAtrue);
+  }
+
+  if(nll_Index.sum() != 0) {
+    REPORT(s_vul_par);
+    REPORT(s_CAApred);
+    REPORT(s_CALpred);
+    REPORT(s_vul);
+    REPORT(s_L5);
+    REPORT(s_LFS);
+    REPORT(s_Vmaxlen);
+  }
 
   return nll;
-
 }
 
 #undef TMB_OBJECTIVE_PTR

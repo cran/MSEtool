@@ -35,6 +35,12 @@ SRA_tiny_comp <- function(x) {
 
 update_SRA_data <- function(data, OM, condition, dots) {
 
+  message("\nChecking OM and data...\n")
+
+  # Preliminary OM check for basics
+  if(length(OM@nyears) == 0) stop("OM@nyears is needed.", call. = FALSE)
+  if(length(OM@maxage) == 0) stop("OM@maxage is needed.", call. = FALSE)
+
   assign_for_compatibility <- function(x) {
     if(is.null(data[[x]]) && !is.null(dots[[x]])) {
       data[[x]] <<- getElement(dots, x)
@@ -47,10 +53,9 @@ update_SRA_data <- function(data, OM, condition, dots) {
 
   lapply(dat_names, assign_for_compatibility)
 
-
   if(is.null(data$Chist) && !is.null(data$Ehist)) condition <- "effort"
 
-  if(condition == "catch") {
+  if(condition == "catch" || condition == "catch2") {
     if(is.null(data$Chist)) {
       stop("Full time series of catch is needed.", call. = FALSE)
     } else {
@@ -70,8 +75,9 @@ update_SRA_data <- function(data, OM, condition, dots) {
         message("No data other than Chist is provided. Model will switch to conditioning on equilibrium effort.")
         data$condition <- "effort"
         data$Ehist <- matrix(1, data$nyears, data$nfleet)
+        data$E_eq <- rep(1, data$nfleet)
       } else {
-        data$condition <- "catch"
+        data$condition <- condition
       }
     }
   }
@@ -94,7 +100,7 @@ update_SRA_data <- function(data, OM, condition, dots) {
     }
   }
 
-  message("SRA model is conditioned on ", data$condition)
+  message("SRA model is conditioned on: ", data$condition)
   message(data$nfleet, " fleet(s) detected.")
   message(data$nyears, " years of data detected.")
 
@@ -102,11 +108,11 @@ update_SRA_data <- function(data, OM, condition, dots) {
   if(OM@nyears != data$nyears) {
     cpars_cond <- length(OM@cpars) > 0 && any(vapply(OM@cpars, function(x) class(x) == "matrix" || class(x) == "array", logical(1)))
     if(cpars_cond) {
-      stmt <- paste0("OM@nyears != length(", ifelse(data$condition == "catch", "Chist", "Ehist"), "). ",
+      stmt <- paste0("OM@nyears != length(", ifelse(data$condition == "catch" || data$condition == "catch2", "Chist", "Ehist"), "). ",
                      "There will be indexing errors in your custom parameters (OM@cpars).")
       stop(stmt, call. = FALSE)
     } else {
-      message("OM@nyears was updated to length(", ifelse(data$condition == "catch", "Chist", "Ehist"), "): ", data$nyears)
+      message("OM@nyears was updated to length(", ifelse(data$condition == "catch" || data$condition == "catch2", "Chist", "Ehist"), "): ", data$nyears)
       OM@nyears <- data$nyears
     }
   }
@@ -178,10 +184,16 @@ update_SRA_data <- function(data, OM, condition, dots) {
   }
 
   # Sample life history, selectivity, and obs parameters
+  OM_samp <- check_OM_for_sampling(OM, data)
+
+  old_warning <- options()$warn
+  options(warn = -1)
+  on.exit(options(warn = old_warning))
+
   set.seed(OM@seed)
-  StockPars <- SampleStockPars(OM, msg = FALSE)
-  ObsPars <- SampleObsPars(OM)
-  FleetPars <- SampleFleetPars(OM, msg = FALSE)
+  StockPars <- SampleStockPars(OM_samp, msg = FALSE)
+  ObsPars <- SampleObsPars(OM_samp)
+  FleetPars <- SampleFleetPars(OM_samp, msg = FALSE)
 
   # Process length comps
   if(!is.null(data$CAL)) {
@@ -224,10 +236,15 @@ update_SRA_data <- function(data, OM, condition, dots) {
 
   # Process equilibrium catch/effort - Ceq
   if(is.null(data$C_eq)) data$C_eq <- rep(0, data$nfleet)
-  if(data$condition == "catch") {
+  if(data$condition == "catch" || data$condition == "catch2") {
     if(length(data$C_eq) == 1) data$C_eq <- rep(data$C_eq, data$nfleet)
     if(length(data$C_eq) < data$nfleet) stop("C_eq needs to be of length nfleet (", data$nfleet, ").", call. = FALSE)
   }
+
+  if(data$condition == "catch2" && any(data$C_eq > 0)) {
+    message("Equilibrium catch was detected. Model conditioning will be switched to: \"catch\" (estimated F's)")
+  }
+
   if(is.null(data$E_eq)) data$E_eq <- rep(0, data$nfleet)
   if(data$condition == "effort") {
     if(length(data$E_eq) == 1) data$E_eq <- rep(data$E_eq, data$nfleet)
@@ -289,14 +306,147 @@ update_SRA_data <- function(data, OM, condition, dots) {
     data$abs_I <- 0L
   }
 
-  # Index basis - biomass/abundance
+  # Index units - biomass/abundance
   if(data$nsurvey > 0) {
-    if(is.null(data$I_basis)) data$I_basis <- rep(1L, data$nsurvey)
-    if(length(data$I_basis) < data$nsurvey) stop("I_basis should be of length", data$nsurvey, call. = FALSE)
+    if(!is.null(data$I_basis)) data$I_units <- data$I_basis # Backwards compatability with 1.4.4
+    if(is.null(data$I_units)) data$I_units <- rep(1L, data$nsurvey)
+    if(length(data$I_units) < data$nsurvey) stop("I_basis should be of length", data$nsurvey, call. = FALSE)
   } else {
     data$I_basis <- 1L
   }
 
+  # Ageing error
+  if(is.null(data$age_error)) data$age_error <- diag(OM@maxage)
+  if(any(dim(data$age_error) != OM@maxage)) stop("data$age_error should be a square matrix of OM@maxage rows and columns", call. = FALSE)
+
   return(list(data = data, OM = OM, StockPars = StockPars, ObsPars = ObsPars, FleetPars = FleetPars))
 
+}
+
+check_OM_for_sampling <- function(OM, data) {
+  if(length(OM@nsim) == 0) stop("OM@nsim is needed.", call. = FALSE)
+  if(length(OM@proyears) == 0) stop("OM@proyears is needed.", call. = FALSE)
+  if(length(OM@seed) == 0) stop("OM@seed is needed.", call. = FALSE)
+
+  cpars <- OM@cpars
+
+  ###### Stock parameters
+  # Len_at_age
+  len_check <- !is.null(cpars$Len_age)
+  if(!len_check) {
+    Linf_check <- length(OM@Linf) == 2 || !is.null(cpars$Linf) || !is.null(cpars$Linfarray)
+    K_check <- length(OM@K) == 2 || !is.null(cpars$K) || !is.null(cpars$Karray)
+    t0_check <- length(OM@t0) == 2 || !is.null(cpars$t0)
+
+    if(!Linf_check && !K_check && !t0_check) stop("Length-at-age not found in OM.", call. = FALSE)
+  }
+  # LenCV
+  LenCV_check <- length(OM@LenCV) == 2 || !is.null(cpars$LenCV) || !is.null(cpars$LatASD)
+  if(!LenCV_check) {
+    any_CAL <- !is.null(data$CAL) && any(data$CAL > 0, na.rm = TRUE)
+    any_ML <- !is.null(data$ML) && any(data$ML > 0, na.rm = TRUE)
+    any_s_CAL <- !is.null(data$s_CAL) && any(data$s_CAL > 0, na.rm = TRUE)
+    if(any_CAL || any_ML || any_s_CAL) {
+      stop("OM@LenCV not found in OM.", call. = FALSE)
+    } else {
+      OM@LenCV <- c(0.1, 0.1)
+    }
+  }
+
+  # Weight_at_age
+  wt_check <- !is.null(cpars$Wt_age)
+  if(!wt_check) {
+    wt_check2 <- length(OM@a) > 0 && length(OM@b) > 0
+    if(!wt_check2) stop("Weight-at-age not found in OM.", call. = FALSE)
+  }
+
+  # Maturity
+  mat_check <- !is.null(cpars$Mat_age) ||
+    (!is.null(cpars$ageM) & !is.null(cpars$age95)) ||
+    (!is.null(cpars$L50) & (!is.null(cpars$L95) | !is.null(cpars$L50_95)))
+  if(!mat_check) {
+    mat_check2 <- length(OM@L50) == 2 && length(OM@L50_95) == 2
+    if(!mat_check2) stop("Maturity-at-age not found in OM.", call. = FALSE)
+  }
+
+  # Natural mortality
+  M_check <- !is.null(cpars$M_at_Length) || !is.null(cpars$Mage) || !is.null(cpars$M) || !is.null(cpars$Marray) || !is.null(cpars$M_ageArray)
+  if(!M_check) {
+    M_check2 <- length(OM@M) >= 2
+    if(!M_check2) stop("Natural mortality not found in OM.", call. = FALSE)
+  }
+
+  # Msd - placeholder
+  Msd_check <- length(OM@Msd) == 2 || !is.null(cpars$Msd)
+  if(!Msd_check) OM@Msd <- c(0, 0)
+
+  # Steepness
+  h_check <- length(OM@h) == 2 || !is.null(cpars$h)
+  if(!h_check) stop("Steepness (OM@h) not found.", call. = FALSE)
+
+  # procsd
+  procsd_check <- !is.null(cpars$Perr) || length(OM@Perr) == 2
+  if(!procsd_check) stop("OM@Perr not found.", call. = FALSE)
+
+  # autocorrelation - placeholder
+  AC_check <- length(OM@AC) == 2 || !is.null(cpars$AC)
+  if(!AC_check) OM@AC <- c(0, 0)
+
+  # Depletion - placeholder
+  D_check <- length(OM@D) == 2 || !is.null(cpars$D)
+  if(!D_check) OM@D <- c(0, 0)
+
+  # Stock recruit relationship
+  SR_check <- length(OM@SRrel) == 1
+  if(!SR_check) stop("Stock-recruit relationship (OM@SRrel) not found.", call. = FALSE)
+
+  # R0 check
+  R0_check <- length(OM@R0) > 0 || !is.null(cpars$R0)
+  if(!R0_check) {
+    if(data$condition == "effort") {
+      OM@R0 <- 1
+    } else {
+      OM@R0 <- 1e3
+      message("OM@R0 is used as the starting value for R0 in SRA_scope, but was not found. By default, using 1000.")
+    }
+  }
+
+  # Mvt parameters
+  OM@Size_area_1 <- OM@Frac_area_1 <- OM@Prob_staying <- c(0.5, 0.5)
+
+  # Fdisc placeholder
+  Fdisc_check <- length(OM@Fdisc) == 2 || !is.null(cpars$Fdisc)
+  if(!Fdisc_check) OM@Fdisc <- c(0, 0)
+
+  ###### Fleet Parameters
+  sel_check <- (length(OM@L5) == 2 | !is.null(cpars$L5)) &&
+    (length(OM@LFS) == 2 | !is.null(cpars$LFS)) &&
+    (length(OM@Vmaxlen) == 2 | !is.null(cpars$Vmaxlen))
+  if(!sel_check) {
+    stop("Selectivity parameters (OM@L5, OM@LFS, OM@Vmaxlen) not found. These are starting values for selectivity in the model", call. = FALSE)
+  }
+
+  # More placeholders
+  OM@Esd <- OM@qinc <- OM@qcv <- OM@DR <- c(0, 0)
+  OM@Spat_targ <- c(1, 1)
+
+  OM@EffYears <- c(1, OM@nyears)
+  OM@EffLower <- OM@EffUpper <- c(0, 1)
+
+  ###### Observation Parameters - Iobs
+  if(any(data$Index > 0)) {
+    Isd_check <- !is.null(data$I_sd) && any(data$I_sd > 0, na.rm = TRUE)
+    if(!Isd_check) {
+      Isd_check2 <- length(OM@Iobs) == 2 && !is.null(cpars$Iobs)
+      if(!Isd_check2) stop("OM@Iobs is needed.", call. = FALSE)
+    }
+  }
+  Iobs <- OM@Iobs
+  OM <- Replace(OM, DLMtool::Generic_Obs, silent = TRUE)
+  OM@Iobs <- Iobs
+
+  ###### Imp
+  OM <- Replace(OM, DLMtool::Perfect_Imp, silent = TRUE)
+
+  return(OM)
 }

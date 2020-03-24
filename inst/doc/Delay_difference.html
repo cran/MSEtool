@@ -8,31 +8,43 @@
 <meta name="generator" content="pandoc" />
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2020-01-09" />
+<meta name="date" content="2020-03-23" />
 
 <title>Description of the delay-difference and delay-differential models</title>
 
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
 
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
-code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
 pre.sourceCode { margin: 0; }
 @media screen {
 div.sourceCode { overflow: auto; }
 }
 @media print {
-code.sourceCode { white-space: pre-wrap; }
-code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
   { counter-reset: source-line 0; }
@@ -52,7 +64,7 @@ pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-le
 div.sourceCode
   {   }
 @media screen {
-code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -119,9 +131,6 @@ padding-right: 2em;
 font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 font-size: 14px;
 line-height: 1.35;
-}
-#header {
-text-align: center;
 }
 #TOC {
 clear: both;
@@ -290,7 +299,8 @@ code > span.st { color: #d14; }
 code > span.co { color: #888888; font-style: italic; } 
 code > span.ot { color: #007020; } 
 code > span.al { color: #ff0000; font-weight: bold; } 
-code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61717; background-color: #e3d2d2; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
 </style>
 
 
@@ -305,21 +315,24 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 
 <h1 class="title toc-ignore">Description of the delay-difference and delay-differential models</h1>
 <h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2020-01-09</h4>
+<h4 class="date">2020-03-23</h4>
 
 
 <div id="TOC">
 <ul>
 <li><a href="#introduction"><span class="toc-section-number">1</span> Introduction</a></li>
-<li><a href="#delay-difference-dd_tmb-model"><span class="toc-section-number">2</span> Delay Difference (DD_TMB) Model</a><ul>
+<li><a href="#delay-difference-dd_tmb-model"><span class="toc-section-number">2</span> Delay Difference (DD_TMB) Model</a>
+<ul>
 <li><a href="#growth"><span class="toc-section-number">2.1</span> Growth</a></li>
 <li><a href="#dynamics-equations"><span class="toc-section-number">2.2</span> Dynamics equations</a></li>
-<li><a href="#stock-recruit-parameters"><span class="toc-section-number">2.3</span> Stock-recruit parameters</a><ul>
+<li><a href="#stock-recruit-parameters"><span class="toc-section-number">2.3</span> Stock-recruit parameters</a>
+<ul>
 <li><a href="#beverton-holt-relationship"><span class="toc-section-number">2.3.1</span> Beverton-Holt relationship</a></li>
 <li><a href="#ricker-equation"><span class="toc-section-number">2.3.2</span> Ricker equation</a></li>
 </ul></li>
 </ul></li>
-<li><a href="#continuous-delay-differential-model-cdd"><span class="toc-section-number">3</span> Continuous Delay-Differential model (cDD)</a><ul>
+<li><a href="#continuous-delay-differential-model-cdd"><span class="toc-section-number">3</span> Continuous Delay-Differential model (cDD)</a>
+<ul>
 <li><a href="#growth-1"><span class="toc-section-number">3.1</span> Growth</a></li>
 <li><a href="#dynamics-equations-1"><span class="toc-section-number">3.2</span> Dynamics equations</a></li>
 <li><a href="#stock-recruit-parameters-1"><span class="toc-section-number">3.3</span> Stock-recruit parameters</a></li>
@@ -360,21 +373,21 @@ pre { /* Code block */
 }
 </style>
 <p><br></p>
-<div id="introduction" class="section level1">
-<h1><span class="header-section-number">1</span> Introduction</h1>
+<div id="introduction" class="section level1" number="1">
+<h1 number="1"><span class="header-section-number">1</span> Introduction</h1>
 <p>In MSEtool, assessment models are of class <code>Assess</code>. This appendix provides a brief description and references for the <code>Assess</code> objects. Further details regarding parameterization, e.g., fixing parameters, and tuning, e.g., adjusting start parameters, are provided in the function documentation.</p>
 <p>For LaTeX equation rendering, it is recommended that this vignette be viewed in a HTML browser. This can be done with the <code>browseVignettes</code> function in R:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">browseVignettes</span>(<span class="st">&quot;MSEtool&quot;</span>)</span></code></pre></div>
 </div>
-<div id="delay-difference-dd_tmb-model" class="section level1">
-<h1><span class="header-section-number">2</span> Delay Difference (DD_TMB) Model</h1>
+<div id="delay-difference-dd_tmb-model" class="section level1" number="2">
+<h1 number="2"><span class="header-section-number">2</span> Delay Difference (DD_TMB) Model</h1>
 <p>There has been a rich history of development for the delay difference model for catch and index data. For the formulation used in MSEtool, the most relevant citations are Chapter 9 of Hilborn and Walters (1992) and Carruthers et al. (2012).</p>
-<div id="growth" class="section level2">
-<h2><span class="header-section-number">2.1</span> Growth</h2>
+<div id="growth" class="section level2" number="2.1">
+<h2 number="2.1"><span class="header-section-number">2.1</span> Growth</h2>
 <p>Growth in weight-at-age <span class="math inline">\(w_a\)</span> follows the recursive Ford-Brody equation: <span class="math display">\[w_a = \rho + \tilde\alpha w_{a-1}.\]</span> We can obtain <span class="math inline">\(\tilde\alpha\)</span> and <span class="math inline">\(\rho\)</span> for the delay difference model if weight is also described by the equation <span class="math display">\[w_a = W_{\infty}(1 - \exp[K\{a-a_0\}])^b.\]</span> Parameter <span class="math inline">\(\tilde\alpha\)</span> is solved in the limiting case where <span class="math inline">\(w_a = w_{a-1} = W_{\infty}\)</span> as <span class="math inline">\(t \rightarrow \infty\)</span>, <span class="math display">\[\tilde\alpha = W_{\infty}(1 - \rho). \]</span> Substitution of equation 3 into equation 1 solves for <span class="math inline">\(\rho\)</span>, <span class="math display">\[\rho = \dfrac{w_a - W_{\infty}}{w_{a-1} - W_{\infty}}.\]</span> In MSEtool, <span class="math inline">\(a = k+2\)</span> is arbitrarily chosen to calculate <span class="math inline">\(\rho\)</span>, where <span class="math inline">\(k\)</span> is the age of knife-edge selectivity. From catch and effort data alone, the age corresponding to the length of 50% maturity is chosen for <span class="math inline">\(k\)</span>.</p>
 </div>
-<div id="dynamics-equations" class="section level2">
-<h2><span class="header-section-number">2.2</span> Dynamics equations</h2>
+<div id="dynamics-equations" class="section level2" number="2.2">
+<h2 number="2.2"><span class="header-section-number">2.2</span> Dynamics equations</h2>
 <p>The population biomass <span class="math inline">\(B_t\)</span> and abundance <span class="math inline">\(N_t\)</span> in year <span class="math inline">\(t\)</span> is given by <span class="math display">\[ \begin{align}
 B_t &amp;= s_{t-1}(\tilde{\alpha} N_{t-1} + \rho B_{t-1}) + w_k R_t\\
 N_t &amp;= s_{t-1} N_{t-1} + R_t,
@@ -382,18 +395,18 @@ N_t &amp;= s_{t-1} N_{t-1} + R_t,
 <p>The predicted catch is <span class="math display">\[\hat{C}_t = \hat{u}_t \hat{B}_t ,\]</span> where the circumflex <span class="math inline">\(^\)</span> denotes the model estimate.</p>
 <p>The likelihood <span class="math inline">\(L\)</span> of the observed catch <span class="math inline">\(C_t\)</span>, assuming a lognormal distribution, is <span class="math display">\[\log(C_t) \sim N(\log[\hat{C}_t], \omega^2).\]</span> where <span class="math inline">\(\omega\)</span> is the standard deviation of the catch.</p>
 </div>
-<div id="stock-recruit-parameters" class="section level2">
-<h2><span class="header-section-number">2.3</span> Stock-recruit parameters</h2>
-<div id="beverton-holt-relationship" class="section level3">
-<h3><span class="header-section-number">2.3.1</span> Beverton-Holt relationship</h3>
+<div id="stock-recruit-parameters" class="section level2" number="2.3">
+<h2 number="2.3"><span class="header-section-number">2.3</span> Stock-recruit parameters</h2>
+<div id="beverton-holt-relationship" class="section level3" number="2.3.1">
+<h3 number="2.3.1"><span class="header-section-number">2.3.1</span> Beverton-Holt relationship</h3>
 <p>Assuming a Beverton-Holt stock recruit relationship and spawning occurring after fishing in each annual time step, then recruitment (at age <span class="math inline">\(k\)</span>) in year <span class="math inline">\(t\)</span> is: <span class="math display">\[ R_t = \dfrac{\alpha B_{t-k}}{1 + \beta B_{t-k}},\]</span> where <span class="math display">\[ \begin{align}
 \alpha &amp;= \dfrac{4hR_0}{(1-h)B_0}\\
 \beta &amp;= \dfrac{5h-1}{(1-h)B_0},
 \end{align}\]</span></p>
 <p>Unfished recruitment <span class="math inline">\(R_0\)</span> and steepness <span class="math inline">\(h\)</span> are estimated parameters, with unfished biomass <span class="math inline">\(B_0\)</span> calculated as <span class="math display">\[B_0 =  R_0 \phi_0.\]</span> The unfished biomass per recruit <span class="math inline">\(\phi_0\)</span> is <span class="math display">\[\phi_0 = \dfrac{\tilde{\alpha} \exp(-M) + w_k (1 - \exp(-M))}{1 - \rho \exp(-M)}\]</span> and is obtained by solving the equilibrium equation for biomass, <span class="math inline">\(B_0 = \exp(-M)(\tilde{\alpha}N_0 + \rho B_0) + w_k R_0\)</span>, is solved for <span class="math inline">\(B_0/R_0\)</span>, with <span class="math inline">\(N_0 = R_0/(1−\exp(-M))\)</span>.</p>
 </div>
-<div id="ricker-equation" class="section level3">
-<h3><span class="header-section-number">2.3.2</span> Ricker equation</h3>
+<div id="ricker-equation" class="section level3" number="2.3.2">
+<h3 number="2.3.2"><span class="header-section-number">2.3.2</span> Ricker equation</h3>
 <p>Assuming a Ricker stock-recruit relationship, the recruitment is <span class="math display">\[ R_t = \alpha B_{t-k}\exp[-\beta B_{t-k}],\]</span> where <span class="math display">\[ \begin{align}
 \alpha &amp;= \dfrac{(5h)^{1.25} R_0}{B_0}\\
 \beta &amp;= \dfrac{5}{4B_0}\log(5h),
@@ -402,15 +415,15 @@ N_t &amp;= s_{t-1} N_{t-1} + R_t,
 </div>
 </div>
 </div>
-<div id="continuous-delay-differential-model-cdd" class="section level1">
-<h1><span class="header-section-number">3</span> Continuous Delay-Differential model (cDD)</h1>
+<div id="continuous-delay-differential-model-cdd" class="section level1" number="3">
+<h1 number="3"><span class="header-section-number">3</span> Continuous Delay-Differential model (cDD)</h1>
 <p>Compared to the discrete delay-difference (annual time-step in production and fishing), the delay-differential model (cDD) is based on continuous recruitment and fishing mortality within a time-step. The continuous model works much better for populations with high turnover (e.g. high F or M, continuous reproduction).</p>
-<div id="growth-1" class="section level2">
-<h2><span class="header-section-number">3.1</span> Growth</h2>
+<div id="growth-1" class="section level2" number="3.1">
+<h2 number="3.1"><span class="header-section-number">3.1</span> Growth</h2>
 <p>Growth in weight is modeled as a von Bertalanffy equation: <span class="math display">\[ \dfrac{dw_{a,t}}{da} = \kappa (W_{\infty} - w_{a,t}).\]</span> A solution to Equation 19 is <span class="math display">\[w_{a+1,t} = W_{\infty} + (w_{a,t} - W_{\infty})\exp(-\kappa).\]</span> From a mean weight-at-age schedule for ages <span class="math inline">\(a = k, k+1, \ldots\)</span>, a non-linear regression can be used to obtain <span class="math inline">\(\kappa\)</span>.</p>
 </div>
-<div id="dynamics-equations-1" class="section level2">
-<h2><span class="header-section-number">3.2</span> Dynamics equations</h2>
+<div id="dynamics-equations-1" class="section level2" number="3.2">
+<h2 number="3.2"><span class="header-section-number">3.2</span> Dynamics equations</h2>
 <p>The governing equations for the pooled biomass <span class="math inline">\(B_t\)</span> and abundance <span class="math inline">\(N_t\)</span> over time <span class="math inline">\(t\)</span> can be written as <span class="math display">\[ \begin{align}
 \dfrac{dN_t}{dt} &amp;= \dfrac{d}{dt} \int N_{a,t}da\\
 \dfrac{dB_t}{dt} &amp;= \dfrac{d}{dt} \int w_{a,t}N_{a,t}da,
@@ -433,21 +446,21 @@ C_t &amp;= \int F_t B_s ds\\
 <p>The predicted index is <span class="math display">\[\hat{I}_t=\hat{q}\hat{B}_t.\]</span></p>
 <p>The likelihood of the observed index <span class="math inline">\(I_t\)</span>, assuming a lognormal distribution, is <span class="math display">\[\log(I_t) \sim N(\log[\hat{I}_t],\sigma^2),\]</span> where <span class="math inline">\(\sigma\)</span> is the standard deviation of the index.</p>
 </div>
-<div id="stock-recruit-parameters-1" class="section level2">
-<h2><span class="header-section-number">3.3</span> Stock-recruit parameters</h2>
+<div id="stock-recruit-parameters-1" class="section level2" number="3.3">
+<h2 number="3.3"><span class="header-section-number">3.3</span> Stock-recruit parameters</h2>
 <p>The stock-recruit parameters are estimated in the same way as the delay difference model, except unfished abundance <span class="math inline">\(N_0\)</span> and biomass <span class="math inline">\(B_0\)</span> are calculated as <span class="math display">\[\begin{align}
 B_0 &amp;= \dfrac{w_k + \dfrac{\kappa W_{\infty}}{M}}{M + \kappa}R_0\\
 N_0 &amp;= \dfrac{R_0}{M}.
 \end{align}\]</span></p>
 </div>
 </div>
-<div id="state-space-version-dd_ss-and-cdd_ss" class="section level1">
-<h1><span class="header-section-number">4</span> State-space version (DD_SS and cDD_SS)</h1>
+<div id="state-space-version-dd_ss-and-cdd_ss" class="section level1" number="4">
+<h1 number="4"><span class="header-section-number">4</span> State-space version (DD_SS and cDD_SS)</h1>
 <p>In the state-space version, annual recruitment deviates from the stock-recruit relationship are estimated. The recruitment in year <span class="math inline">\(t\)</span> is <span class="math display">\[ R_t = \dfrac{\alpha B_{t-k}}{1 + \beta B_{t-k}} \exp(\delta_t - 0.5 \tau^2)\]</span> or <span class="math display">\[ R_t = \alpha B_{t-k}\exp(-\beta B_{t-k})\exp(\delta_t - 0.5 \tau^2),\]</span> where <span class="math inline">\(\delta_t\)</span> are recruitment deviations in lognormal space and <span class="math inline">\(\tau\)</span> is the standard deviation of the recruitment deviations.</p>
 <p>The likelihood of the estimated log-recruitment deviations <span class="math inline">\(\hat{\delta}_t\)</span> <span class="math display">\[\hat{\delta}_t \sim N(0, \tau^2).\]</span></p>
 </div>
-<div id="references" class="section level1">
-<h1><span class="header-section-number">5</span> References</h1>
+<div id="references" class="section level1" number="5">
+<h1 number="5"><span class="header-section-number">5</span> References</h1>
 <p>Carruthers, T., Walters, C.J., and McAllister, M.K. 2012. Evaluating methods that classify fisheries stock status using only fisheries catch data. Fisheries Research 119-120:66-79.</p>
 <p>Hilborn, R., and Walters, C. 1992. Quantitative Fisheries Stock Assessment: Choice, Dynamics and Uncertainty. Chapman and Hall, New York.</p>
 </div>

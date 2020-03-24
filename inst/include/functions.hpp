@@ -1,7 +1,3 @@
-#include "ns/ns_cDD.hpp"
-#include "ns/ns_SCA.hpp"
-#include "ns/ns_VPA.hpp"
-#include "ns/ns_SRA_scope.hpp"
 
 //posfun from ADMB
 template<class Type>
@@ -45,6 +41,18 @@ Type calc_sigma(vector<Type> I_y, vector<Type> Ipred_y) {
   return sigma;
 }
 
+// Calculates analytical solution of a lognormal variable
+//template<class Type>
+//Type calc_sigma(matrix<Type> I_y, matrix<Type> Ipred_y, int nsurvey) {
+//  vector<Type> sigma(nsurvey);
+//  for(int sur=0;sur<nsurvey;sur++) {
+//    vector<Type> obs = I_y.col(sur);
+//    vector<Type> pred = Ipred_y.col(sur);
+//    sigma(sur) = calc_sigma(obs, pred);
+//  }
+//  return sigma;
+//}
+
 // Calculates analytical solution of catchability when conditioned on catch and
 // index is lognormally distributed.
 template<class Type>
@@ -61,6 +69,7 @@ Type calc_q(vector<Type> I_y, vector<Type> B_y) {
   Type q = exp(num/n_y);
   return q;
 }
+
 
 
 
@@ -87,40 +96,74 @@ Type Ricker_SR(Type SSB, Type h, Type R0, Type SSB0) {
   return Rpred;
 }
 
-// Sub-annual time steps for SP and iteratively find the F that predicts the observed catch
+#include "ns/ns_cDD.hpp"
+#include "ns/ns_SCA.hpp"
+#include "ns/ns_VPA.hpp"
+#include "ns/ns_SRA_scope.hpp"
+#include "ns/ns_SP.hpp"
+
+
+// This is the Newton solver for the fleet-specific F in year y given the observed catches.
+// Let vector x = log(F_y,f)
+// Then g(x) = Cpred - Cobs = sum_a v_y,a,f F_y,f / Z_y,a * (1 - exp(-Z_y,a)) * N_y,a * wt_y,a - Cobs
+// g'(x) = sum_a v * N * w * deriv where deriv is defined in the code below
+// We iteratively solve for x where x_next = x_previous - g(x)/g'(x)
 template<class Type>
-Type SP_F(Type U_start, Type C_hist, Type MSY, Type K, Type n, Type nterm, Type dt, int nstep, int nitF,
-          vector<Type> &Cpred, vector<Type> &B, int y, Type &penalty) {
+vector<Type> Newton_SRA_F(matrix<Type> C_hist, matrix<Type> N, matrix<Type> M, matrix<Type> wt, matrix<Type> VB_out, array<Type> vul,
+                          Type max_F, int y, int max_age, int nfleet, int nit_F, Type &penalty) {
 
-  Type F = -log(1 - U_start);
-  if(dt < 1) {
-    for(int i=0;i<nitF;i++) {
-      Type Catch = 0;
-      Type B_next = B(y);
-
-      for(int seas=0;seas<nstep;seas++) {
-        Type SP = CppAD::CondExpEq(n, Type(1), -exp(Type(1.0)) * MSY * B_next / K * log(B_next/K),
-                                   nterm/(n-1) * MSY * (B_next/K - pow(B_next/K, n))) - F * B_next;
-        SP *= dt;
-        Catch += F * B_next * dt;
-        B_next += SP;
-      }
-
-      if(i==nitF-1) {
-        B(y+1) = B_next;
-        Cpred(y) = Catch;
-      } else {
-        F *= C_hist/Catch;
-      }
-    }
-  } else {
-    Cpred(y) = C_hist;
-    F = CppAD::CondExpLt(1 - C_hist/B(y), Type(0.025), 1 - posfun(1 - C_hist/B(y), Type(0.025), penalty), C_hist/B(y));
-    B(y+1) = B(y) + CppAD::CondExpEq(n, Type(1), -exp(Type(1.0)) * MSY * B(y) / K * log(B(y)/K),
-      nterm/(n-1) * MSY * (B(y)/K - pow(B(y)/K, n))) - F * B(y);
+  vector<Type> F_out(nfleet);
+  vector<Type> x_loop(nfleet);
+  vector<Type> C_hist_y = C_hist.row(y);
+  for(int ff=0;ff<nfleet;ff++) { // Starting values of x = log(F)
+    Type F_start = CppAD::CondExpGt(C_hist(y,ff)/VB_out(y,ff), Type(0.95), Type(3), -log(1 - C_hist(y,ff)/VB_out(y,ff)));
+    x_loop(ff) = log(F_start);
   }
 
-  return F;
+  for(int i=0;i<nit_F;i++) { // Loop for Newton-Raphson
+    vector<Type> Z = M.row(y);
+    matrix<Type> VB(max_age, nfleet);
+    vector<Type> Cpred(nfleet);
+    vector<Type> F_loop(nfleet);
+    Cpred.setZero();
+
+    for(int ff=0;ff<nfleet;ff++) {
+      F_loop(ff) = exp(x_loop(ff));
+      VB.col(ff) = N.row(y);
+      for(int a=0;a<max_age;a++) {
+        VB(a,ff) *= vul(y,a,ff) * wt(y,a);
+        Z(a) += vul(y,a,ff) * F_loop(ff);
+      }
+    }
+
+    for(int ff=0;ff<nfleet;ff++) {
+      for(int a=0;a<max_age;a++) Cpred(ff) += VB(a,ff) * F_loop(ff) * (1 - exp(-Z(a)))/Z(a);
+    }
+
+    if(i<nit_F-1) {
+      vector<Type> Newton_fn = Cpred - C_hist_y;
+      vector<Type> Newton_gr(nfleet);
+      Newton_gr.setZero();
+      for(int ff=0;ff<nfleet;ff++) {
+        for(int a=0;a<max_age;a++) {
+          Type deriv = F_loop(ff) * Z(a);
+          deriv -= vul(y,a,ff) * F_loop(ff) * F_loop(ff);
+          deriv *= 1 - exp(-Z(a));
+          deriv += vul(y,a,ff) * F_loop(ff) * F_loop(ff) * Z(a) * exp(-Z(a));
+          deriv /= Z(a) * Z(a);
+          Newton_gr(ff) += VB(a,ff) * deriv;
+        }
+      }
+      x_loop -= Newton_fn/Newton_gr; // Newton-Raphson
+
+    } else {
+      for(int ff=0;ff<nfleet;ff++) {
+        Type tmp = max_F - F_loop(ff);
+        F_out(ff) = CppAD::CondExpLt(tmp, Type(0), max_F - posfun(tmp, Type(0), penalty), F_loop(ff)); //posfun
+      }
+    }
+  }
+  return F_out;
 }
 
 
@@ -134,7 +177,6 @@ Type SP_F(Type U_start, Type C_hist, Type MSY, Type K, Type n, Type nterm, Type 
 #include "SCA_Pope.hpp"
 #include "SCA2.hpp"
 #include "SP.hpp"
-#include "SP_SS.hpp"
 #include "SRA_scope.hpp"
 #include "VPA.hpp"
 

@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
+
+<meta name="date" content="2020-05-04" />
+
+<title>2b. Configuring selectivity for the SRA model</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">2b. Configuring selectivity for the SRA model</h1>
+<h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
+<h4 class="date">2020-05-04</h4>
+
+
+<div id="TOC">
+<ul>
+<li><a href="#introduction"><span class="toc-section-number">1</span> Introduction</a></li>
+<li><a href="#fleet-selectivity"><span class="toc-section-number">2</span> Fleet selectivity</a>
+<ul>
+<li><a href="#time-blocks-for-selectivity"><span class="toc-section-number">2.1</span> Time blocks for selectivity</a></li>
+<li><a href="#selectivity-of-each-block"><span class="toc-section-number">2.2</span> Selectivity of each block</a></li>
+<li><a href="#starting-values-of-selectivity-parameters"><span class="toc-section-number">2.3</span> Starting values of selectivity parameters</a></li>
+<li><a href="#fixing-and-sharing-parameters"><span class="toc-section-number">2.4</span> Fixing and sharing parameters</a></li>
+</ul></li>
+<li><a href="#survey-selectivity"><span class="toc-section-number">3</span> Survey selectivity</a>
+<ul>
+<li><a href="#is-survey-selectivity-already-parameterized-elsewhere"><span class="toc-section-number">3.1</span> Is survey selectivity already parameterized elsewhere?</a></li>
+<li><a href="#selectivity-function"><span class="toc-section-number">3.2</span> Selectivity function</a></li>
+<li><a href="#selectivity-parameters"><span class="toc-section-number">3.3</span> Selectivity parameters</a></li>
+</ul></li>
+</ul>
+</div>
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({ TeX: { equationNumbers: {autoNumber: "all"} } });
+</script>
+<style type="text/css">
+
+body{ /* Normal  */
+   font-size: 12px;
+}
+td {  /* Table  */
+   font-size: 8px;
+}
+h1 { /* Header 1 */
+ font-size: 18px;
+ color: DarkBlue;
+}
+h2 { /* Header 2 */
+ font-size: 15px;
+ color: DarkBlue;
+}
+h3 { /* Header 3 */
+ font-size: 14px;
+ color: DarkBlue;
+}
+code.r{ /* Code block */
+  font-size: 10px;
+}
+pre { /* Code block */
+  font-size: 10px
+}
+</style>
+<p><br></p>
+<div id="introduction" class="section level1" number="1">
+<h1 number="1"><span class="header-section-number">1</span> Introduction</h1>
+<p>There are a multitude of options available in how selectivity for fleets and surveys is parameterized in the model. This vignette is designed to be a step-by-step guide for setup of selectivity. Familiarity with the more general <a href="SRA_scope.html">SRA vignette</a> and the function help page (found by typing <code>?SRA_scope</code> into the R console) will be helpful.</p>
+<p>This vignette is designed to provide step-by-step information on possible model configurations, but of course it is up to the user to decide whether those configurations are appropriate for the operating model conditioning.</p>
+<p>The general function call for <code>SRA_scope</code> is:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a>SRA &lt;-<span class="st"> </span><span class="kw">SRA_scope</span>(OM, data, ...)</span></code></pre></div>
+<p>where the <code>SRA</code> is of class SRA, <code>OM</code> is a class OM object, <code>data</code> is a list, and <code>...</code> are additional function arguments explained below.</p>
+</div>
+<div id="fleet-selectivity" class="section level1" number="2">
+<h1 number="2"><span class="header-section-number">2</span> Fleet selectivity</h1>
+<div id="time-blocks-for-selectivity" class="section level2" number="2.1">
+<h2 number="2.1"><span class="header-section-number">2.1</span> Time blocks for selectivity</h2>
+<p>Fleet selectivity can be vary in time blocks. We define the selectivity for each block and then assign the blocks to fleets. Let’s say we have 2 fleets, a 10-year time series, and the first fleet selectivity changes in year 6. Thus, we have 3 selectivity blocks and assign the block for each fleet and year with a 10 by 2 matrix:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a>data<span class="op">$</span>nsel_block &lt;-<span class="st"> </span><span class="dv">3</span> <span class="co"># There are three blocks</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a>data<span class="op">$</span>sel_block</span>
+<span id="cb2-3"><a href="#cb2-3"></a><span class="co">#&gt;       [,1] [,2]</span></span>
+<span id="cb2-4"><a href="#cb2-4"></a><span class="co">#&gt;  [1,]    1    3</span></span>
+<span id="cb2-5"><a href="#cb2-5"></a><span class="co">#&gt;  [2,]    1    3</span></span>
+<span id="cb2-6"><a href="#cb2-6"></a><span class="co">#&gt;  [3,]    1    3</span></span>
+<span id="cb2-7"><a href="#cb2-7"></a><span class="co">#&gt;  [4,]    1    3</span></span>
+<span id="cb2-8"><a href="#cb2-8"></a><span class="co">#&gt;  [5,]    1    3</span></span>
+<span id="cb2-9"><a href="#cb2-9"></a><span class="co">#&gt;  [6,]    2    3</span></span>
+<span id="cb2-10"><a href="#cb2-10"></a><span class="co">#&gt;  [7,]    2    3</span></span>
+<span id="cb2-11"><a href="#cb2-11"></a><span class="co">#&gt;  [8,]    2    3</span></span>
+<span id="cb2-12"><a href="#cb2-12"></a><span class="co">#&gt;  [9,]    2    3</span></span>
+<span id="cb2-13"><a href="#cb2-13"></a><span class="co">#&gt; [10,]    2    3</span></span></code></pre></div>
+<p>By default, a unique block is assigned to each fleet, i.e., no time-varying element, and the above code chunk is not needed.</p>
+</div>
+<div id="selectivity-of-each-block" class="section level2" number="2.2">
+<h2 number="2.2"><span class="header-section-number">2.2</span> Selectivity of each block</h2>
+<p>We specify the selectivity as a character vector with each entry corresponding to block:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a>selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span></code></pre></div>
+<p>These functions are described in <a href="SRA_scope_eq.html">Vignette #2a</a>.</p>
+</div>
+<div id="starting-values-of-selectivity-parameters" class="section level2" number="2.3">
+<h2 number="2.3"><span class="header-section-number">2.3</span> Starting values of selectivity parameters</h2>
+<p>For logistic and dome selectivity, the default behavior is to generate starting values from <code>OM@LFS</code>, <code>OM@L5</code>, and <code>OM@Vmaxlen</code>. Custom start values are needed when selectivity uses free parameters.</p>
+<p>Custom starting values are passed to the model with the <code>vul_par</code> matrix (the terms selectivity and vulnerability are used interchangeably). If only logistic or dome options are used, then <code>vul_par</code> is a matrix of 3 rows (corresponding to LFS, L5, and Vmaxlen) and <code>data$nsel_block</code> columns:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a>selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;dome&quot;</span>)</span>
+<span id="cb4-2"><a href="#cb4-2"></a>vul_par</span>
+<span id="cb4-3"><a href="#cb4-3"></a><span class="co">#&gt;      [,1] [,2] [,3]</span></span>
+<span id="cb4-4"><a href="#cb4-4"></a><span class="co">#&gt; [1,]   55 55.0 20.0</span></span>
+<span id="cb4-5"><a href="#cb4-5"></a><span class="co">#&gt; [2,]   30 30.0 19.0</span></span>
+<span id="cb4-6"><a href="#cb4-6"></a><span class="co">#&gt; [3,]    1  0.5  0.9</span></span></code></pre></div>
+<p>Note that Vmaxlen is ultimately not used, and if <code>vul_par</code> is provided, another step is needed to turn off this parameter (see next subsection).</p>
+<p>If we have selectivity as free parameters (independent parameters for each age), <code>vul_par</code> has <code>OM@maxage</code> rows with each row giving the selectivity value to the corresponding age (first row = age-1, etc.):</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a>OM<span class="op">@</span>maxage &lt;-<span class="st"> </span><span class="dv">6</span></span>
+<span id="cb5-2"><a href="#cb5-2"></a>selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span>
+<span id="cb5-3"><a href="#cb5-3"></a>vul_par</span>
+<span id="cb5-4"><a href="#cb5-4"></a><span class="co">#&gt;      [,1] [,2] [,3]</span></span>
+<span id="cb5-5"><a href="#cb5-5"></a><span class="co">#&gt; [1,]   55 45.0  0.1</span></span>
+<span id="cb5-6"><a href="#cb5-6"></a><span class="co">#&gt; [2,]   30 30.0  0.3</span></span>
+<span id="cb5-7"><a href="#cb5-7"></a><span class="co">#&gt; [3,]    1  0.5  0.7</span></span>
+<span id="cb5-8"><a href="#cb5-8"></a><span class="co">#&gt; [4,]   NA   NA  1.0</span></span>
+<span id="cb5-9"><a href="#cb5-9"></a><span class="co">#&gt; [5,]   NA   NA  1.0</span></span>
+<span id="cb5-10"><a href="#cb5-10"></a><span class="co">#&gt; [6,]   NA   NA  1.0</span></span></code></pre></div>
+</div>
+<div id="fixing-and-sharing-parameters" class="section level2" number="2.4">
+<h2 number="2.4"><span class="header-section-number">2.4</span> Fixing and sharing parameters</h2>
+<p>Selectivity parameters may be fixed or shared. For TMB, this is accomplished by the <code>map</code> argument, which can be provided in <code>SRA_scope</code> via the <code>map_vul_par</code> matrix. Shared parameters are assigned a unique integer while fixed parameters are assigned <code>NA</code>. Let’s look at the first <code>vul_par</code> example again:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a>selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;dome&quot;</span>)</span>
+<span id="cb6-2"><a href="#cb6-2"></a>vul_par</span>
+<span id="cb6-3"><a href="#cb6-3"></a><span class="co">#&gt;      [,1] [,2] [,3]</span></span>
+<span id="cb6-4"><a href="#cb6-4"></a><span class="co">#&gt; [1,]   55 55.0 20.0</span></span>
+<span id="cb6-5"><a href="#cb6-5"></a><span class="co">#&gt; [2,]   30 30.0 19.0</span></span>
+<span id="cb6-6"><a href="#cb6-6"></a><span class="co">#&gt; [3,]    1  0.5  0.9</span></span></code></pre></div>
+<p>We want:</p>
+<ul>
+<li>LFS and L5 for the first two blocks to be identical</li>
+<li>Vmaxlen in the third block to be fixed</li>
+<li>The parameter reserved for Vmaxlen for the first block to be turned off since it’s not needed</li>
+<li>All other parameters are estimated unique parameters</li>
+</ul>
+<p>The matrix <code>map_vul_par</code> that accomplishes these tasks will look like this:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a>map_vul_par</span>
+<span id="cb7-2"><a href="#cb7-2"></a><span class="co">#&gt;      [,1] [,2] [,3]</span></span>
+<span id="cb7-3"><a href="#cb7-3"></a><span class="co">#&gt; [1,]    1    1    4</span></span>
+<span id="cb7-4"><a href="#cb7-4"></a><span class="co">#&gt; [2,]    2    2    5</span></span>
+<span id="cb7-5"><a href="#cb7-5"></a><span class="co">#&gt; [3,]   NA    3   NA</span></span></code></pre></div>
+<p>For the second <code>vul_par</code> example, we want:</p>
+<ul>
+<li>Selectivity of block three to be estimated only for age 1 and 2</li>
+<li>The parameter reserved for Vmaxlen for the first block to be turned off since it’s not needed</li>
+<li>Rows 4-6 for the first two blocks to be turned off (undefined in the model)</li>
+</ul>
+<p>The matrix <code>map_vul_par</code> that accomplishes these tasks will look like this:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a>selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span>
+<span id="cb8-2"><a href="#cb8-2"></a>map_vul_par</span>
+<span id="cb8-3"><a href="#cb8-3"></a><span class="co">#&gt;      [,1] [,2] [,3]</span></span>
+<span id="cb8-4"><a href="#cb8-4"></a><span class="co">#&gt; [1,]    1    3    6</span></span>
+<span id="cb8-5"><a href="#cb8-5"></a><span class="co">#&gt; [2,]    2    4    7</span></span>
+<span id="cb8-6"><a href="#cb8-6"></a><span class="co">#&gt; [3,]   NA    5   NA</span></span>
+<span id="cb8-7"><a href="#cb8-7"></a><span class="co">#&gt; [4,]   NA   NA   NA</span></span>
+<span id="cb8-8"><a href="#cb8-8"></a><span class="co">#&gt; [5,]   NA   NA   NA</span></span>
+<span id="cb8-9"><a href="#cb8-9"></a><span class="co">#&gt; [6,]   NA   NA   NA</span></span></code></pre></div>
+</div>
+</div>
+<div id="survey-selectivity" class="section level1" number="3">
+<h1 number="3"><span class="header-section-number">3</span> Survey selectivity</h1>
+<p>Next we can move on to survey selectivity. Unlike fleet selectivity, selectivity is unique to each survey and no time blocks are used.</p>
+<div id="is-survey-selectivity-already-parameterized-elsewhere" class="section level2" number="3.1">
+<h2 number="3.1"><span class="header-section-number">3.1</span> Is survey selectivity already parameterized elsewhere?</h2>
+<p>The vector <code>data$I_type</code> defines where the survey selectivity is defined (the terms index and survey are used interchangeably). Survey selectivity may be identical to fleet selectivity, i.e., vulnerable biomass, total biomass, or spawning biomass. If we have 5 surveys with:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>data<span class="op">$</span>I_type &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">2</span>, <span class="st">&quot;SSB&quot;</span>, <span class="st">&quot;B&quot;</span>, <span class="st">&quot;est&quot;</span>, <span class="st">&quot;est&quot;</span>)</span></code></pre></div>
+<p>The first survey has the selectivity of the second fleet (note the integer does not refer to selectivity blocks), while “SSB” indicates the second survey selectivity follows the maturity ogive, and “B” refers to a total biomass survey (selectivity = 1 for all ages).</p>
+<p>If selectivity is otherwise not defined elsewhere, then “est” is used to indicate that the survey selectivity is estimated, or more precisely, this survey has its own set of parameters.</p>
+</div>
+<div id="selectivity-function" class="section level2" number="3.2">
+<h2 number="3.2"><span class="header-section-number">3.2</span> Selectivity function</h2>
+<p>After declaring <code>I_type</code>, the selectivity function needs to be declared for surveys with estimated parameters.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a>s_selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span></code></pre></div>
+<p>For the fourth and fifth surveys, the selectivity functions are dome-shaped and free parameters, respectively. A placeholder is needed for the first three surveys solely for internal organization so that the code correctly matches the selectivity to the survey.</p>
+</div>
+<div id="selectivity-parameters" class="section level2" number="3.3">
+<h2 number="3.3"><span class="header-section-number">3.3</span> Selectivity parameters</h2>
+<p>Just as in the fleet parameters, the survey selectivity parameters by default use <code>OM@LFS</code>, <code>OM@L5</code>, and <code>OM@Vmaxlen</code> for start values when s_selectivity = “logistic” or “dome”, and custom start values needed when selectivity uses free parameters.</p>
+<p>Custom start values are passed to the SRA in the <code>s_vul_par</code> matrix with the same layout as that for the fleet blocks:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a>OM<span class="op">@</span>maxage &lt;-<span class="st"> </span><span class="dv">6</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a>data<span class="op">$</span>I_type &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">2</span>, <span class="st">&quot;SSB&quot;</span>, <span class="st">&quot;B&quot;</span>, <span class="st">&quot;est&quot;</span>, <span class="st">&quot;est&quot;</span>)</span>
+<span id="cb11-3"><a href="#cb11-3"></a>s_selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span>
+<span id="cb11-4"><a href="#cb11-4"></a>s_vul_par</span>
+<span id="cb11-5"><a href="#cb11-5"></a><span class="co">#&gt;      [,1] [,2] [,3] [,4] [,5]</span></span>
+<span id="cb11-6"><a href="#cb11-6"></a><span class="co">#&gt; [1,]    0    0    0 55.0    1</span></span>
+<span id="cb11-7"><a href="#cb11-7"></a><span class="co">#&gt; [2,]    0    0    0 40.0    0</span></span>
+<span id="cb11-8"><a href="#cb11-8"></a><span class="co">#&gt; [3,]    0    0    0  0.5    0</span></span>
+<span id="cb11-9"><a href="#cb11-9"></a><span class="co">#&gt; [4,]    0    0    0  0.0    0</span></span>
+<span id="cb11-10"><a href="#cb11-10"></a><span class="co">#&gt; [5,]    0    0    0  0.0    0</span></span>
+<span id="cb11-11"><a href="#cb11-11"></a><span class="co">#&gt; [6,]    0    0    0  0.0    0</span></span></code></pre></div>
+<p>Parameter slots for surveys 1 - 3 are ignored, the first three rows in column four are the start values for the three paramaters of the dome function, and the fifth survey only selects age-1 animals, i.e., a survey of recruits.</p>
+<p>Finally, to remove parameters from estimation either because they’re just placeholders (surveys 1-3) or they should be fixed in the model (survey 5), we provide the map argument for <code>s_vul_par</code> with <code>map_s_vul_par</code>:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a>map_s_vul_par</span>
+<span id="cb12-2"><a href="#cb12-2"></a><span class="co">#&gt;      [,1] [,2] [,3] [,4] [,5]</span></span>
+<span id="cb12-3"><a href="#cb12-3"></a><span class="co">#&gt; [1,]   NA   NA   NA    1   NA</span></span>
+<span id="cb12-4"><a href="#cb12-4"></a><span class="co">#&gt; [2,]   NA   NA   NA    2   NA</span></span>
+<span id="cb12-5"><a href="#cb12-5"></a><span class="co">#&gt; [3,]   NA   NA   NA    3   NA</span></span>
+<span id="cb12-6"><a href="#cb12-6"></a><span class="co">#&gt; [4,]   NA   NA   NA   NA   NA</span></span>
+<span id="cb12-7"><a href="#cb12-7"></a><span class="co">#&gt; [5,]   NA   NA   NA   NA   NA</span></span>
+<span id="cb12-8"><a href="#cb12-8"></a><span class="co">#&gt; [6,]   NA   NA   NA   NA   NA</span></span></code></pre></div>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

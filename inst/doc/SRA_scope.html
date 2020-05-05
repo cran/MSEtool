@@ -12,9 +12,9 @@
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2020-03-23" />
+<meta name="date" content="2020-05-04" />
 
-<title>Description of the SRA model for conditioning DLMtool operating models</title>
+<title>2. Description of the SRA model for conditioning DLMtool operating models</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -313,9 +313,9 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">Description of the SRA model for conditioning DLMtool operating models</h1>
+<h1 class="title toc-ignore">2. Description of the SRA model for conditioning DLMtool operating models</h1>
 <h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2020-03-23</h4>
+<h4 class="date">2020-05-04</h4>
 
 
 <div id="TOC">
@@ -324,26 +324,12 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <li><a href="#stock-reduction-analysis-sra-for-conditioning-dlmtool-operating-models"><span class="toc-section-number">2</span> Stock Reduction Analysis (SRA) for conditioning DLMtool operating models</a>
 <ul>
 <li><a href="#model-configuration-of-the-sra"><span class="toc-section-number">2.1</span> Model configuration of the SRA</a></li>
-<li><a href="#updated-parameters-and-sra-model-evaluation"><span class="toc-section-number">2.2</span> Updated parameters and SRA model evaluation</a></li>
+<li><a href="#data-limited-cases"><span class="toc-section-number">2.2</span> Data-limited cases</a></li>
+<li><a href="#updated-parameters-and-sra-model-evaluation"><span class="toc-section-number">2.3</span> Updated parameters and SRA model evaluation</a></li>
 </ul></li>
 <li><a href="#case-study"><span class="toc-section-number">3</span> Case study</a></li>
-<li><a href="#mathematical-description-of-the-sra-model"><span class="toc-section-number">4</span> Mathematical description of the SRA model</a>
-<ul>
-<li><a href="#selectivity-and-mortality"><span class="toc-section-number">4.1</span> Selectivity and mortality</a></li>
-<li><a href="#initial-population-distribution"><span class="toc-section-number">4.2</span> Initial population distribution</a></li>
-<li><a href="#dynamics-equations"><span class="toc-section-number">4.3</span> Dynamics equations</a></li>
-<li><a href="#catch-at-age"><span class="toc-section-number">4.4</span> Catch at age</a></li>
-<li><a href="#catch-at-length"><span class="toc-section-number">4.5</span> Catch-at-length</a></li>
-<li><a href="#survey"><span class="toc-section-number">4.6</span> Survey</a></li>
-<li><a href="#likelihoods"><span class="toc-section-number">4.7</span> Likelihoods</a></li>
-</ul></li>
-<li><a href="#estimated-parameters"><span class="toc-section-number">5</span> Estimated parameters</a>
-<ul>
-<li><a href="#selectivity"><span class="toc-section-number">5.1</span> Selectivity</a></li>
-<li><a href="#fishing-mortality"><span class="toc-section-number">5.2</span> Fishing mortality</a></li>
-<li><a href="#index-catchability"><span class="toc-section-number">5.3</span> Index catchability</a></li>
-<li><a href="#other-parameters"><span class="toc-section-number">5.4</span> Other parameters</a></li>
-</ul></li>
+<li><a href="#mathematical-description-of-the-sra-model"><span class="toc-section-number">4</span> Mathematical description of the SRA model</a></li>
+<li><a href="#additional-resources"><span class="toc-section-number">5</span> Additional resources</a></li>
 <li><a href="#references"><span class="toc-section-number">6</span> References</a></li>
 </ul>
 </div>
@@ -434,11 +420,15 @@ pre { /* Code block */
 <p>The SRA will pick up this change in the model as well.</p>
 <p>The easiest way to turn off time-varying growth and M is to set:</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a>OM<span class="op">@</span>Linfsd &lt;-<span class="st"> </span>OM<span class="op">@</span>Ksd &lt;-<span class="st"> </span>OM<span class="op">@</span>Msd &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">0</span>, <span class="dv">0</span>)</span></code></pre></div>
-<p>Selectivity is fixed if no age or length compositions are provided. Otherwise, the ascending limb of selectivity is estimated with age or length composition data. If the selectivity is assumed to be dome-shaped, then the descending limb can either be fixed values sampled from slot <code>OM@Vmaxlen</code> or estimated in the SRA.</p>
 <p>Information about the slots in the OM object can be viewed through <code>class?OM</code>. If passing custom objects to the operating model that override default inputs (e.g., for time-varying parameters), then <code>DLMtool::validcpars()</code> will be helpful for setting up and indexing the dimensions of the custom objects.</p>
 </div>
-<div id="updated-parameters-and-sra-model-evaluation" class="section level2" number="2.2">
-<h2 number="2.2"><span class="header-section-number">2.2</span> Updated parameters and SRA model evaluation</h2>
+<div id="data-limited-cases" class="section level2" number="2.2">
+<h2 number="2.2"><span class="header-section-number">2.2</span> Data-limited cases</h2>
+<p>By default, the function estimates selectivity when age or length compositions are provided. If the selectivity is assumed to be dome-shaped, then the descending limb can either be fixed values sampled from slot <code>OM@Vmaxlen</code> or estimated in the SRA. If no composition data are provided, then all selectivity parameters are fixed. The <code>selectivity</code> argument is used to determine whether the selectivity is dome-shaped (<code>OM@Vmaxlen</code> is used) or logistic. Selectivity must be fixed when only mean lengths are available.</p>
+<p>If the model is conditioned on effort (with no catch data), then unfished recruitment <code>R0</code> is fixed to the value in <code>OM@R0</code> (predicted catches are conditional on the value of <code>R0</code>). With catch data are also available while conditioning on effort (incomplete catch time series are permissible), the <code>R0</code> can be scaled the population to generate the observed catches. The scalar is a multiplicative factor that minimizes the sum of squared differences between observed and predicted catches.</p>
+</div>
+<div id="updated-parameters-and-sra-model-evaluation" class="section level2" number="2.3">
+<h2 number="2.3"><span class="header-section-number">2.3</span> Updated parameters and SRA model evaluation</h2>
 <p>Historical OM parameters that are updated by the SRA scoping function include:</p>
 <ul>
 <li>Unfished recruitment <code>OM@R0</code>, only if catch is provided.</li>
@@ -475,121 +465,11 @@ pre { /* Code block */
 </div>
 <div id="mathematical-description-of-the-sra-model" class="section level1" number="4">
 <h1 number="4"><span class="header-section-number">4</span> Mathematical description of the SRA model</h1>
-<div id="selectivity-and-mortality" class="section level2" number="4.1">
-<h2 number="4.1"><span class="header-section-number">4.1</span> Selectivity and mortality</h2>
-<p>Selectivity <span class="math inline">\(v\)</span> is length-based and modeled as a double-exponential function (using base 2). For fleet <span class="math inline">\(f\)</span> with flat-topped selectivity, two parameters are used, the length of 5% selectivity (<span class="math inline">\(L^5_f\)</span>) and the length of full selectivity <span class="math inline">\(L^{\textrm{FS}}_f\)</span>. For dome selectivity, a third parameter, the selectivity at <span class="math inline">\(L_{\infty}\)</span>, <span class="math inline">\(V^{L_{\infty}}_f\)</span> is also used. Length-based selectivity is converted to age-based selectivity in the age-structured model as:</p>
-<p><span class="math display">\[ v_{y,a,f} = 
-\begin{cases}
-2^{-[(L_{y,a} - L^{\textrm{FS}}_f)/(\sigma^{\textrm{asc}}_f)]^2} &amp; \textrm{if } L_{y,a} &lt; L^{\textrm{FS}}_f\\ 
-1 &amp; \textrm{if logistic and } L_{y,a} \ge L^{\textrm{FS}}_f,\\
-2^{-[(L_{y,a} - L^{\textrm{FS}}_f)/(\sigma^{\textrm{des}}_f)]^2} &amp; \textrm{if dome and } L_{y,a} \ge L^{\textrm{FS}}_f
-\end{cases}
-\]</span></p>
-<p>where <span class="math inline">\(L_{y,a}\)</span> is the mean length-at-age in year <span class="math inline">\(y\)</span>, and <span class="math inline">\(\sigma^{\textrm{asc}}_f = (L^5_f - L^{\textrm{FS}}_f)/\sqrt{-\log_2(0.05)}\)</span> and <span class="math inline">\(\sigma^{\textrm{des}}_f = (L_{\infty} - L^{\textrm{FS}}_f)/\sqrt{-\log_2(V^{L_{\infty}})}\)</span> control the shape of the ascending and descending limbs, respectively, of the selectivity function. In this parameterization, length-based selectivity is constant over time. The corresponding age-based selectivity is constant over time if growth is not time-varying.</p>
-<p>Total mortality <span class="math inline">\(Z\)</span> in year <span class="math inline">\(y\)</span> and for age <span class="math inline">\(a\)</span> is the sum of fishing mortality <span class="math inline">\(F\)</span> from all fleets and natural mortality <span class="math inline">\(M\)</span>,</p>
-<p><span class="math display">\[ Z_{y,a} = M_{y,a} + \Sigma_f v_{y,a,f} F_{y,f}.\]</span></p>
+<p>This section has been moved to a separate <a href="SRA_scope_eq.html">vignette</a>.</p>
 </div>
-<div id="initial-population-distribution" class="section level2" number="4.2">
-<h2 number="4.2"><span class="header-section-number">4.2</span> Initial population distribution</h2>
-<p>The population age distribution in the first year of the model <span class="math inline">\(y=1\)</span> is in equilibrium where <span class="math display">\[ N_{1,a} = 
-\begin{cases}
-      R^{\textrm{eq}} \exp(-\Sigma_{i=1}^{a-1}Z^{\textrm{eq}}_i) &amp; a = 1, \ldots, A-1\\
-      \dfrac{R^{\textrm{eq}} \exp(-\Sigma_{i=1}^{a-1}Z^{\textrm{eq}}_i)}{1 - \exp(-Z^{\textrm{eq}}_A)} &amp; a = A,
-\end{cases}
-\]</span> where the <span class="math inline">\(R^{\textrm{eq}}\)</span> is the equilibrium recruitment and <span class="math inline">\(Z^{\textrm{eq}}_a = M_{1,a} + \Sigma_f v_{1,a,f} F^{\textrm{eq}}_f\)</span> is the equilibrium total mortality rate. Unfished conditions are modeled by setting <span class="math inline">\(F^{\textrm{eq}}_f = 0\)</span>. To estimate <span class="math inline">\(F^{\textrm{eq}}_f\)</span>, the corresponding equilibrium catch in weight <span class="math inline">\(\tilde{C}^{\textrm{eq}}_f\)</span> prior to the first year of the model should be provided. In the equilibrium yield curve, <span class="math inline">\(F^{\textrm{eq}}_f\)</span> would be the fishing mortality corresponding to fishing at <span class="math inline">\(F^{\textrm{eq}}_f\)</span>. Once <span class="math inline">\(Z^{\textrm{eq}}_a\)</span> is obtained, then the equilibrium recruitment is calculated as:</p>
-<p><span class="math display">\[ R^{\textrm{eq}} = 
-\begin{cases}
-      \dfrac{\alpha^{\textrm{B}}\phi^{\textrm{eq}} - 1}{\beta^{\textrm{B}}\phi^{\textrm{eq}}} &amp; \textrm{if Beverton-Holt stock-recruit relationship}\\
-      \dfrac{\log(\alpha^{\textrm{R}}\phi^{\textrm{eq}})}{\beta^{\textrm{R}}\phi^{\textrm{eq}}} &amp; \textrm{if Ricker stock-recruit relationship}
-\end{cases},
-\]</span> where <span class="math inline">\(\phi^{\textrm{eq}}\)</span> is the spawners-per-recruit when the mortality is <span class="math inline">\(Z^{\textrm{eq}}_a\)</span>. From steepness <span class="math inline">\(h\)</span>, <span class="math inline">\(\alpha^{\textrm{B}} = \frac{4h}{(1-h)\phi_0}\)</span>, <span class="math inline">\(\beta^{\textrm{B}} = \frac{5h-1}{(1-h)B^S_0}\)</span>, <span class="math inline">\(\alpha^{\textrm{R}} = \frac{(5h)^{1.25}}{\phi_0}\)</span>, <span class="math inline">\(\beta^{\textrm{R}} = \frac{\log(5h)}{B^S_0}\)</span>, where <span class="math inline">\(\phi_0\)</span> and <span class="math inline">\(B^S_0\)</span> are unfished spawners-per-recruit and unfished spawning biomass, respectively.</p>
-</div>
-<div id="dynamics-equations" class="section level2" number="4.3">
-<h2 number="4.3"><span class="header-section-number">4.3</span> Dynamics equations</h2>
-<p>After setting the equilibrium population age distribution in the first year of the model, the population abundance <span class="math inline">\(N_{y,a}\)</span> in subsequent years is <span class="math display">\[ N_{y,a} =
-\begin{cases}
-      R_y &amp; a = 1\\
-      N_{y-1,a-1} \exp(-Z_{y-1,a-1}) &amp; a = 2, \ldots, A - 1,\\
-      N_{y-1,a-1} \exp(-Z_{y-1,a-1}) + N_{y-1,a} \exp(-Z_{y-1,a}) &amp; a = A
-\end{cases}
-\]</span> where <span class="math inline">\(R_y\)</span> is the recruitment and <span class="math inline">\(A\)</span> is the maximum-age as the plus-group. Recruitment is modelled as <span class="math display">\[ R_y = 
-\begin{cases}
-      \dfrac{\alpha^{\textrm{BH}} B^S_{y-1}}{1 + \beta^{\textrm{BH}}B^S_{y-1}} \exp(\delta_y - 0.5 \tau^2) &amp; \textrm{if Beverton-Holt stock-recruit relationship}\\
-      \alpha^{\textrm{Ricker}} B^S_{y-1} \exp(-\beta^{\textrm{Ricker}} B^S_{y-1})\exp(\delta_y - 0.5 \tau^2) &amp; \textrm{if Ricker stock-recruit relationship}
-\end{cases},
-\]</span> where <span class="math inline">\(\delta_y\)</span> are recruitment deviates and <span class="math inline">\(\tau\)</span> is the standard deviation of the deviates.</p>
-<p>The spawning biomass is <span class="math inline">\(B^S_y\)</span> is <span class="math display">\[B^S_y = \sum_a w_{y,a} m_{y,a} N_{y,a},\]</span> where <span class="math inline">\(m_{y,a}\)</span> and <span class="math inline">\(w_{y,a}\)</span> are the maturity at age and weight at age, respectively.</p>
-</div>
-<div id="catch-at-age" class="section level2" number="4.4">
-<h2 number="4.4"><span class="header-section-number">4.4</span> Catch at age</h2>
-<p>The catch (in numbers) <span class="math inline">\(C^N\)</span> at age for fleet <span class="math inline">\(f\)</span> is <span class="math display">\[ C^N_{y,a,f} = \dfrac{v_{y,a,f} F_{y,f}}{Z_{y,a}} N_{y,a} (1 - \exp[-Z_{y,a}]).\]</span></p>
-<p>If the model is conditioned on catch, then <span class="math inline">\(F_{y,f}\)</span> can be estimated as parameters or solved iteratively to match the observed catch. If the model is conditioned on effort, then <span class="math display">\[ F_{y,f} = q_f E_{y,f},\]</span> where <span class="math inline">\(E_{y,f}\)</span> is the observed effort and <span class="math inline">\(q_f\)</span> is the scaling coefficient.</p>
-</div>
-<div id="catch-at-length" class="section level2" number="4.5">
-<h2 number="4.5"><span class="header-section-number">4.5</span> Catch-at-length</h2>
-<p>The catch at length is calculated assuming a normally distributed length-at-age <span class="math inline">\(P(\ell,a)\)</span>, where <span class="math display">\[ C^N_{y,\ell,f} = \sum_a C^N_{y,a,f} P(\ell|a) \]</span> and</p>
-<p><span class="math display">\[ P(\ell|a) = 
-\begin{cases}
-      \phi(L&#39;_{\ell+1}) &amp; \ell = 1\\
-      \phi(L&#39;_{\ell+1}) - \phi(L&#39;_\ell) &amp; \ell = 2, \ldots, L - 1,\\
-      1 -\phi(L&#39;_\ell) &amp; \ell = L
-\end{cases}
-\]</span> with <span class="math inline">\(L&#39;_{\ell}\)</span> as the length at the lower boundary of length bin <span class="math inline">\(\ell\)</span> and <span class="math inline">\(\phi(L&#39;_{\ell})\)</span> as the cumulative distribution function of a normal variable with mean <span class="math inline">\(\tilde{L}_{y,a}\)</span> (the expected mean length at age <span class="math inline">\(a\)</span>) and standard deviation <span class="math inline">\(\tilde{L}_{y,a} \times CV^L\)</span> (<span class="math inline">\(CV^L\)</span> is the coefficient of variation in mean length at age).</p>
-<p>The catch in weight <span class="math inline">\(\tilde{C}\)</span> is <span class="math display">\[ \tilde{C}_{y,f} = \sum_a C^N_{y,a,f} w_{y,a}.\]</span></p>
-<p>The mean length of the catch <span class="math inline">\(\bar{L}_{y,f}\)</span> is <span class="math display">\[ \bar{L}_{y,f} = \dfrac{\sum_{\ell} L_{\ell} C^N_{y,\ell,f}}{\sum_{\ell} C^N_{y,\ell,f}},\]</span> where <span class="math inline">\(L_\ell\)</span> is the midpoint of the length bin <span class="math inline">\(\ell\)</span>.</p>
-<p>The proportion of the catch-at-age is <span class="math display">\[ p_{y,a,f} = \dfrac{C^N_{y,a,f}}{\sum_a C^N_{y,a,f}}.\]</span></p>
-<p>The proportion of the catch-at-length is <span class="math display">\[ p_{y,\ell,f} = \dfrac{C^N_{y,\ell,f}}{\sum_{\ell}C^N_{y,\ell,f}}.\]</span></p>
-</div>
-<div id="survey" class="section level2" number="4.6">
-<h2 number="4.6"><span class="header-section-number">4.6</span> Survey</h2>
-<p>If the <span class="math inline">\(s^{\textrm{th}}\)</span> survey is biomass-based, then the survey value <span class="math inline">\(I_{y,s}\)</span> is calculated as <span class="math display">\[ I_{y,s} = q_s \sum_a v_{y,a,s} N_{y,a} w_{y,a}, \]</span> where <span class="math inline">\(q\)</span> is the scaling coefficient and <span class="math inline">\(s\)</span> indexes survey.</p>
-<p>If the survey is abundance-based, then <span class="math display">\[ I_{y,s} = q_s \sum_a v_{y,a,s} N_{y,a} . \]</span></p>
-</div>
-<div id="likelihoods" class="section level2" number="4.7">
-<h2 number="4.7"><span class="header-section-number">4.7</span> Likelihoods</h2>
-<p>If the model is conditioned on catch and fishing mortality rates are estimated parameters, then the log-likelihood component <span class="math inline">\(\Lambda_1\)</span> of the catch is <span class="math display">\[\Lambda_1 = \sum_f \left[\lambda^{\tilde{C}}_f \sum_y \left(-\log(0.01) - \dfrac{[\log(\tilde{C}^{\textrm{obs}}_{y,f}) - \log(\tilde{C}^{\textrm{pred}}_{y,f})]^2}{2 \times 0.01^2}\right)\right],\]</span></p>
-<p>where <span class="math inline">\(\textrm{obs}\)</span> and <span class="math inline">\(\textrm{pred}\)</span> indicate observed and predicted quantities, respectively, and <span class="math inline">\(\lambda\)</span> are likelihood weights. With a small standard deviation for the catch likelihood relative to the variance in other likelihood components, the predicted catch should match the observed catch.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_2\)</span> of survey data is <span class="math display">\[\Lambda_2 = \sum_s \left[ \lambda^I_s \sum_y \left(-\log(\sigma_{y,s}) - \dfrac{[\log(I^{\textrm{obs}}_{y,s}) - \log(I^{\textrm{pred}}_{y,s})]^2}{2\sigma_{y,s}^2}\right) \right].\]</span></p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_3\)</span> of catch-at-age data is <span class="math display">\[\Lambda_3 = \sum_f \lambda^A_f \left[\sum_y O^A_{y,f} \sum_a p^{\textrm{obs}}_{y,a,f} \log(p^{\textrm{pred}}_{y,a,f})\right],\]</span> where <span class="math inline">\(O^A\)</span> is the annual sample sizes for the age compositions.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_4\)</span> of catch-at-length data is <span class="math display">\[\Lambda_4 = \sum_f \lambda^L_f \left[ \sum_y O^L_{y,f} \sum_{\ell} p^{\textrm{obs}}_{y,\ell,f} \log(p^{\textrm{pred}}_{y,\ell,f})\right]\]</span> where <span class="math inline">\(O^L\)</span> is the annual sample sizes for the length compositions.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_5\)</span> of observed mean lengths in the catch is <span class="math display">\[\Lambda_5 = \sum_f \lambda^{\bar{L}}_f\left[ \sum_y \left(-\log(\omega_f) - \dfrac{[\bar{L}^{\textrm{obs}}_{y,f} - \bar{L}^{\textrm{pred}}_{y,f}]^2}{2 \omega^2_f}\right)\right],\]</span> where <span class="math inline">\(\omega_f\)</span> is the standard deviation of mean lengths.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_6\)</span> of annual estimated recruitment deviates <span class="math inline">\(\delta_y\)</span> in log space is <span class="math display">\[\Lambda_6 = \Sigma_y\left(-\log(\tau) - \dfrac{\delta_y^2}{2 \tau^2}\right),\]</span> where <span class="math inline">\(\tau\)</span> is the standard deviation of recruitment deviates.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_7\)</span> of the equilibrium catch is <span class="math display">\[\Lambda_7 = \sum_f \lambda^{\tilde{C}}_f \left(-\log(0.01) - \dfrac{[\log(\tilde{C}^{\textrm{eq,obs}}_f) - \log(\tilde{C}^{\textrm{eq,pred}}_f)]^2}{2 \times 0.01^2}\right),\]</span></p>
-<p>The total log-likelihood <span class="math inline">\(\textrm{LL}\)</span> to be maximized is <span class="math display">\[\textrm{LL} = \sum_{i=1}^7\Lambda_i.\]</span></p>
-</div>
-</div>
-<div id="estimated-parameters" class="section level1" number="5">
-<h1 number="5"><span class="header-section-number">5</span> Estimated parameters</h1>
-<p>The estimated parameters, denoted in this section as <span class="math inline">\(x\)</span>, are unconstrained over all real numbers and then transformed in order to constrain the corresponding model parameters. For optimization, the transformation is also designed to reduce the scale of all estimated parameters to within an order of magnitude.</p>
-<div id="selectivity" class="section level2" number="5.1">
-<h2 number="5.1"><span class="header-section-number">5.1</span> Selectivity</h2>
-<p>For a fleet <span class="math inline">\(f\)</span> or survey <span class="math inline">\(s\)</span> for which selectivity is estimated, then parameters <span class="math inline">\(x^{LFS}_f\)</span> and <span class="math inline">\(x^{L5}_f\)</span> are estimated over all real numbers, where</p>
-<p><span class="math display">\[ \begin{align}
-L^{\textrm{FS}}_f &amp;= 0.99 \times L_{\infty} \times \textrm{logit}^{-1}(x^{LFS}_f)\\
-L^5_f &amp;= L^{\textrm{FS}}_f - \exp(x^{L5}_f) 
-\end{align}\]</span></p>
-<p>If a third parameter <span class="math inline">\(x^{V}_f\)</span>is estimated for dome selectivity, then <span class="math display">\[ V^{L_{\infty}}_f = \textrm{logit}^{-1}(x^V_f)\]</span></p>
-</div>
-<div id="fishing-mortality" class="section level2" number="5.2">
-<h2 number="5.2"><span class="header-section-number">5.2</span> Fishing mortality</h2>
-<p>If <span class="math inline">\(F_{y,f}\)</span> are estimated parameters (<code>condition = &quot;catch&quot;</code>), then one parameter <span class="math inline">\(x^F_f\)</span> is the estimated <span class="math inline">\(F\)</span> in log-space in the middle of the time series is estimated and all others are subsequent deviations, represented as <span class="math inline">\(x^{F_{dev}}_{y,f}\)</span>:</p>
-<p><span class="math display">\[ F_{y,f} = 
-\begin{cases}
-\exp(x^F_f) &amp; y \textrm{ is midpoint of the time series}\\ 
-\exp(x^F_f) \times \exp(x^{F_{dev}}_{y,f}) &amp; \textrm{otherwise}\\
-\end{cases}
-\]</span></p>
-<p>If <code>condition = &quot;effort&quot;</code>, then <span class="math inline">\(q_f\)</span> is estimated in log space, where <span class="math display">\[F_{y,f} = q_f E_{y,f} = \exp(x^q_f) \times E_{y,f}\]</span></p>
-</div>
-<div id="index-catchability" class="section level2" number="5.3">
-<h2 number="5.3"><span class="header-section-number">5.3</span> Index catchability</h2>
-<p>To scale biomass to index values, the index catchability <span class="math inline">\(q_s\)</span> is solved analytically in the model:</p>
-<p><span class="math display">\[ q_s = \exp\left(\dfrac{\sum_y \log(I^{\textrm{obs}}_{y,s}) - \sum_y \log(\sum_a v_{y,a,s}N_{y,a,s})}{n_s}\right),\]</span> or <span class="math display">\[ q_s = \exp\left(\dfrac{\sum_y \log(I^{\textrm{obs}}_{y,s}) - \sum_y \log(\sum_a v_{y,a,s}N_{y,a,s}w_{y,a})}{n_s}\right),\]</span> for an abundance or biomass based index, respectively, where <span class="math inline">\(n_s\)</span> is the number of years with index values and the summation is over those <span class="math inline">\(n_s\)</span> years.</p>
-</div>
-<div id="other-parameters" class="section level2" number="5.4">
-<h2 number="5.4"><span class="header-section-number">5.4</span> Other parameters</h2>
-<p>Unfished recruitment is estimated in log-space, <span class="math inline">\(R_0 = \dfrac{1}{z}\exp(x^{R_0})\)</span> where <span class="math inline">\(z\)</span> is an optional rescaler, e.g. mean historical catch, to reduce the magnitude of the <span class="math inline">\(x^{R_0}\)</span> estimate. Recruitment deviations <span class="math inline">\(\delta_y\)</span> are directly estimated.</p>
-</div>
+<div id="additional-resources" class="section level1" number="5">
+<h1 number="5"><span class="header-section-number">5</span> Additional resources</h1>
+<p>The help file for <code>SRA_scope</code> will provide more information on the possible inputs for the model. The help file for the SRA class (obtained by typing <code>class?SRA</code> into the R console) describes the outputs from the function. An additional <a href="SRA_scope_sel.html">vignette</a> is available to describe set up of fleet and survey selectivity in the function call.</p>
 </div>
 <div id="references" class="section level1" number="6">
 <h1 number="6"><span class="header-section-number">6</span> References</h1>

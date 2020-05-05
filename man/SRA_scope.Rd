@@ -35,11 +35,11 @@ steepness, maturity parameters (L50 and L50_95), standard deviation of recruitme
 \item{condition}{String to indicate whether the SRA model is conditioned on "catch" (where F is estimated), "catch2" (where F is solved internally using Newton's method),
 or "effort".}
 
-\item{selectivity}{A character vector of length nfleet to indicate \code{"logistic"} or \code{"dome"} selectivity for each fleet in \code{Chist}.}
+\item{selectivity}{A character vector of length nfleet to indicate \code{"logistic"} or \code{"dome"} selectivity for each fleet in \code{Chist}.
+If there is time-varying selectivity, this is a characte vector of length nsel_block (see Data section below).}
 
 \item{s_selectivity}{A vector of length nsurvey to indicate \code{"logistic"} or \code{"dome"} selectivity for each survey in \code{Index}. Use a number
-for an age-specific index.
-Only used if any of the corresponding entries of \code{data$I_type = "est"} or if a number is specified here.}
+for an age-specific index. Only used if any of the corresponding entries of \code{data$I_type = "est"} or if a number is specified here.}
 
 \item{LWT}{A named list of likelihood weights for the SRA model. See details.}
 
@@ -68,7 +68,7 @@ respectively, for the multinomial likelihood function. The effective sample size
 \item{sims}{A logical vector of length \code{OM@nsim} or a numberic vector indicating which simulations to keep.}
 }
 \value{
-An object of class \linkS4class{SRA}, including the updated operating model object.
+An object of class \linkS4class{SRA} (see link for description of output).
 }
 \description{
 Intended for conditioning operating models for data-limited stocks. From a historical time series of total catch or effort, and potentially
@@ -94,6 +94,7 @@ or survey, otherwise estimated.
 \item map_s_vul_par: The map argument for the survey selectivity parameters (same dimension as s_vul_par). Placeholder parameters should have a map value of NA.
 \item map_log_rec_dev: A vector of length OM@nyears that indexes which recruitment deviates are fixed (using NA) or estimated (a separate integer).
 \item plusgroup: Logical for whether the maximum age is a plusgroup or not.
+\item fix_dome: Logical for whether the dome selectivity parameter for fleets is fixed. Used primarily for backwards compatibility, this is overridden by map_vul_par.
 }
 
 Survey selectivity is estimated only if \code{s_CAA} or \code{s_CAL} is provided. Otherwise, the selectivity should
@@ -124,6 +125,17 @@ See section D.5 of \code{DLMtool::userguide()}.
 
 The easiest way to turn off time-varying growth/M is by setting: \code{OM@Msd <- OM@Linfsd <- OM@Ksd <- c(0, 0)}.
 }
+\section{Vignette}{
+
+Three vignettes are available for the SRA model:
+
+\itemize{
+\item \href{../doc/SRA_scope.html}{General overview of approach}
+\item \href{../doc/SRA_scope_eq.html}{Mathematical description}
+\item \href{../doc/SRA_scope_sel.html}{Setup of selectivity settings} (useful for more data-rich cases)
+}
+}
+
 \section{Data}{
 
 One of indices, age compositions, or length compositions should be provided in addition to the historical catch or effort. Not all arguments
@@ -161,6 +173,9 @@ Zero (default) implies unfished conditions in year one. Otherwise, this is used 
 \item I_units - Optional, an integer vector to indicate whether indices are biomass based (1) or abundance-based (0). By default, all are biomass-based.
 \item age_error - Optional, a square matrix of maxage rows and columns to specify ageing error. The aa-th column assigns a proportion of the true age in the
 a-th row to observed age. Thus, all \code{rowSums(age_error)} should be 1. Default is an identity matrix (no ageing error).
+\item sel_block - Optional, for time-varying fleet selectivity (in time blocks), a matrix of nyears x nfleet that assigns a selectivity function to a fleet-year combination.
+See \href{../doc/SRA_scope_sel.html}{selectivity} vignette.
+\item nsel_block - Optional, the number of selectivity blocks.
 }
 
 Selectivity is fixed to values sampled from \code{OM} if no age or length compositions are provided.

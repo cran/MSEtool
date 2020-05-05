@@ -13,12 +13,17 @@ summary_DD_TMB <- function(Assessment, state_space = FALSE) {
                   "Age of knife-edge selectivity",
                   "Weight at age k")
   rownam <- c("S0", "alpha", "rho", "k", "w_k")
-  if("log_omega" %in% names(obj$env$map)) {
+  if(Assessment@obj$env$data$condition == "effort" && "log_omega" %in% names(obj$env$map)) {
     Value <- c(Value, TMB_report$omega)
     Description <- c(Description, "Catch SD (log-space)")
     rownam <- c(rownam, "omega")
   }
-  if("log_tau" %in% names(obj$env$map)) {
+  if(Assessment@obj$env$data$condition == "catch" && "log_sigma" %in% names(obj$env$map)) {
+    Value <- c(Value, TMB_report$sigma)
+    Description <- c(Description, "Index SD (log-space)")
+    rownam <- c(rownam, "sigma")
+  }
+  if(state_space && "log_tau" %in% names(obj$env$map)) {
     Value <- c(Value, TMB_report$tau)
     Description <- c(Description, "log-Recruitment deviation SD")
     rownam <- c(rownam, "tau")
@@ -85,9 +90,15 @@ rmd_DD_TMB <- function(Assessment, state_space = FALSE, ...) {
 
   # Assessment
   #### Pars and Fit
-  assess_fit <- c(rmd_R0(header = "## Assessment {.tabset}\n### Estimates and Model Fit\n"), rmd_h(),
-                  rmd_sel(age, mat, fig.cap = "Knife-edge selectivity set to the age corresponding to the length of 50% maturity."),
-                  rmd_assess_fit("Catch", "catch"), rmd_assess_resid("Catch"), rmd_assess_qq("Catch", "catch"))
+  assess_all <- c(rmd_R0(header = "## Assessment {.tabset}\n### Estimates and Model Fit\n"), rmd_h(),
+                  rmd_sel(age, mat, fig.cap = "Knife-edge selectivity set to the age corresponding to the length of 50% maturity."))
+
+  if(Assessment@obj$env$data$condition == "effort") {
+    assess_data <- c(rmd_assess_fit("Catch", "catch"), rmd_assess_resid("Catch"), rmd_assess_qq("Catch", "catch"))
+  } else {
+    assess_data <- c(rmd_assess_fit("Index", "index"), rmd_assess_resid("Index"), rmd_assess_qq("Index", "index"))
+  }
+  assess_fit <- c(assess_all, assess_data)
 
   if(state_space) {
     assess_fit2 <- c(rmd_residual("Dev", fig.cap = "Time series of recruitment deviations.", label = Assessment@Dev_type),
@@ -144,7 +155,7 @@ profile_likelihood_DD_TMB <- function(Assessment, ...) {
   joint_profile <- !exists("profile_par")
 
   profile_fn <- function(i, Assessment, params, map) {
-    params$log_R0 <- log(profile_grid[i, 1] * Assessment@info$rescale)
+    params$log_R0 <- log(profile_grid[i, 1] * Assessment@obj$env$data$rescale)
     if(Assessment@info$data$SR_type == "BH") {
       params$transformed_h <- logit((profile_grid[i, 2] - 0.2)/0.8)
     } else {
@@ -197,21 +208,16 @@ retrospective_DD_TMB <- function(Assessment, nyr, state_space = FALSE) {
   dimnames(retro_est) <- list(Peel = 0:nyr, Var = names(SD$par.fixed)[names(SD$par.fixed) != "log_rec_dev"],
                               Value = c("Estimate", "Std. Error"))
 
-  SD <- NULL
-  rescale <- info$rescale
-
-  data_ret <- info$data
-  params_ret <- info$params
-
-  for(i in 0:nyr) {
+  lapply_fn <- function(i, info, obj, state_space) {
     ny_ret <- ny - i
-    data_ret$ny <- ny_ret
-    data_ret$C_hist <- info$data$C_hist[1:ny_ret]
-    data_ret$E_hist <- info$data$E_hist[1:ny_ret]
+    info$data$ny <- ny_ret
+    info$data$C_hist <- info$data$C_hist[1:ny_ret]
+    info$data$E_hist <- info$data$E_hist[1:ny_ret]
+    info$data$I_hist <- info$data$I_hist[1:ny_ret]
 
-    if(state_space) params_ret$log_rec_dev <- rep(0, ny_ret - k)
+    if(state_space) info$params$log_rec_dev <- rep(0, ny_ret - k)
 
-    obj2 <- MakeADFun(data = data_ret, parameters = params_ret, random = obj$env$random, map = obj$env$map,
+    obj2 <- MakeADFun(data = info$data, parameters = info$params, random = obj$env$random, map = obj$env$map,
                       inner.control = info$inner.control, DLL = "MSEtool", silent = TRUE)
     mod <- optimize_TMB_model(obj2, info$control)
     opt2 <- mod[[1]]
@@ -222,15 +228,6 @@ retrospective_DD_TMB <- function(Assessment, nyr, state_space = FALSE) {
       ref_pt <- get_MSY_DD(info$data, report$Arec, report$Brec)
       report <- c(report, ref_pt)
 
-      if(rescale != 1) {
-        vars_div <- c("B0", "B", "Cpred", "BMSY", "MSY", "N0", "N", "R", "R0")
-        vars_mult <- c("Brec")
-        var_trans <- c("R0")
-        fun_trans <- c("/")
-        fun_fixed <- c("log")
-        rescale_report(vars_div, vars_mult, var_trans, fun_trans, fun_fixed)
-      }
-
       U <- c(report$U, rep(NA, k + i))
       U_UMSY <- U/report$UMSY
       B <- c(report$B, rep(NA, k - 1 + i))
@@ -239,16 +236,19 @@ retrospective_DD_TMB <- function(Assessment, nyr, state_space = FALSE) {
       R <- c(report$R, rep(NA, i))
       VB <- B
 
-      retro_ts[i+1, , ] <- cbind(U, U_UMSY, B, B_BMSY, B_B0, R, VB)
+      retro_ts[i+1, , ] <<- cbind(U, U_UMSY, B, B_BMSY, B_B0, R, VB)
 
       sumry <- summary(SD, "fixed")
       sumry <- sumry[rownames(sumry) != "log_rec_dev", drop = FALSE]
-      retro_est[i+1, , ] <- sumry
+      retro_est[i+1, , ] <<- sumry
 
-    } else {
-      message("Non-convergence when peel = ", i, " (years of data removed).")
+      return(SD$pdHess)
     }
+    return(FALSE)
   }
+
+  conv <- vapply(0:nyr, lapply_fn, logical(1), info = info, obj = obj, state_space = state_space)
+  if(any(!conv)) warning("Peels that did not converge: ", paste0(which(!conv) - 1, collapse = " "))
 
   retro <- new("retro", Model = Assessment@Model, Name = Assessment@Name, TS_var = TS_var, TS = retro_ts,
                Est_var = dimnames(retro_est)[[2]], Est = retro_est)
@@ -285,8 +285,6 @@ plot_yield_DD <- function(data, report, umsy, msy, xaxis = c("U", "Biomass", "De
   Surv <- S0 * (1 - u.vector)
 
   BPR <- (Surv * Alpha/(1 - Surv) + wk)/(1 - Rho * Surv)
-  #if(SR_type == "BH") R <- (Arec * BPR * (1 - u.vector)- 1)/(Brec * BPR * (1 - u.vector))
-  #if(SR_type == "Ricker") R <- log(Arec * BPR * (1 - u.vector))/(Brec * BPR * (1 - u.vector))
   if(SR_type == "BH") R <- (Arec * BPR - 1)/(Brec * BPR)
   if(SR_type == "Ricker") R <- log(Arec * BPR)/(Brec * BPR)
 

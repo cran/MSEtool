@@ -9,8 +9,6 @@ Type objective_function<Type>::operator() ()
 
   if(model == "DD") {
     return DD(this);
-  } else if(model == "DD_SS") {
-	return DD_SS(this);
   } else if(model =="SP") {
     return SP(this);
   } else if(model == "grav") {
@@ -27,10 +25,8 @@ Type objective_function<Type>::operator() ()
     return VPA(this);
   } else if(model == "cDD") {
     return cDD(this);
-  } else if(model == "cDD_SS") {
-	return cDD_SS(this);
   } else if(model == "SRA_scope") {
-	return SRA_scope(this);
+    return SRA_scope(this);
   } else {
     error("No model found.");
   }

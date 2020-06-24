@@ -75,7 +75,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   DATA_INTEGER(nit_F);    // When condition = "catch2", the number of iterations for Newton-Raphson method to solve for F
   DATA_INTEGER(plusgroup) // Boolean, whether the maximum age in the plusgroup is modeled.
 
-  PARAMETER(log_R0);                    // Unfished recruitment
+  PARAMETER(R0x);                    // Unfished recruitment
   PARAMETER(transformed_h);             // Steepness
   PARAMETER_MATRIX(vul_par);            // Matrix of vul_par 3 rows and nsel_block columns
   PARAMETER_MATRIX(s_vul_par);          // Matrix of selectivity parameters, 3 rows and nsurvey columns
@@ -91,7 +91,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   int nlbin = length_bin.size();
   Type bin_width = length_bin(1) - length_bin(0);
 
-  Type R0 = exp(log_R0)/rescale;
+  Type R0 = exp(R0x)/rescale;
   Type h;
   if(SR_type == "BH") {
     h = 0.8 * invlogit(transformed_h);
@@ -351,7 +351,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   for(int sur=0;sur<nsurvey;sur++) {
     for(int y=0;y<n_y;y++) {
       if(LWT_Index(sur,0) > 0 && !R_IsNA(asDouble(I_hist(y,sur)))) {
-        nll_Index(sur) -= dnorm(log(I_hist(y,sur)), log(Ipred(y,sur)), sigma_I(y,sur), true);
+        nll_Index(sur) -= dnorm_(log(I_hist(y,sur)), log(Ipred(y,sur)), sigma_I(y,sur), true);
       }
 
       if(LWT_Index(sur,1) > 0 && !R_IsNA(asDouble(s_CAA_n(y,sur))) && s_CAA_n(y,sur) > 0) {
@@ -394,9 +394,9 @@ Type SRA_scope(objective_function<Type> *obj) {
           }
         }
 
-        if(nll_C && LWT_C(ff,0) > 0) nll_Catch(ff) -= dnorm(log(C_hist(y,ff)), log(Cpred(y,ff)), Type(0.01), true);
+        if(nll_C && LWT_C(ff,0) > 0) nll_Catch(ff) -= dnorm_(log(C_hist(y,ff)), log(Cpred(y,ff)), Type(0.01), true);
         if(LWT_C(ff,3) > 0 && !R_IsNA(asDouble(mlen(y,ff))) && mlen(y,ff) > 0) {
-          nll_ML(ff) -= dnorm(mlen(y,ff), mlen_pred(y,ff), sigma_mlen(ff), true);
+          nll_ML(ff) -= dnorm_(mlen(y,ff), mlen_pred(y,ff), sigma_mlen(ff), true);
         }
       }
     }
@@ -407,15 +407,15 @@ Type SRA_scope(objective_function<Type> *obj) {
     nll_ML(ff) *= LWT_C(ff,3);
 
     if(LWT_C(ff,4) > 0 && C_eq(ff) > 0 && condition != "effort") {
-      nll_Ceq(ff) = -1 * LWT_C(ff,4) * dnorm(log(C_eq(ff)), log(C_eq_pred(ff)), Type(0.01), true);
+      nll_Ceq(ff) = -1 * LWT_C(ff,4) * dnorm_(log(C_eq(ff)), log(C_eq_pred(ff)), Type(0.01), true);
     }
   }
 
   for(int y=0;y<n_y;y++) {
-    if(est_rec_dev(y)) nll_log_rec_dev -= dnorm(log_rec_dev(y), Type(0), tau, true);
+    if(est_rec_dev(y)) nll_log_rec_dev -= dnorm_(log_rec_dev(y), Type(0), tau, true);
   }
   for(int a=0;a<max_age-1;a++) {
-    if(est_early_rec_dev(a)) nll_log_rec_dev -= dnorm(log_early_rec_dev(a), Type(0), tau, true);
+    if(est_early_rec_dev(a)) nll_log_rec_dev -= dnorm_(log_early_rec_dev(a), Type(0), tau, true);
   }
 
   Type nll = nll_Catch.sum() + nll_Index.sum();
@@ -424,7 +424,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   nll += nll_log_rec_dev + nll_Ceq.sum();
   nll += penalty + prior;
 
-  if(CppAD::Variable(log_R0)) ADREPORT(R0);
+  if(CppAD::Variable(R0x)) ADREPORT(R0);
   ADREPORT(h);
   if(CppAD::Variable(log_tau)) ADREPORT(tau);
   if(condition == "effort") ADREPORT(q_effort);
@@ -434,7 +434,7 @@ Type SRA_scope(objective_function<Type> *obj) {
   REPORT(length_bin);
   REPORT(Linf);
 
-  REPORT(log_R0);
+  REPORT(R0x);
   REPORT(transformed_h);
   REPORT(vul_par);
   REPORT(LFS);

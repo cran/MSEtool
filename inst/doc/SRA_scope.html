@@ -12,7 +12,7 @@
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2020-05-04" />
+<meta name="date" content="2020-06-24" />
 
 <title>2. Description of the SRA model for conditioning DLMtool operating models</title>
 
@@ -315,7 +315,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">2. Description of the SRA model for conditioning DLMtool operating models</h1>
 <h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2020-05-04</h4>
+<h4 class="date">2020-06-24</h4>
 
 
 <div id="TOC">
@@ -326,6 +326,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <li><a href="#model-configuration-of-the-sra"><span class="toc-section-number">2.1</span> Model configuration of the SRA</a></li>
 <li><a href="#data-limited-cases"><span class="toc-section-number">2.2</span> Data-limited cases</a></li>
 <li><a href="#updated-parameters-and-sra-model-evaluation"><span class="toc-section-number">2.3</span> Updated parameters and SRA model evaluation</a></li>
+<li><a href="#sampling-the-covariance-matrix"><span class="toc-section-number">2.4</span> Sampling the covariance matrix</a></li>
 </ul></li>
 <li><a href="#case-study"><span class="toc-section-number">3</span> Case study</a></li>
 <li><a href="#mathematical-description-of-the-sra-model"><span class="toc-section-number">4</span> Mathematical description of the SRA model</a></li>
@@ -397,7 +398,7 @@ pre { /* Code block */
 <li>Mean lengths (this option is generally for very sparse data scenarios when mean length data are available but not the composition data)</li>
 </ul>
 <p>Multiple surveys and fleets can be accommodated with <code>SRA_scope</code>. One of these several data types in addition to catch or effort is generally needed to obtain depletion estimates. Availability of these data can be quite sparse over time, yet still informative. For example, an age composition sample from a single recent year that shows a very truncated age structure can be sufficient to imply a heavily depleted stock.</p>
-<p>Here are the required pre-specified OM parameters needed for SRA scoping:</p>
+<p>Here are the required pre-specified OM parameters needed for the SRA model:</p>
 <ul>
 <li>Growth (length-at-age) using slots <code>OM@Linf, OM@K, OM@t0</code> (or alternatively, <code>OM@cpars$Len_age</code>)</li>
 <li>Variability in length-at-age <code>OM@LenCV</code> only if length data are used</li>
@@ -429,7 +430,7 @@ pre { /* Code block */
 </div>
 <div id="updated-parameters-and-sra-model-evaluation" class="section level2" number="2.3">
 <h2 number="2.3"><span class="header-section-number">2.3</span> Updated parameters and SRA model evaluation</h2>
-<p>Historical OM parameters that are updated by the SRA scoping function include:</p>
+<p>Historical OM parameters that are updated by the SRA model include:</p>
 <ul>
 <li>Unfished recruitment <code>OM@R0</code>, only if catch is provided.</li>
 <li>Depletion <code>OM@D</code></li>
@@ -457,6 +458,14 @@ pre { /* Code block */
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a>OM<span class="op">@</span>DR &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">0</span>, <span class="dv">0</span>) <span class="co"># All discards are accounted for</span></span>
 <span id="cb6-2"><a href="#cb6-2"></a>OM<span class="op">@</span>Size_area_<span class="dv">1</span> &lt;-<span class="st"> </span>OM<span class="op">@</span>Frac_area_<span class="dv">1</span> &lt;-<span class="st"> </span>OM<span class="op">@</span>Prob_staying &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="fl">0.5</span>, <span class="fl">0.5</span>) <span class="co"># A well-mixed stock in 2 areas of equal sizes</span></span></code></pre></div>
 <p>It may be desirable to compare the SRA to a simple operating model before incorporating more complex dynamics in the operating model.</p>
+</div>
+<div id="sampling-the-covariance-matrix" class="section level2" number="2.4">
+<h2 number="2.4"><span class="header-section-number">2.4</span> Sampling the covariance matrix</h2>
+<p>The procedure above describes conditioning in which we accommodate life history uncertainty within an OM. Alternatively, we may wish to consider incorporate uncertainty with the SRA model fit conditional on a single set of life history values. To do so, we have an OM in which we ensure that all the necessary SRA input parameters, e.g., growth, maturity, M, steepness, etc., are identical among <code>nsim</code> replicates. Then we call <code>SRA_scope</code> with the <code>resample</code> argument:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a>SRA &lt;-<span class="st"> </span><span class="kw">SRA_scope</span>(OM, data, <span class="dt">resample =</span> <span class="ot">TRUE</span>)</span>
+<span id="cb7-2"><a href="#cb7-2"></a><span class="kw">plot</span>(SRA)</span></code></pre></div>
+<p>When <code>resample = TRUE</code>, the function will generate a single model fit, placed in <code>SRA@mean_fit</code>, and then sample the covariance matrix to populate the recruitment, fishing mortality, selectivity slots in the updated OM. If the model has difficulty estimating the stock size, then there should be a high variance in the <code>R0</code> estimate. A wide range of historical biomass among simulations should then be seen in the conditioned OM. The markdown report contains separate panels for evaluating the conditioned OM as well as the single model fit.</p>
+<p>Uncertainty in life history parameters would be accommodated by generating a set of OMs that vary in parameter values such as M and repeating the sampling step for each OM.</p>
 </div>
 </div>
 <div id="case-study" class="section level1" number="3">

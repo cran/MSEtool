@@ -123,13 +123,30 @@ rmd_R0 <- function(header = NULL) {
   fig.cap <- "Estimate of R0, distribution based on normal approximation of estimated covariance matrix."
   ans <- c(paste0("```{r, fig.cap=\"", fig.cap, "\"}"),
            "if(conv) {",
-           "  ind <- names(SD$par.fixed) == \"log_R0\"",
-           "  plot_lognormalvar(SD$par.fixed[ind], sqrt(diag(SD$cov.fixed)[ind]), label = expression(Unfished~~recruitment~~(R[0])), logtransform = TRUE)",
+           "  ind <- names(SD$par.fixed) == \"R0x\"",
+           "  mu <- SD$par.fixed[ind] - log(obj$env$data$rescale)",
+           "  sig <- sqrt(diag(SD$cov.fixed)[ind])",
+           "  plot_lognormalvar(mu, sig, label = expression(Unfished~~recruitment~~(R[0])), logtransform = TRUE)",
            "}",
            "```\n")
   if(!is.null(header)) ans <- c(header, ans)
   return(ans)
 }
+
+rmd_meanR <- function(header = NULL) {
+  fig.cap <- "Estimate of mean recruitment, distribution based on normal approximation of estimated covariance matrix."
+  ans <- c(paste0("```{r, fig.cap=\"", fig.cap, "\"}"),
+           "if(conv) {",
+           "  ind <- names(SD$par.fixed) == \"meanRx\"",
+           "  mu <- SD$par.fixed[ind] - log(obj$env$data$rescale)",
+           "  sig <- sqrt(diag(SD$cov.fixed)[ind])",
+           "  plot_lognormalvar(mu, sig, label = \"Mean recruitment\", logtransform = TRUE)",
+           "}",
+           "```\n")
+  if(!is.null(header)) ans <- c(header, ans)
+  return(ans)
+}
+
 
 rmd_h <- function() {
   fig.cap <- "Estimate of steepness, distribution based on normal approximation of estimated covariance matrix."
@@ -155,12 +172,12 @@ rmd_FMSY <- function(header = NULL) {
   return(ans)
 }
 
-rmd_MSY <- function(par = "log_MSY") {
+rmd_MSY <- function(par = "MSYx") {
   fig.cap <- "Estimate of MSY, distribution based on normal approximation of estimated covariance matrix."
   c(paste0("```{r, fig.cap=\"", fig.cap, "\"}"),
     "if(conv) {",
     paste0("  msy.ind <- names(SD$par.fixed) == \"", par, "\""),
-    "  log.msy <- SD$par.fixed[msy.ind]",
+    "  log.msy <- SD$par.fixed[msy.ind] - log(obj$env$data$rescale)",
     "  log.msy.sd <- sqrt(diag(SD$cov.fixed)[msy.ind])",
     "  plot_lognormalvar(log.msy, log.msy.sd, logtransform = TRUE, label = expression(widehat(MSY)))",
     "}",
@@ -343,6 +360,8 @@ rmd_U_UMSY <- function(conv_check = TRUE, fig.cap = "U/UMSY") {
 }
 
 rmd_SSB <- function() rmd_assess_timeseries("SSB", "spawning biomass", "\"Spawning biomass\"")
+
+rmd_dynamic_SSB0 <- function() rmd_assess_timeseries("dynamic_SSB0", "dynamic SSB0", "\"Dynamic SSB0\"")
 
 rmd_SSB_SSBMSY <- function(conv_check = TRUE) {
   rmd_assess_timeseries("SSB_SSBMSY", "SSB/SSBMSY", "expression(SSB/SSB[MSY])", conv_check = conv_check, one_line = TRUE)

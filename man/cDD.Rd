@@ -8,11 +8,13 @@
 cDD(
   x = 1,
   Data,
+  AddInd = "B",
   SR = c("BH", "Ricker"),
   rescale = "mean1",
   start = NULL,
   fix_h = TRUE,
-  fix_F_equilibrium = TRUE,
+  dep = 1,
+  LWT = NULL,
   n_itF = 5L,
   silent = TRUE,
   opt_hess = FALSE,
@@ -24,13 +26,15 @@ cDD(
 cDD_SS(
   x = 1,
   Data,
+  AddInd = "B",
   SR = c("BH", "Ricker"),
   rescale = "mean1",
   start = NULL,
   fix_h = TRUE,
-  fix_F_equilibrium = TRUE,
   fix_sigma = FALSE,
   fix_tau = TRUE,
+  dep = 1,
+  LWT = NULL,
   n_itF = 5L,
   integrate = FALSE,
   silent = TRUE,
@@ -47,6 +51,10 @@ Otherwise, equals to 1 when running an assessment.}
 
 \item{Data}{An object of class \linkS4class{Data}.}
 
+\item{AddInd}{A vector of integers or character strings indicating the indices to be used in the model. Integers assign the index to
+the corresponding index in Data@AddInd, "B" (or 0) represents total biomass in Data@Ind, "VB" represents vulnerable biomass in
+Data@VInd, and "SSB" represents spawning stock biomass in Data@SpInd.}
+
 \item{SR}{Stock-recruit function (either \code{"BH"} for Beverton-Holt or \code{"Ricker"}).}
 
 \item{rescale}{A multiplicative factor that rescales the catch in the assessment model, which
@@ -57,9 +65,11 @@ Output is re-converted back to original units.}
 
 \item{fix_h}{Logical, whether to fix steepness to value in \code{Data@steep} in the assessment model.}
 
-\item{fix_F_equilibrium}{Logical, whether the equilibrium F prior to the first year of the model is
-estimated. If TRUE, F_equilibruim is fixed to value provided in start (if provided), otherwise, equal to zero
-(assumes unfished conditions).}
+\item{dep}{The initial depletion in the first year of the model. A tight prior is placed on the model objective function
+to estimate the equilibrium fishing mortality corresponding to the initial depletion. Due to this tight prior, this F
+should not be considered to be an independent model parameter.}
+
+\item{LWT}{A vector of likelihood weights for each survey.}
 
 \item{n_itF}{Integer, the number of iterations to solve F conditional on the observed catch.}
 

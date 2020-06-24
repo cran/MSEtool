@@ -15,15 +15,20 @@ Type DD(objective_function<Type> *obj) {
   DATA_INTEGER(k);
   DATA_SCALAR(wk);
   DATA_VECTOR(C_hist);
+  DATA_SCALAR(dep);
   DATA_SCALAR(rescale);
-  DATA_VECTOR(I_hist);
+  DATA_MATRIX(I_hist);
+  DATA_IVECTOR(I_units);
+  DATA_MATRIX(I_sd);
   DATA_VECTOR(E_hist);
   DATA_STRING(SR_type);
   DATA_STRING(condition);
+  DATA_VECTOR(I_lambda);
+  DATA_INTEGER(nsurvey);
+  DATA_INTEGER(fix_sigma);
   DATA_INTEGER(state_space);
-  //DATA_VECTOR_INDICATOR(keep, C_hist);
 
-  PARAMETER(log_R0);
+  PARAMETER(R0x);
   PARAMETER(transformed_h);
   PARAMETER(log_q_effort);
   PARAMETER(U_equilibrium);
@@ -37,11 +42,12 @@ Type DD(objective_function<Type> *obj) {
     h = 0.8 * invlogit(transformed_h);
   } else h = exp(transformed_h);
   h += 0.2;
-  Type R0 = exp(log_R0)/rescale;
+  Type R0 = exp(R0x)/rescale;
   Type q_effort = exp(log_q_effort);
   Type omega = exp(log_omega);
   Type sigma = exp(log_sigma);
   Type tau = exp(log_tau);
+
 
   //--DECLARING DERIVED VALUES
   Type Spr0 = (S0 * Alpha/(1 - S0) + wk)/(1 - Rho * S0);
@@ -75,7 +81,7 @@ Type DD(objective_function<Type> *obj) {
 
   vector<Type> Surv(ny);
   vector<Type> Cpred(ny);
-  vector<Type> Ipred(ny);
+  matrix<Type> Ipred(ny,nsurvey);
   vector<Type> Sp(ny);
   vector<Type> U(ny);
 
@@ -94,7 +100,10 @@ Type DD(objective_function<Type> *obj) {
   N(0) = Req/(1 - Seq);
   for(int tt=0;tt<k;tt++) R(tt) = Req;
 
-  Type penalty = 0;
+  Type Ceqpred = B(0) * U_equilibrium;
+
+  Type penalty = 0; // Penalty to likelihood for high U > 0.95
+  Type prior = -dnorm_(log(B(0)/B0), log(dep), Type(0.01), true); // Penalty for initial depletion to get the corresponding U_equilibrium
 
   for(int tt=0; tt<ny; tt++){
     if(condition == "catch") {
@@ -125,23 +134,35 @@ Type DD(objective_function<Type> *obj) {
   //--ARGUMENTS FOR NLL
   // Objective function
   //creates storage for nll and sets value to 0
-  Type q = calc_q(I_hist, B);
-  for(int tt=0;tt<ny;tt++) Ipred(tt) = q * B(tt);
+  vector<Type> q(nsurvey);
+  if(condition == "catch") q = calc_q(I_hist, B, N, Ipred, nsurvey, I_units);
 
-  vector<Type> nll_comp(2);
+  vector<Type> nll_comp(nsurvey + 1);
   nll_comp.setZero();
 
   for(int tt=0; tt<ny; tt++){
-    if(condition == "effort" && C_hist(tt) > 0) {
-      nll_comp(0) -= dnorm(log(C_hist(tt)), log(Cpred(tt)), omega, true);
-    } if(I_hist(tt) > 0) {
-      nll_comp(0) -= dnorm(log(I_hist(tt)), log(Ipred(tt)), sigma, true);
+    if(condition == "effort") {
+      if(C_hist(tt) > 0) nll_comp(0) -= dnorm(log(C_hist(tt)), log(Cpred(tt)), omega, true);
+    } else {
+      for(int sur=0;sur<nsurvey;sur++) {
+        for(int tt=0;tt<ny;tt++) {
+          if(I_lambda(sur) > 0 && !R_IsNA(asDouble(I_hist(tt,sur)))) {
+            if(fix_sigma) {
+              nll_comp(sur) -= dnorm_(log(I_hist(tt,sur)), log(Ipred(tt,sur)), I_sd(tt,sur), true);
+            } else {
+              nll_comp(sur) -= dnorm(log(I_hist(tt,sur)), log(Ipred(tt,sur)), sigma, true);
+            }
+          }
+        }
+        nll_comp(sur) *= I_lambda(sur);
+      }
+
     }
-    if(state_space && tt + k < ny) nll_comp(1) -= dnorm(log_rec_dev(tt), Type(0), tau, true);
+    if(state_space && tt + k < ny) nll_comp(nsurvey) -= dnorm(log_rec_dev(tt), Type(0), tau, true);
   }
 
   //Summing individual nll and penalties
-  Type nll = nll_comp.sum() + penalty;
+  Type nll = nll_comp.sum() + penalty + prior;
 
   //-------REPORTING-------//
   ADREPORT(R0);
@@ -152,7 +173,7 @@ Type DD(objective_function<Type> *obj) {
   if(CppAD::Variable(log_sigma)) ADREPORT(sigma);
   if(CppAD::Variable(log_tau)) ADREPORT(tau);
   if(condition == "effort") REPORT(omega);
-  if(condition == "catch") REPORT(sigma);
+  if(!fix_sigma) REPORT(sigma);
   if(state_space) REPORT(tau);
   REPORT(nll_comp);
   REPORT(nll);
@@ -160,6 +181,7 @@ Type DD(objective_function<Type> *obj) {
   REPORT(Brec);
   REPORT(Spr0);
   REPORT(Cpred);
+  REPORT(Ceqpred);
   REPORT(Ipred);
   REPORT(q);
   if(condition == "effort") REPORT(q_effort);
@@ -174,6 +196,7 @@ Type DD(objective_function<Type> *obj) {
   REPORT(N0);
   REPORT(B0);
   REPORT(penalty);
+  REPORT(prior);
 
   return nll;
 }

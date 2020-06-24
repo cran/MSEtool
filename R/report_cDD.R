@@ -65,14 +65,14 @@ rmd_cDD <- function(Assessment, state_space = FALSE, ...) {
                   rmd_mat(age, mat, fig.cap = "Assumed knife-edge maturity at age corresponding to length of 50% maturity."))
 
   # Data section
-  data_section <- c(rmd_data_timeseries("Catch", header = "## Data\n"), rmd_data_timeseries("Index"))
+  data_section <- c(rmd_data_timeseries("Catch", header = "## Data\n"),
+                    rmd_data_timeseries("Index", is_matrix = is.matrix(Assessment@Obs_Index), nsets = ncol(Assessment@Obs_Index)))
 
   # Assessment
   #### Pars and Fit
   assess_fit <- c(rmd_R0(header = "## Assessment {.tabset}\n### Estimates and Model Fit\n"), rmd_h(),
                   rmd_sel(age, mat, fig.cap = "Knife-edge selectivity set to the age corresponding to the length of 50% maturity."),
-                  rmd_assess_fit("Index", "index"), rmd_assess_resid("Index"), rmd_assess_qq("Index", "index"),
-                  rmd_assess_fit("Catch", "catch", match = TRUE))
+                  rmd_assess_fit_series(nsets = ncol(Assessment@Index)), rmd_assess_fit("Catch", "catch", match = TRUE))
 
   if(state_space) {
     assess_fit2 <- c(rmd_residual("Dev", fig.cap = "Time series of recruitment deviations.", label = Assessment@Dev_type),
@@ -127,7 +127,7 @@ profile_likelihood_cDD <- function(Assessment, ...) {
   joint_profile <- !exists("profile_par")
 
   profile_fn <- function(i, Assessment, params, map) {
-    params$log_R0 <- log(profile_grid[i, 1] * Assessment@obj$env$data$rescale)
+    params$R0x <- log(profile_grid[i, 1] * Assessment@obj$env$data$rescale)
 
     if(Assessment@info$data$SR_type == "BH") {
       params$transformed_h <- logit((profile_grid[i, 2] - 0.2)/0.8)
@@ -137,14 +137,14 @@ profile_likelihood_cDD <- function(Assessment, ...) {
 
     if(length(Assessment@opt$par) == 1) { # R0 is the only estimated parameter
       if(!joint_profile && profile_par == "R0") {
-        nll <- Assessment@obj$fn(params$log_R0)
+        nll <- Assessment@obj$fn(params$R0x)
       } else {
 
         obj2 <- MakeADFun(data = Assessment@info$data, parameters = params, map = map, random = Assessment@obj$env$random,
                           DLL = "MSEtool", silent = TRUE)
 
         if(joint_profile) {
-          nll <- obj2$fn(params$log_R0)
+          nll <- obj2$fn(params$R0x)
         } else { # Profile h
           opt2 <- optimize_TMB_model(obj2, Assessment@info$control)[[1]]
           if(!is.character(opt2)) nll <- opt2$objective else nll <- NA
@@ -152,18 +152,18 @@ profile_likelihood_cDD <- function(Assessment, ...) {
       }
     } else if(length(Assessment@opt$par) == 2) {
 
-      if(all(names(Assessment@opt$par) == c("log_R0", "transformed_h"))) {
+      if(all(names(Assessment@opt$par) == c("R0x", "transformed_h"))) {
         if(joint_profile) {
-          nll <- Assessment@obj$fn(c(params$log_R0, params$transformed_h))
+          nll <- Assessment@obj$fn(c(params$R0x, params$transformed_h))
         } else {
-          if(profile_par == "R0") map$log_R0 <- factor(NA) else map$transformed_h <- factor(NA)
+          if(profile_par == "R0") map$R0x <- factor(NA) else map$transformed_h <- factor(NA)
           obj2 <- MakeADFun(data = Assessment@info$data, parameters = params, map = map, random = Assessment@obj$env$random,
                             DLL = "MSEtool", silent = TRUE)
           opt2 <- optimize_TMB_model(obj2, Assessment@info$control)[[1]]
           if(!is.character(opt2)) nll <- opt2$objective else nll <- NA
         }
       } else { # R0, F
-        if(joint_profile || profile_par == "R0") map$log_R0 <- factor(NA)
+        if(joint_profile || profile_par == "R0") map$R0x <- factor(NA)
         obj2 <- MakeADFun(data = Assessment@info$data, parameters = params, map = map, random = Assessment@obj$env$random,
                           DLL = "MSEtool", silent = TRUE)
         opt2 <- optimize_TMB_model(obj2, Assessment@info$control)[[1]]
@@ -173,10 +173,10 @@ profile_likelihood_cDD <- function(Assessment, ...) {
     } else { # more than 2 parameters
 
       if(joint_profile) {
-        map$log_R0 <- factor(NA)
+        map$R0x <- factor(NA)
         if(!"transformed_h" %in% names(Assessment@opt$par)) map$transformed_h <- factor(NA)
       } else {
-        if(profile_par == "R0") map$log_R0 <- factor(NA) else map$transformed_h <- factor(NA)
+        if(profile_par == "R0") map$R0x <- factor(NA) else map$transformed_h <- factor(NA)
       }
 
       obj2 <- MakeADFun(data = Assessment@info$data, parameters = params, map = map, random = Assessment@obj$env$random, DLL = "MSEtool", silent = TRUE)
@@ -225,7 +225,8 @@ retrospective_cDD <- function(Assessment, nyr, state_space = FALSE) {
     ny_ret <- info$data$ny - i
     info$data$ny <- ny_ret
     info$data$C_hist <- info$data$C_hist[1:ny_ret]
-    info$data$I_hist <- info$data$I_hist[1:ny_ret]
+    info$data$I_hist <- info$data$I_hist[1:ny_ret, , drop = FALSE]
+    info$data$I_sd <- info$data$I_sd[1:ny_ret, , drop = FALSE]
 
     if(state_space) info$params$log_rec_dev <- rep(0, ny_ret - k)
 

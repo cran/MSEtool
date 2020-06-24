@@ -24,6 +24,25 @@ Type posfun2(Type x, Type eps, Type &penalty) {
   return ans;
 }
 
+// Shortened multinomial density function
+template <class Type>
+Type dmultinom_(vector<Type> x, vector<Type> p, int give_log=0) {
+  Type logres = (x*log(p)).sum();
+  if(give_log) return logres;
+  else return exp(logres);
+}
+
+// Shortened normal density function
+template<class Type>
+Type dnorm_(Type x, Type mean, Type sd, int give_log=0) {
+  Type resid = (x - mean) / sd;
+  Type logans = - Type(.5) * resid * resid;
+  if(give_log) return logans; else return exp(logans);
+}
+VECTORIZE4_ttti(dnorm_)
+
+
+
 
 // Calculates analytical solution of a lognormal variable
 template<class Type>
@@ -71,6 +90,40 @@ Type calc_q(vector<Type> I_y, vector<Type> B_y) {
 }
 
 
+
+template<class Type>
+vector<Type> calc_q(matrix<Type> I_y, vector<Type> B_y, matrix<Type> &Ipred, int nsurvey) {
+  vector<Type> q(nsurvey);
+
+  for(int sur=0;sur<nsurvey;sur++) {
+    vector<Type> I_vec = I_y.col(sur);
+    q(sur) = calc_q(I_vec, B_y);
+    for(int y=0;y<I_y.rows();y++) Ipred(y,sur) = q(sur) * B_y(y);
+  }
+  return q;
+}
+
+template<class Type>
+vector<Type> calc_q(matrix<Type> I_y, vector<Type> B_y, vector<Type> N_y, matrix<Type> &Ipred, int nsurvey,
+                    vector<int> I_units) {
+  vector<Type> q(nsurvey);
+  for(int sur=0;sur<nsurvey;sur++) {
+    vector<Type> I_vec = I_y.col(sur);
+    if(I_units(sur)) {
+      q(sur) = calc_q(I_vec, B_y);
+    } else {
+      q(sur) = calc_q(I_vec, N_y);
+    }
+    for(int y=0;y<I_y.rows();y++) {
+      if(I_units(sur)) {
+        Ipred(y,sur) = q(sur) * B_y(y);
+      } else {
+        Ipred(y,sur) = q(sur) * N_y(y);
+      }
+    }
+  }
+  return q;
+}
 
 
 //////////// Functions for cDD.h, DD.h, SCA.h

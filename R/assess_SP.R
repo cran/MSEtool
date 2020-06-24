@@ -11,7 +11,9 @@
 #' @param x An index for the objects in \code{Data} when running in \link[DLMtool]{runMSE}.
 #' Otherwise, equals to 1 When running an assessment interactively.
 #' @param Data An object of class Data.
-#' @param AddInd A vector of integers indicating the indices to be used in the model. Integers assign the index to
+#' @param AddInd A vector of integers or character strings indicating the indices to be used in the model. Integers assign the index to
+#' the corresponding index in Data@@AddInd, "B" (or 0) represents total biomass in Data@@Ind, "VB" represents vulnerable biomass in
+#' Data@@VInd, and "SSB" represents spawning stock biomass in Data@@SpInd.
 #' @param rescale A multiplicative factor that rescales the catch in the assessment model, which
 #' can improve convergence. By default, \code{"mean1"} scales the catch so that time series mean is 1, otherwise a numeric.
 #' Output is re-converted back to original units.
@@ -137,7 +139,7 @@
 #' res_prior2 <- SP(Data = SimulatedData, use_r_prior = TRUE, start = list(r_prior = c(0.35, 0.10)))
 #' @seealso \link{SP_production} \link{plot.Assessment} \link{summary.Assessment} \link{retrospective} \link{profile} \link{make_MP}
 #' @export
-SP <- function(x = 1, Data, rescale = "mean1", AddInd = 0L, start = NULL, fix_dep = TRUE, fix_n = TRUE, LWT = NULL,
+SP <- function(x = 1, Data, AddInd = "B", rescale = "mean1", start = NULL, fix_dep = TRUE, fix_n = TRUE, LWT = NULL,
                n_seas = 4L, n_itF = 3L, use_r_prior = FALSE, r_reps = 1e2, SR_type = c("BH", "Ricker"),
                silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
                control = list(iter.max = 5e3, eval.max = 1e4), ...) {
@@ -150,7 +152,7 @@ class(SP) <- "Assess"
 
 #' @rdname SP
 #' @export
-SP_SS <- function(x = 1, Data, AddInd = 0, rescale = "mean1", start = NULL, fix_dep = TRUE, fix_n = TRUE, fix_sigma = TRUE,
+SP_SS <- function(x = 1, Data, AddInd = "B", rescale = "mean1", start = NULL, fix_dep = TRUE, fix_n = TRUE, fix_sigma = TRUE,
                   fix_tau = TRUE, LWT = NULL, early_dev = c("all", "index"), n_seas = 4L, n_itF = 3L,
                   use_r_prior = FALSE, r_reps = 1e2, SR_type = c("BH", "Ricker"), integrate = FALSE,
                   silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
@@ -177,7 +179,7 @@ class(SP_Fox) <- "Assess"
 #' @importFrom TMB MakeADFun
 #' @importFrom stats nlminb
 #' @useDynLib MSEtool
-SP_ <- function(x = 1, Data, AddInd = 0L, state_space = FALSE, rescale = "mean1", start = NULL, fix_dep = TRUE, fix_n = TRUE, fix_sigma = TRUE,
+SP_ <- function(x = 1, Data, AddInd = "B", state_space = FALSE, rescale = "mean1", start = NULL, fix_dep = TRUE, fix_n = TRUE, fix_sigma = TRUE,
                 fix_tau = TRUE, early_dev = c("all", "index"), LWT = NULL, n_seas = 4L, n_itF = 3L,
                 use_r_prior = FALSE, r_reps = 1e2, SR_type = c("BH", "Ricker"), integrate = FALSE,
                 silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
@@ -200,22 +202,10 @@ SP_ <- function(x = 1, Data, AddInd = 0L, state_space = FALSE, rescale = "mean1"
   ny <- length(C_hist)
   if(rescale == "mean1") rescale <- 1/mean(C_hist)
 
-  AddInd <- as.integer(AddInd)
-  if(any(!AddInd)) {
-    I_hist0 <- Data@Ind[x, yind]
-    I_hist0[I_hist0 < 0] <- NA
-    if(!state_space && length(AddInd) == 1 && AddInd == 0) {
-      I_sd0 <- rep(0, length(I_hist0))
-    } else I_sd0 <- sdconv(1, Data@CV_Ind[x, yind])
-  } else I_hist0 <- I_sd0 <- NULL
-  if(any(AddInd)) {
-    I_hist <- Data@AddInd[x, , ][AddInd[which(AddInd > 0)], yind, drop = FALSE] %>% t()
-    I_sd <- sdconv(1, Data@CV_AddInd[x, , ][AddInd[which(AddInd > 0)], yind, drop = FALSE]) %>% t()
-  } else I_hist <- I_sd <- NULL
-  if(is.null(I_hist0) && is.null(I_hist)) stop("No indices found.")
-
-  I_hist <- cbind(I_hist0, I_hist)
-  I_sd <- cbind(I_sd0, I_sd)
+  Ind <- lapply(AddInd, Assess_I_hist, Data = Data, x = x, yind = yind)
+  I_hist <- do.call(cbind, lapply(Ind, getElement, "I_hist"))
+  I_sd <- do.call(cbind, lapply(Ind, getElement, "I_sd"))
+  if(is.null(I_hist)) stop("No indices found.")
   nsurvey <- ncol(I_hist)
 
   if(state_space) {
@@ -225,7 +215,9 @@ SP_ <- function(x = 1, Data, AddInd = 0L, state_space = FALSE, rescale = "mean1"
       est_B_dev <- ifelse(1:ny < first_year_index, 0, 1)
     }
   } else {
-    if(nsurvey == 1 && AddInd == 0) fix_sigma <- FALSE # Override: estimate sigma if there's a single survey
+    if(nsurvey == 1 && (AddInd == 0 | AddInd == "B")) {
+      fix_sigma <- FALSE # Override: estimate sigma if there's a single survey
+    }
     est_B_dev <- rep(0, ny)
   }
 
@@ -249,20 +241,14 @@ SP_ <- function(x = 1, Data, AddInd = 0L, state_space = FALSE, rescale = "mean1"
   params <- list()
   if(!is.null(start)) {
     if(!is.null(start$FMSY) && is.numeric(start$FMSY)) params$log_FMSY <- log(start$FMSY[1])
-    if(!is.null(start$MSY) && is.numeric(start$MSY)) params$log_MSY <- log(start$MSY[1])
+    if(!is.null(start$MSY) && is.numeric(start$MSY)) params$MSYx <- log(start$MSY[1])
     if(!is.null(start$dep) && is.numeric(start$dep)) params$log_dep <- log(start$dep[1])
     if(!is.null(start$n) && is.numeric(start$n)) params$log_n <- log(start$n[1])
     if(!is.null(start$sigma) && is.numeric(start$sigma)) params$log_sigma <- log(start$sigma)
     if(!is.null(start$tau) && is.numeric(start$tau)) params$log_tau <- log(start$tau[1])
   }
-  if(is.null(params$log_FMSY)) {
-    FMSY_start <- ifelse(is.na(Data@Mort[x]), 0.2, 0.5 * Data@Mort[x])
-    params$log_FMSY <- log(FMSY_start)
-  }
-  if(is.null(params$log_MSY)) {
-    AvC <- mean(C_hist * rescale)
-    params$log_MSY <- log(3 * AvC)
-  }
+  if(is.null(params$log_FMSY)) params$log_FMSY <- ifelse(is.na(Data@Mort[x]), 0.2, 0.5 * Data@Mort[x]) %>% log()
+  if(is.null(params$MSYx)) params$MSYx <- mean(3 * C_hist * rescale) %>% log()
   if(is.null(params$log_dep)) params$log_dep <- log(1)
   if(is.null(params$log_n)) params$log_n <- log(2)
   if(is.null(params$log_sigma)) params$log_sigma <- rep(log(0.05), nsurvey)
@@ -306,8 +292,8 @@ SP_ <- function(x = 1, Data, AddInd = 0L, state_space = FALSE, rescale = "mean1"
                     SSB_SSB0 = structure(report$B/report$K, names = Yearplusone),
                     Obs_Catch = structure(C_hist, names = Year), Obs_Index = structure(I_hist, dimnames = list(Year, paste0("Index_", 1:nsurvey))),
                     Catch = structure(report$Cpred, names = Year), Index = structure(report$Ipred, dimnames = list(Year, paste0("Index_", 1:nsurvey))),
-                    NLL = structure(c(nll_report, sum(report$nll_comp[1:nsurvey]), report$nll_comp[nsurvey+1], report$penalty, report$prior),
-                                    names = c("Total", "Index", "Dev", "Penalty", "Prior")),
+                    NLL = structure(c(nll_report, report$nll_comp, report$penalty, report$prior),
+                                    names = c("Total", paste0("Index_", 1:nsurvey), "Dev", "Penalty", "Prior")),
                     info = info, obj = obj, opt = opt, SD = SD, TMB_report = report,
                     dependencies = dependencies)
 

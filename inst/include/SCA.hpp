@@ -28,7 +28,7 @@ Type SCA(objective_function<Type> *obj) {
   DATA_IVECTOR(est_rec_dev); // Indicator of whether rec_dev is estimated in model or fixed at zero
   DATA_INTEGER(yindF);    // Year for which to estimate F, all other F are deviations from this F
 
-  PARAMETER(log_R0);
+  PARAMETER(R0x);
   PARAMETER(transformed_h);
   PARAMETER(F_equilibrium);
   PARAMETER_VECTOR(vul_par);
@@ -41,7 +41,7 @@ Type SCA(objective_function<Type> *obj) {
   PARAMETER_VECTOR(log_early_rec_dev);
   PARAMETER_VECTOR(log_rec_dev);
 
-  Type R0 = exp(log_R0)/rescale;
+  Type R0 = exp(R0x)/rescale;
   Type h;
   if(SR_type == "BH") {
     h = 0.8 * invlogit(transformed_h);
@@ -192,7 +192,7 @@ Type SCA(objective_function<Type> *obj) {
         loglike_CAAobs = CAA_hist.row(y);
         if(CAA_dist == "multinomial") {
           loglike_CAAobs *= CAA_n(y);
-          nll_comp(1) -= dmultinom(loglike_CAAobs, loglike_CAApred, true);
+          nll_comp(1) -= dmultinom_(loglike_CAAobs, loglike_CAApred, true);
         } else {
           nll_comp(1) -= dlnorm_comp(loglike_CAAobs, loglike_CAApred);
         }

@@ -8,21 +8,25 @@
 #' @param x An index for the objects in \code{Data} when running in closed loop simulation.
 #' Otherwise, equals to 1 when running an assessment.
 #' @param Data An object of class \linkS4class{Data}.
+#' @param AddInd A vector of integers or character strings indicating the indices to be used in the model. Integers assign the index to
+#' the corresponding index in Data@@AddInd, "B" (or 0) represents total biomass in Data@@Ind, "VB" represents vulnerable biomass in
+#' Data@@VInd, and "SSB" represents spawning stock biomass in Data@@SpInd.
 #' @param SR Stock-recruit function (either \code{"BH"} for Beverton-Holt or \code{"Ricker"}).
 #' @param rescale A multiplicative factor that rescales the catch in the assessment model, which
 #' can improve convergence. By default, \code{"mean1"} scales the catch so that time series mean is 1, otherwise a numeric.
 #' Output is re-converted back to original units.
 #' @param start Optional list of starting values. Entries can be expressions that are evaluated in the function. See details.
 #' @param fix_h Logical, whether to fix steepness to value in \code{Data@@steep} in the assessment model.
-#' @param fix_F_equilibrium Logical, whether the equilibrium F prior to the first year of the model is
-#' estimated. If TRUE, F_equilibruim is fixed to value provided in start (if provided), otherwise, equal to zero
-#' (assumes unfished conditions).
 #' @param fix_sigma Logical, whether the standard deviation of the index is fixed. If \code{TRUE},
 #' sigma is fixed to value provided in \code{start} (if provided), otherwise, value based on \code{Data@@CV_Ind}.
 #' @param fix_tau Logical, the standard deviation of the recruitment deviations is fixed. If \code{TRUE},
 #' tau is fixed to value provided in \code{start} (if provided), otherwise, equal to 1.
+#' @param dep The initial depletion in the first year of the model. A tight prior is placed on the model objective function
+#' to estimate the equilibrium fishing mortality corresponding to the initial depletion. Due to this tight prior, this F
+#' should not be considered to be an independent model parameter.
 #' @param integrate Logical, whether the likelihood of the model integrates over the likelihood
 #' of the recruitment deviations (thus, treating it as a state-space variable). Otherwise, recruitment deviations are penalized parameters.
+#' @param LWT A vector of likelihood weights for each survey.
 #' @param silent Logical, passed to \code{\link[TMB]{MakeADFun}}, whether TMB
 #' will print trace information during optimization. Used for dignostics for model convergence.
 #' @param n_itF Integer, the number of iterations to solve F conditional on the observed catch.
@@ -77,11 +81,11 @@
 #' @seealso \link{DD_TMB} \link{plot.Assessment} \link{summary.Assessment} \link{retrospective} \link{profile} \link{make_MP}
 #' @useDynLib MSEtool
 #' @export
-cDD <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start = NULL, fix_h = TRUE,
-                fix_F_equilibrium = TRUE, n_itF = 5L, silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
+cDD <- function(x = 1, Data, AddInd = "B", SR = c("BH", "Ricker"), rescale = "mean1", start = NULL, fix_h = TRUE,
+                dep = 1, LWT = NULL, n_itF = 5L, silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
                 control = list(iter.max = 5e3, eval.max = 1e4), ...) {
-  cDD_(x = x, Data = Data, state_space = FALSE, SR = SR, rescale = rescale, start = start, fix_h = fix_h,
-       fix_F_equilibrium = fix_F_equilibrium, fix_sigma = FALSE, fix_tau = TRUE, n_itF = n_itF,
+  cDD_(x = x, Data = Data, AddInd = AddInd, state_space = FALSE, SR = SR, rescale = rescale, start = start, fix_h = fix_h,
+       fix_sigma = FALSE, fix_tau = TRUE, dep = dep, LWT = LWT, n_itF = n_itF,
        integrate = FALSE, silent = silent, opt_hess = opt_hess, n_restart = n_restart,
        control = control, inner.control = list(), ...)
 }
@@ -93,20 +97,20 @@ class(cDD) <- "Assess"
 #' @importFrom TMB MakeADFun
 #' @importFrom stats nlminb
 #' @useDynLib MSEtool
-cDD_SS <- function(x = 1, Data, SR = c("BH", "Ricker"), rescale = "mean1", start = NULL,
-                   fix_h = TRUE, fix_F_equilibrium = TRUE, fix_sigma = FALSE, fix_tau = TRUE, n_itF = 5L,
+cDD_SS <- function(x = 1, Data, AddInd = "B", SR = c("BH", "Ricker"), rescale = "mean1", start = NULL,
+                   fix_h = TRUE, fix_sigma = FALSE, fix_tau = TRUE, dep = 1, LWT = NULL, n_itF = 5L,
                    integrate = FALSE, silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
                    control = list(iter.max = 5e3, eval.max = 1e4), inner.control = list(), ...) {
-  cDD_(x = x, Data = Data, state_space = TRUE, SR = SR, rescale = rescale, start = start, fix_h = fix_h,
-       fix_F_equilibrium = fix_F_equilibrium, fix_sigma = fix_sigma, fix_tau = fix_tau, n_itF = n_itF,
+  cDD_(x = x, Data = Data, AddInd = AddInd, state_space = TRUE, SR = SR, rescale = rescale, start = start, fix_h = fix_h,
+       fix_sigma = fix_sigma, fix_tau = fix_tau, dep = dep, LWT = LWT, n_itF = n_itF,
        integrate = integrate, silent = silent, opt_hess = opt_hess, n_restart = n_restart,
        control = control, inner.control = inner.control, ...)
 }
 class(cDD_SS) <- "Assess"
 
 
-cDD_ <- function(x = 1, Data, state_space = FALSE, SR = c("BH", "Ricker"), rescale = "mean1", start = NULL,
-                 fix_h = TRUE, fix_F_equilibrium = TRUE, fix_sigma = FALSE, fix_tau = TRUE, n_itF = 5L,
+cDD_ <- function(x = 1, Data, AddInd = "B", state_space = FALSE, SR = c("BH", "Ricker"), rescale = "mean1", start = NULL,
+                 fix_h = TRUE, fix_sigma = FALSE, fix_tau = TRUE, dep = 1, LWT = NULL, n_itF = 5L,
                  integrate = FALSE, silent = TRUE, opt_hess = FALSE, n_restart = ifelse(opt_hess, 0, 1),
                  control = list(iter.max = 5e3, eval.max = 1e4), inner.control = list(), ...) {
   dependencies <- "Data@Cat, Data@Ind, Data@Mort, Data@L50, Data@vbK, Data@vbLinf, Data@vbt0, Data@wla, Data@wlb, Data@MaxAge"
@@ -128,9 +132,14 @@ cDD_ <- function(x = 1, Data, state_space = FALSE, SR = c("BH", "Ricker"), resca
   }
   Year <- Data@Year[yind]
   C_hist <- Data@Cat[x, yind]
-  I_hist <- Data@Ind[x, yind]
   if(any(is.na(C_hist))) stop('Model is conditioned on complete catch time series, but there is missing catch.')
-  I_hist[I_hist < 0] <- NA
+
+  Ind <- lapply(AddInd, Assess_I_hist, Data = Data, x = x, yind = yind)
+  I_hist <- do.call(cbind, lapply(Ind, getElement, "I_hist"))
+  I_sd <- do.call(cbind, lapply(Ind, getElement, "I_sd"))
+  I_units <- do.call(cbind, lapply(Ind, getElement, "I_units"))
+  if(is.null(I_hist)) stop("No indices found.", call. = FALSE)
+  nsurvey <- ncol(I_hist)
 
   ny <- length(C_hist)
   k <- ceiling(a50V)  # get age nearest to 50% vulnerability (ascending limb)
@@ -147,14 +156,21 @@ cDD_ <- function(x = 1, Data, state_space = FALSE, SR = c("BH", "Ricker"), resca
 
   M <- Data@Mort[x]
 
+  if(!state_space && (nsurvey == 1 & AddInd == "B")) fix_sigma <- FALSE # Override: estimate sigma if there's a single survey
   if(rescale == "mean1") rescale <- 1/mean(C_hist)
-  data <- list(model = "cDD", M = M, Winf = Winf, Kappa = Kappa, ny = ny, k = k, wk = wk, C_hist = C_hist,
-               rescale = rescale, I_hist = I_hist, SR_type = SR, nitF = n_itF, state_space = as.integer(state_space))
+  if(dep <= 0 || dep > 1) stop("Initial depletion (dep) must be > 0 and <= 1.")
+  if(is.null(LWT)) LWT <- rep(1, nsurvey)
+  if(length(LWT) != nsurvey) stop("LWT needs to be a vector of length ", nsurvey)
+
+  data <- list(model = "cDD", M = M, Winf = Winf, Kappa = Kappa, ny = ny, k = k, wk = wk, C_hist = C_hist, dep = dep,
+               rescale = rescale, I_hist = I_hist, I_units = I_units, I_sd = I_sd,
+               SR_type = SR, nitF = n_itF, I_lambda = LWT, nsurvey = nsurvey,
+               fix_sigma = as.integer(fix_sigma), state_space = as.integer(state_space))
   LH <- list(LAA = la, WAA = wa, maxage = Data@MaxAge, A50 = k, fit_mod = fit_mod)
 
   params <- list()
   if(!is.null(start)) {
-    if(!is.null(start$R0) && is.numeric(start$R0)) params$log_R0 <- log(start$R0[1] * rescale)
+    if(!is.null(start$R0) && is.numeric(start$R0)) params$R0x <- log(start$R0[1] * rescale)
     if(!is.null(start$h) && is.numeric(start$h)) {
       if(SR == "BH") {
         h_start <- (start$h[1] - 0.2)/0.8
@@ -167,8 +183,8 @@ cDD_ <- function(x = 1, Data, state_space = FALSE, SR = c("BH", "Ricker"), resca
     if(!is.null(start$sigma) && is.numeric(start$sigma)) params$log_sigma <- log(start$sigma[1])
     if(!is.null(start$tau) && is.numeric(start$tau)) params$log_tau <- log(start$tau[1])
   }
-  if(is.null(params$log_R0)) {
-    params$log_R0 <- ifelse(is.null(Data@OM$R0[x]), log(4 * mean(data$C_hist)), log(1.5 * rescale * Data@OM$R0[x]))
+  if(is.null(params$R0x)) {
+    params$R0x <- ifelse(is.null(Data@OM$R0[x]), log(4 * mean(data$C_hist)), log(1.5 * rescale * Data@OM$R0[x]))
   }
   if(is.null(params$transformed_h)) {
     h_start <- ifelse(is.na(Data@steep[x]), 0.9, Data@steep[x])
@@ -179,7 +195,7 @@ cDD_ <- function(x = 1, Data, state_space = FALSE, SR = c("BH", "Ricker"), resca
       params$transformed_h <- log(h_start - 0.2)
     }
   }
-  if(is.null(params$F_equilibrium)) params$F_equilibrium <- 0
+  if(is.null(params$F_equilibrium)) params$F_equilibrium <- ifelse(dep < 1, 0.1, 0)
   if(is.null(params$log_sigma)) {
     params$log_sigma <- max(0.05, sdconv(1, Data@CV_Ind[x]), na.rm = TRUE) %>% log()
   }
@@ -192,7 +208,7 @@ cDD_ <- function(x = 1, Data, state_space = FALSE, SR = c("BH", "Ricker"), resca
 
   map <- list()
   if(fix_h) map$transformed_h <- factor(NA)
-  if(fix_F_equilibrium) map$F_equilibrium <- factor(NA)
+  if(dep == 1) map$F_equilibrium <- factor(NA)
   if(fix_sigma) map$log_sigma <- factor(NA)
   if(fix_tau) map$log_tau <- factor(NA)
   if(!state_space) map$log_rec_dev <- factor(rep(NA, ny-k))
@@ -226,11 +242,11 @@ cDD_ <- function(x = 1, Data, state_space = FALSE, SR = c("BH", "Ricker"), resca
                     R = structure(report$R, names = Yearplusk),
                     N = structure(report$N, names = Yearplusone),
                     Obs_Catch = structure(C_hist, names = Year),
-                    Obs_Index = structure(I_hist, names = Year),
+                    Obs_Index = structure(I_hist, dimnames = list(Year, paste0("Index_", 1:nsurvey))),
                     Catch = structure(report$Cpred, names = Year),
-                    Index = structure(report$Ipred, names = Year),
-                    NLL = structure(c(nll_report, report$nll_comp, report$penalty),
-                                    names = c("Total", "Index", "Dev", "Penalty")),
+                    Index = structure(report$Ipred, dimnames = list(Year, paste0("Index_", 1:nsurvey))),
+                    NLL = structure(c(nll_report, report$nll_comp, report$prior, report$penalty),
+                                    names = c("Total", paste0("Index_", 1:nsurvey), "Dev", "Prior", "Penalty")),
                     info = info, obj = obj, opt = opt, SD = SD, TMB_report = report,
                     dependencies = dependencies)
 

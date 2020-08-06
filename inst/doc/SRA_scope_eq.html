@@ -12,7 +12,7 @@
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2020-06-24" />
+<meta name="date" content="2020-08-05" />
 
 <title>2a. Mathematical description of the SRA model</title>
 
@@ -228,7 +228,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">2a. Mathematical description of the SRA model</h1>
 <h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2020-06-24</h4>
+<h4 class="date">2020-08-05</h4>
 
 
 <div id="TOC">
@@ -239,16 +239,18 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <li><a href="#dynamics-equations"><span class="toc-section-number">4</span> Dynamics equations</a></li>
 <li><a href="#catch-at-age"><span class="toc-section-number">5</span> Catch at age</a></li>
 <li><a href="#catch-at-length"><span class="toc-section-number">6</span> Catch-at-length</a></li>
-<li><a href="#survey"><span class="toc-section-number">7</span> Survey</a></li>
-<li><a href="#likelihoods"><span class="toc-section-number">8</span> Likelihoods</a></li>
-<li><a href="#estimated-parameters"><span class="toc-section-number">9</span> Estimated parameters</a>
+<li><a href="#catch-in-weight"><span class="toc-section-number">7</span> Catch in weight</a></li>
+<li><a href="#mean-size"><span class="toc-section-number">8</span> Mean size</a></li>
+<li><a href="#survey"><span class="toc-section-number">9</span> Survey</a></li>
+<li><a href="#likelihoods"><span class="toc-section-number">10</span> Likelihoods</a></li>
+<li><a href="#estimated-parameters"><span class="toc-section-number">11</span> Estimated parameters</a>
 <ul>
-<li><a href="#selectivity"><span class="toc-section-number">9.1</span> Selectivity</a></li>
-<li><a href="#fishing-mortality"><span class="toc-section-number">9.2</span> Fishing mortality</a></li>
-<li><a href="#index-catchability"><span class="toc-section-number">9.3</span> Index catchability</a></li>
-<li><a href="#other-parameters"><span class="toc-section-number">9.4</span> Other parameters</a></li>
+<li><a href="#selectivity"><span class="toc-section-number">11.1</span> Selectivity</a></li>
+<li><a href="#fishing-mortality"><span class="toc-section-number">11.2</span> Fishing mortality</a></li>
+<li><a href="#index-catchability"><span class="toc-section-number">11.3</span> Index catchability</a></li>
+<li><a href="#other-parameters"><span class="toc-section-number">11.4</span> Other parameters</a></li>
 </ul></li>
-<li><a href="#additional-resources"><span class="toc-section-number">10</span> Additional resources</a></li>
+<li><a href="#additional-resources"><span class="toc-section-number">12</span> Additional resources</a></li>
 </ul>
 </div>
 
@@ -339,6 +341,7 @@ pre { /* Code block */
 <h1 number="5"><span class="header-section-number">5</span> Catch at age</h1>
 <p>The catch (in numbers) <span class="math inline">\(C^N\)</span> at age for fleet <span class="math inline">\(f\)</span> is <span class="math display">\[ C^N_{y,a,f} = \dfrac{v_{y,a,f} F_{y,f}}{Z_{y,a}} N_{y,a} (1 - \exp[-Z_{y,a}]).\]</span></p>
 <p>If the model is conditioned on catch, then <span class="math inline">\(F_{y,f}\)</span> can be estimated as parameters or solved iteratively to match the observed catch. If the model is conditioned on effort, then <span class="math display">\[ F_{y,f} = q_f E_{y,f},\]</span> where <span class="math inline">\(E_{y,f}\)</span> is the observed effort and <span class="math inline">\(q_f\)</span> is the scaling coefficient.</p>
+<p>The proportion of the catch-at-age is <span class="math display">\[ p_{y,a,f} = \dfrac{C^N_{y,a,f}}{\sum_a C^N_{y,a,f}}.\]</span></p>
 </div>
 <div id="catch-at-length" class="section level1" number="6">
 <h1 number="6"><span class="header-section-number">6</span> Catch-at-length</h1>
@@ -350,37 +353,45 @@ pre { /* Code block */
       1 -\phi(L&#39;_\ell) &amp; \ell = L
 \end{cases}
 \]</span> with <span class="math inline">\(L&#39;_{\ell}\)</span> as the length at the lower boundary of length bin <span class="math inline">\(\ell\)</span> and <span class="math inline">\(\phi(L&#39;_{\ell})\)</span> as the cumulative distribution function of a normal variable with mean <span class="math inline">\(\tilde{L}_{y,a}\)</span> (the expected mean length at age <span class="math inline">\(a\)</span>) and standard deviation <span class="math inline">\(\tilde{L}_{y,a} \times CV^L\)</span> (<span class="math inline">\(CV^L\)</span> is the coefficient of variation in mean length at age).</p>
-<p>The catch in weight <span class="math inline">\(\tilde{C}\)</span> is <span class="math display">\[ \tilde{C}_{y,f} = \sum_a C^N_{y,a,f} w_{y,a}.\]</span></p>
-<p>The mean length of the catch <span class="math inline">\(\bar{L}_{y,f}\)</span> is <span class="math display">\[ \bar{L}_{y,f} = \dfrac{\sum_{\ell} L_{\ell} C^N_{y,\ell,f}}{\sum_{\ell} C^N_{y,\ell,f}},\]</span> where <span class="math inline">\(L_\ell\)</span> is the midpoint of the length bin <span class="math inline">\(\ell\)</span>.</p>
-<p>The proportion of the catch-at-age is <span class="math display">\[ p_{y,a,f} = \dfrac{C^N_{y,a,f}}{\sum_a C^N_{y,a,f}}.\]</span></p>
 <p>The proportion of the catch-at-length is <span class="math display">\[ p_{y,\ell,f} = \dfrac{C^N_{y,\ell,f}}{\sum_{\ell}C^N_{y,\ell,f}}.\]</span></p>
 </div>
-<div id="survey" class="section level1" number="7">
-<h1 number="7"><span class="header-section-number">7</span> Survey</h1>
+<div id="catch-in-weight" class="section level1" number="7">
+<h1 number="7"><span class="header-section-number">7</span> Catch in weight</h1>
+<p>The catch in weight <span class="math inline">\(\tilde{C}\)</span> is <span class="math display">\[ \tilde{C}_{y,f} = \sum_a C^N_{y,a,f} w_{y,a}.\]</span></p>
+</div>
+<div id="mean-size" class="section level1" number="8">
+<h1 number="8"><span class="header-section-number">8</span> Mean size</h1>
+<p>The mean length of the catch <span class="math inline">\(\bar{L}_{y,f}\)</span> is <span class="math display">\[ \bar{L}_{y,f} = \dfrac{\sum_{\ell} L_{\ell} C^N_{y,\ell,f}}{\sum_{\ell} C^N_{y,\ell,f}},\]</span> where <span class="math inline">\(L_\ell\)</span> is the midpoint of the length bin <span class="math inline">\(\ell\)</span>.</p>
+<p>The mean weight of the catch <span class="math inline">\(\bar{w}_{y,f}\)</span> is <span class="math display">\[ \bar{w}_{y,f} = \dfrac{\sum_a C^N_{y,a,f}w_{y,a}}{\sum_a C^N_{y,a,f}},\]</span></p>
+</div>
+<div id="survey" class="section level1" number="9">
+<h1 number="9"><span class="header-section-number">9</span> Survey</h1>
 <p>If the <span class="math inline">\(s^{\textrm{th}}\)</span> survey is biomass-based, then the survey value <span class="math inline">\(I_{y,s}\)</span> is calculated as <span class="math display">\[ I_{y,s} = q_s \sum_a v_{y,a,s} N_{y,a} w_{y,a}, \]</span> where <span class="math inline">\(q\)</span> is the scaling coefficient and <span class="math inline">\(s\)</span> indexes survey.</p>
 <p>If the survey is abundance-based, then <span class="math display">\[ I_{y,s} = q_s \sum_a v_{y,a,s} N_{y,a} . \]</span></p>
 <p>The proportion-at-age vulnerable to the survey is <span class="math display">\[ p_{y,a,s} = \dfrac{v_{a,s}N_{y,a}}{\sum_a v_{a,s}N_{y,a}}.\]</span></p>
 <p>The proportion-at-length vulnerable to the survey is <span class="math display">\[ p_{y,\ell,s} = \dfrac{\sum_a v_{a,s} N_{y,a} P(\ell|a)}{\sum_{\ell} \sum_a v_{a,s} N_{y,a} P(\ell|a)}.\]</span></p>
 </div>
-<div id="likelihoods" class="section level1" number="8">
-<h1 number="8"><span class="header-section-number">8</span> Likelihoods</h1>
+<div id="likelihoods" class="section level1" number="10">
+<h1 number="10"><span class="header-section-number">10</span> Likelihoods</h1>
 <p>If the model is conditioned on catch and fishing mortality rates are estimated parameters, then the log-likelihood component <span class="math inline">\(\Lambda_1\)</span> of the catch is <span class="math display">\[\Lambda_1 = \sum_f \left[\lambda^{\tilde{C}}_f \sum_y \left(-\log(0.01) - \dfrac{[\log(\tilde{C}^{\textrm{obs}}_{y,f}) - \log(\tilde{C}^{\textrm{pred}}_{y,f})]^2}{2 \times 0.01^2}\right)\right],\]</span></p>
 <p>where <span class="math inline">\(\textrm{obs}\)</span> and <span class="math inline">\(\textrm{pred}\)</span> indicate observed and predicted quantities, respectively, and <span class="math inline">\(\lambda\)</span> are likelihood weights. With a small standard deviation for the catch likelihood relative to the variance in other likelihood components, the predicted catch should match the observed catch.</p>
 <p>The log-likelihood component <span class="math inline">\(\Lambda_2\)</span> of survey data is <span class="math display">\[\Lambda_2 = \sum_s \left[ \lambda^I_s \sum_y \left(-\log(\sigma_{y,s}) - \dfrac{[\log(I^{\textrm{obs}}_{y,s}) - \log(I^{\textrm{pred}}_{y,s})]^2}{2\sigma_{y,s}^2}\right) \right].\]</span></p>
 <p>The log-likelihood component <span class="math inline">\(\Lambda_3\)</span> of catch-at-age data is <span class="math display">\[\Lambda_3 = \sum_f \lambda^A_f \left[\sum_y O^A_{y,f} \sum_a p^{\textrm{obs}}_{y,a,f} \log(p^{\textrm{pred}}_{y,a,f})\right],\]</span> where <span class="math inline">\(O^A\)</span> is the annual sample sizes for the age compositions.</p>
 <p>The log-likelihood component <span class="math inline">\(\Lambda_4\)</span> of catch-at-length data is <span class="math display">\[\Lambda_4 = \sum_f \lambda^L_f \left[ \sum_y O^L_{y,f} \sum_{\ell} p^{\textrm{obs}}_{y,\ell,f} \log(p^{\textrm{pred}}_{y,\ell,f})\right]\]</span> where <span class="math inline">\(O^L\)</span> is the annual sample sizes for the length compositions.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_5\)</span> of observed mean lengths in the catch is <span class="math display">\[\Lambda_5 = \sum_f \lambda^{\bar{L}}_f\left[ \sum_y \left(-\log(\omega_f) - \dfrac{[\bar{L}^{\textrm{obs}}_{y,f} - \bar{L}^{\textrm{pred}}_{y,f}]^2}{2 \omega^2_f}\right)\right],\]</span> where <span class="math inline">\(\omega_f\)</span> is the standard deviation of mean lengths.</p>
+<p>The log-likelihood component <span class="math inline">\(\Lambda_5\)</span> for the observed mean size in this catch is:</p>
+<p><span class="math display">\[\Lambda_5 = \sum_f \lambda^{\bar{L}}_f\left[ \sum_y \left(-\log(\omega_{y,f}) - \dfrac{[\bar{L}^{\textrm{obs}}_{y,f} - \bar{L}^{\textrm{pred}}_{y,f}]^2}{2 \omega^2_{y,f}}\right)\right],\]</span> for mean lengths, or</p>
+<p><span class="math display">\[\Lambda_5 = \sum_f \lambda^{\bar{w}}_f\left[ \sum_y \left(-\log(\omega_{y,f}) - \dfrac{[\bar{w}^{\textrm{obs}}_{y,f} - \bar{w}^{\textrm{pred}}_{y,f}]^2}{2 \omega^2_{y,f}}\right)\right],\]</span> for mean weights, where <span class="math inline">\(\omega_{y,f}\)</span> is the standard deviation of mean size. With constant cofficient of variation (CV), <span class="math inline">\(\omega_{y,f} = \bar{w}^{\textrm{obs}}_{y,f} CV^{\omega}_f\)</span>.</p>
 <p>The log-likelihood component <span class="math inline">\(\Lambda_6\)</span> of annual estimated recruitment deviates <span class="math inline">\(\delta_y\)</span> in log space is <span class="math display">\[\Lambda_6 = \Sigma_y\left(-\log(\tau) - \dfrac{\delta_y^2}{2 \tau^2}\right),\]</span> where <span class="math inline">\(\tau\)</span> is the standard deviation of recruitment deviates.</p>
 <p>The log-likelihood component <span class="math inline">\(\Lambda_7\)</span> of the equilibrium catch is <span class="math display">\[\Lambda_7 = \sum_f \lambda^{\tilde{C}}_f \left(-\log(0.01) - \dfrac{[\log(\tilde{C}^{\textrm{eq,obs}}_f) - \log(\tilde{C}^{\textrm{eq,pred}}_f)]^2}{2 \times 0.01^2}\right),\]</span></p>
 <p>The log-likelihood component <span class="math inline">\(\Lambda_8\)</span> of the survey proportion-at-age data is <span class="math display">\[\Lambda_8 = \sum_s \lambda^{IA}_s \left[\sum_y O^{IA}_{y,s} \sum_a p^{\textrm{obs}}_{y,a,s} \log(p^{\textrm{pred}}_{y,a,s})\right],\]</span> where <span class="math inline">\(O^{IA}\)</span> is the annual sample sizes for the survey age compositions.</p>
-<p>The log-likelihood component <span class="math inline">\(\Lambda_9\)</span> of the surey proportion-at-length data is <span class="math display">\[\Lambda_9 = \sum_s \lambda^{IL}_s \left[ \sum_y O^{IL}_{y,s} \sum_{\ell} p^{\textrm{obs}}_{y,\ell,s} \log(p^{\textrm{pred}}_{y,\ell,s})\right]\]</span> where <span class="math inline">\(O^{IL}\)</span> is the annual sample sizes for the survey length compositions.</p>
+<p>The log-likelihood component <span class="math inline">\(\Lambda_9\)</span> of the survey proportion-at-length data is <span class="math display">\[\Lambda_9 = \sum_s \lambda^{IL}_s \left[ \sum_y O^{IL}_{y,s} \sum_{\ell} p^{\textrm{obs}}_{y,\ell,s} \log(p^{\textrm{pred}}_{y,\ell,s})\right]\]</span> where <span class="math inline">\(O^{IL}\)</span> is the annual sample sizes for the survey length compositions.</p>
 <p>The total log-likelihood <span class="math inline">\(\textrm{LL}\)</span> to be maximized is <span class="math display">\[\textrm{LL} = \sum_{i=1}^9\Lambda_i.\]</span></p>
 </div>
-<div id="estimated-parameters" class="section level1" number="9">
-<h1 number="9"><span class="header-section-number">9</span> Estimated parameters</h1>
+<div id="estimated-parameters" class="section level1" number="11">
+<h1 number="11"><span class="header-section-number">11</span> Estimated parameters</h1>
 <p>The estimated parameters, denoted in this section as <span class="math inline">\(x\)</span>, are unconstrained over all real numbers and then transformed in order to constrain the corresponding model parameters. For optimization, the transformation is also designed to reduce the scale of all estimated parameters to within an order of magnitude.</p>
-<div id="selectivity" class="section level2" number="9.1">
-<h2 number="9.1"><span class="header-section-number">9.1</span> Selectivity</h2>
+<div id="selectivity" class="section level2" number="11.1">
+<h2 number="11.1"><span class="header-section-number">11.1</span> Selectivity</h2>
 <p>For a fleet block <span class="math inline">\(b\)</span> for which selectivity is estimated, then parameters <span class="math inline">\(x^{LFS}_b\)</span> and <span class="math inline">\(x^{L5}_b\)</span> are estimated over all real numbers, where</p>
 <p><span class="math display">\[ \begin{align}
 L^{\textrm{FS}}_b &amp;= 0.99 \times L_{\infty} \times \textrm{logit}^{-1}(x^{LFS}_b)\\
@@ -390,8 +401,8 @@ L^5_b &amp;= L^{\textrm{FS}}_b - \exp(x^{L5}_b)
 <p>If selectivity is parameterized as free parameters, then <span class="math display">\[ v_{y,a,f} = \textrm{logit}^{-1}(x^v_{y,a,f}).\]</span></p>
 <p>For surveys, parameterizations are identical except with indexing for survey <span class="math inline">\(s\)</span>.</p>
 </div>
-<div id="fishing-mortality" class="section level2" number="9.2">
-<h2 number="9.2"><span class="header-section-number">9.2</span> Fishing mortality</h2>
+<div id="fishing-mortality" class="section level2" number="11.2">
+<h2 number="11.2"><span class="header-section-number">11.2</span> Fishing mortality</h2>
 <p>If <span class="math inline">\(F_{y,f}\)</span> are estimated parameters (<code>condition = &quot;catch&quot;</code>), then one parameter <span class="math inline">\(x^F_f\)</span> is the estimated <span class="math inline">\(F\)</span> in log-space in the middle of the time series is estimated and all others are subsequent deviations, represented as <span class="math inline">\(x^{F_{dev}}_{y,f}\)</span>:</p>
 <p><span class="math display">\[ F_{y,f} = 
 \begin{cases}
@@ -401,18 +412,18 @@ L^5_b &amp;= L^{\textrm{FS}}_b - \exp(x^{L5}_b)
 \]</span></p>
 <p>If <code>condition = &quot;effort&quot;</code>, then <span class="math inline">\(q_f\)</span> is estimated in log space, where <span class="math display">\[F_{y,f} = q_f E_{y,f} = \exp(x^q_f) \times E_{y,f}\]</span></p>
 </div>
-<div id="index-catchability" class="section level2" number="9.3">
-<h2 number="9.3"><span class="header-section-number">9.3</span> Index catchability</h2>
+<div id="index-catchability" class="section level2" number="11.3">
+<h2 number="11.3"><span class="header-section-number">11.3</span> Index catchability</h2>
 <p>To scale biomass to index values, the index catchability <span class="math inline">\(q_s\)</span> is solved analytically in the model:</p>
 <p><span class="math display">\[ q_s = \exp\left(\dfrac{\sum_y \log(I^{\textrm{obs}}_{y,s}) - \sum_y \log(\sum_a v_{y,a,s}N_{y,a,s})}{n_s}\right),\]</span> or <span class="math display">\[ q_s = \exp\left(\dfrac{\sum_y \log(I^{\textrm{obs}}_{y,s}) - \sum_y \log(\sum_a v_{y,a,s}N_{y,a,s}w_{y,a})}{n_s}\right),\]</span> for an abundance or biomass based index, respectively, where <span class="math inline">\(n_s\)</span> is the number of years with index values and the summation is over those <span class="math inline">\(n_s\)</span> years.</p>
 </div>
-<div id="other-parameters" class="section level2" number="9.4">
-<h2 number="9.4"><span class="header-section-number">9.4</span> Other parameters</h2>
+<div id="other-parameters" class="section level2" number="11.4">
+<h2 number="11.4"><span class="header-section-number">11.4</span> Other parameters</h2>
 <p>Unfished recruitment is estimated in log-space, <span class="math inline">\(R_0 = \dfrac{1}{z}\exp(x^{R_0})\)</span> where <span class="math inline">\(z\)</span> is an optional rescaler, e.g. mean historical catch, to reduce the magnitude of the <span class="math inline">\(x^{R_0}\)</span> estimate. Recruitment deviations <span class="math inline">\(\delta_y\)</span> are directly estimated.</p>
 </div>
 </div>
-<div id="additional-resources" class="section level1" number="10">
-<h1 number="10"><span class="header-section-number">10</span> Additional resources</h1>
+<div id="additional-resources" class="section level1" number="12">
+<h1 number="12"><span class="header-section-number">12</span> Additional resources</h1>
 <p>The help file for <code>SRA_scope</code> will provide more information on the possible inputs for the model. The help file for the SRA class (obtained by typing <code>class?SRA</code> into the R console) describes the outputs from the function. An additional <a href="SRA_scope_sel.html">vignette</a> is available to describe set up of fleet and survey selectivity in the function call.</p>
 </div>
 

@@ -1,28 +1,117 @@
 
 
-SRA_scope_data <- function (OM, Data, ...) {
+vec_slot_fn <- function(x, Data, err = FALSE) {
+  res <- slot(Data, x)
+  if(!all(is.na(res))) {
+    return(res[1, ])
+  } else {
+    if(err) stop(paste0("Nothing found in Data@", x), call. = FALSE)
+    return(NULL)
+  }
+}
 
-  # < code for making Chist, Index, ML, CAA, CAL, I_sd matrices out of list of Data objects >
-  nyears<-OM@nyears
-  CYcond<-length(Data@Cat[1,]) != nyears
-  if(CYcond) message(paste0("Catch data for a different duration than operating model. Data@Cat[1,] is of length ",length(Data@Cat[1,]),", but OM@nyears is ",nyears))
-  if(CYcond)stop("OM, Data, incompatibility")
+matrix_slot_fn <- function(x, Data) {
+  res <- slot(Data, x)
+  if(!all(is.na(res))) return(res[1, , ]) else return(NULL)
+}
 
-  Chist<-Data@Cat[1, ]
-  Index<-Data@Ind[1, ]
-  I_sd<-Data@CV_Ind[1, ]
-  CAA<-Data@CAA[1, , ]
-  CAA<-NULL
-  CAL<-Data@CAL[1, , ]
-  CAL<-NULL
-  ML<-Data@ML[1, ]
-  ML<-NULL
-  length_bin<-Data@CAL_mids
+pull_Ind <- function(Data, maxage) {
+  Ind_name <- c("Ind", "SpInd", "VInd")
+  s_sel_Ind <- c("B", "SSB", 1)
+  s_sel_AddIndType <- 1:3
+  lapply_fn <- function(x) {
+    Index <- vec_slot_fn(x = x, Data = Data)
+    if(!is.null(Index)) {
+      ICV <- vec_slot_fn(paste0("CV_", x), Data)
+      if(is.null(ICV)) {
+        I_sd <- rep(NA_real_, length(Index))
+      } else {
+        if(sum(!is.na(ICV)) == 1) I_sd <- rep(ICV[1], length(Index))
+        I_sd <- sdconv(1, ICV)
+      }
+      s_sel <- s_sel_Ind[match(x, Ind_name)]
+      slotname <- x
+    } else {
+      I_sd <- s_sel <- slotname <- NULL
+    }
+    return(list(Index = Index, I_sd = I_sd, s_sel = s_sel, slotname = slotname))
+  }
 
-  out<-SRA_scope(OM, Chist=Chist, Index = Index, I_sd = I_sd, CAA = CAA, CAL = CAL,
-                            ML = ML, length_bin = length_bin, ...)
+  get_Ind <- lapply(Ind_name, lapply_fn)
+  out <- list(Index = do.call(cbind, lapply(get_Ind, getElement, "Index")),
+              I_sd = do.call(cbind, lapply(get_Ind, getElement, "I_sd")),
+              s_sel = do.call(c, lapply(get_Ind, getElement, "s_sel")),
+              slotname = do.call(c, lapply(get_Ind, getElement, "slotname")))
+  if(!is.null(out$Index)) {
+    out$V <- matrix(NA_real_, maxage, ncol(out$Index))
+    out$I_units <- rep(1, ncol(out$Index))
+  } else {
+    out$V <- out$I_units <- NULL
+  }
   return(out)
 }
+
+pull_AddInd <- function(Data, maxage) {
+  Ind_name <- c("Ind", "SpInd", "VInd")
+  s_sel_Ind <- c("B", "SSB", 1)
+  s_sel_AddIndType <- 1:3
+  if(!all(is.na(Data@AddInd))) {
+    nindex <- dim(Data@AddInd)[2]
+    nyears <- dim(Data@AddInd)[3]
+    Index <- Data@AddInd[1, , ] %>% matrix(nyears, nindex, byrow = TRUE)
+    if(!all(is.na(Data@CV_AddInd[1, , ]))) {
+      I_sd <- sdconv(1, Data@CV_AddInd[1, , ]) %>% matrix(nyears, nindex, byrow = TRUE)
+    } else {
+      I_sd <- array(NA_real_, dim(Index))
+    }
+
+    V <- matrix(NA_real_, maxage, nindex)
+    s_sel <- rep(NA_character_, nindex)
+    for(i in 1:nindex) {
+      if(!all(is.na(Data@AddIndV[1, i, ]))) {
+        V[, i] <- Data@AddIndV[1, i, ]
+        s_sel[i] <- "free"
+      } else if(!is.na(Data@AddIndType[i])) {
+        sel_arg <- match(Data@AddIndType[i], s_sel_AddIndType)
+        if(is.na(sel_arg)) {
+          message("Data@AddIndType[", i, "] is undefined.")
+          s_sel[i] <- 1
+          message("Selectivity for survey number ", i, " assumed to be a vulnerable biomass survey.")
+        } else {
+          s_sel[i] <- s_sel_Ind[sel_arg]
+        }
+      } else {
+        s_sel[i] <- 1
+        message("Selectivity for survey number ", i, " in Data@AddInd is undefined. Assuming to be a vulnerable biomass survey.")
+      }
+    }
+    if(all(!is.na(Data@AddIunits)) && length(Data@AddIunits) == nindex) {
+      I_units <- Data@AddIunits
+    } else {
+      I_units <- rep(1, nindex)
+    }
+    return(list(Index = Index, I_sd = I_sd, s_sel = s_sel, slotname = rep("AddInd", ncol(Index)), V = V,
+                I_units = I_units))
+  } else {
+    return(list(Index = NULL, I_sd = NULL, s_sel = NULL, slotname = NULL, V = NULL, I_units = NULL))
+  }
+}
+
+
+pull_Index <- function(Data, maxage) {
+  Ind <- pull_Ind(Data, maxage)
+  AddInd <- pull_AddInd(Data, maxage)
+
+  if(all(is.na(Ind$I_sd)) && all(is.na(AddInd$I_sd))) {
+    I_sd <- NULL
+  } else {
+    I_sd <- cbind(Ind$I_sd, AddInd$I_sd)
+  }
+  return(list(Index = cbind(Ind$Index, AddInd$Index), I_sd = I_sd, s_selectivity = c(Ind$s_sel, AddInd$s_sel),
+              slotname = c(Ind$slotname, AddInd$slotname), V = cbind(Ind$V, AddInd$V),
+              I_units = c(Ind$I_units, AddInd$I_units)))
+}
+
 
 SRA_tiny_comp <- function(x) {
   all_zero <- all(is.na(x)) | sum(x, na.rm = TRUE) == 0
@@ -32,6 +121,101 @@ SRA_tiny_comp <- function(x) {
   }
   return(x)
 }
+
+int_s_sel <- function(s_selectivity, nfleet = 1) {
+  s_sel <- suppressWarnings(as.numeric(s_selectivity)) # Numbers match fleets, otherwise see next lines
+  s_sel[s_selectivity == "B"] <- -4
+  s_sel[s_selectivity == "SSB"] <- -3
+  s_sel[s_selectivity == "free"] <- -2
+  s_sel[s_selectivity == "logistic"] <- -1
+  s_sel[s_selectivity == "dome"] <- 0
+
+  if(any(s_sel > nfleet, na.rm = TRUE)) {
+    stop(paste("There are undefined fishing fleets in s_selectivity (for surveys). There are only", nfleet, "fleets."),
+         call. = FALSE)
+  }
+
+  if(any(is.na(s_sel))) {
+    stop("Character entries for s_selectivity (for surveys) must be either: \"B\", \"SSB\", \"logistic\", \"dome\", or \"free\"", call. = FALSE)
+  }
+
+  return(s_sel)
+}
+
+int_sel <- function(selectivity) {
+  sel <- suppressWarnings(as.numeric(selectivity))
+  sel[selectivity == "free"] <- -2
+  sel[selectivity == "logistic"] <- -1
+  sel[selectivity == "dome"] <- 0
+
+  if(any(is.na(sel))) {
+    stop("Character entries for s_selectivity (for fleets) must be either: \"logistic\", \"dome\", or \"free\"", call. = FALSE)
+  }
+
+  return(sel)
+}
+
+make_LWT <- function(LWT, nfleet, nsurvey) {
+
+  if(is.null(LWT$Chist)) {
+    LWT$Chist <- rep(1, nfleet)
+  } else if(length(LWT$Chist) == 1 && nfleet > 1) {
+    LWT$Chist <- rep(LWT$Chist, nfleet)
+  }
+  if(length(LWT$Chist) != nfleet) stop("LWT$Chist should be a vector of length ", nfleet, ".")
+
+  if(is.null(LWT$Index)) {
+    LWT$Index <- rep(1, max(1, nsurvey))
+  } else if(length(LWT$Index) == 1 && nsurvey > 1) {
+    LWT$Index <- rep(LWT$Index, nsurvey)
+  }
+  if(length(LWT$Index) != max(1, nsurvey)) stop("LWT$Index should be a vector of length ", data$nsurvey, ".")
+
+  if(is.null(LWT$CAA)) {
+    LWT$CAA <- rep(1, nfleet)
+  } else if(length(LWT$CAA) == 1 && nfleet > 1) {
+    LWT$CAA <- rep(LWT$CAA, nfleet)
+  }
+  if(length(LWT$CAA) != nfleet) stop("LWT$CAA should be a vector of length ", nfleet, ".")
+
+  if(is.null(LWT$CAL)) {
+    LWT$CAL <- rep(1, nfleet)
+  } else if(length(LWT$CAL) == 1 && nfleet > 1) {
+    LWT$CAL <- rep(LWT$CAL, nfleet)
+  }
+  if(length(LWT$CAL) != nfleet) stop("LWT$CAL should be a vector of length ", nfleet, ".")
+
+  if(is.null(LWT$MS)) {
+    LWT$MS <- rep(1, nfleet)
+  } else if(length(LWT$MS) == 1 && nfleet > 1) {
+    LWT$MS <- rep(LWT$MS, nfleet)
+  }
+  if(length(LWT$MS) != nfleet) stop("LWT$MS should be a vector of length ", nfleet, ".")
+
+  if(is.null(LWT$C_eq)) {
+    LWT$C_eq <- rep(1, max(1, nfleet))
+  } else if(length(LWT$C_eq) == 1 && nfleet > 1) {
+    LWT$C_eq <- rep(LWT$C_eq, nfleet)
+  }
+  if(length(LWT$C_eq) != nfleet) stop("LWT$C_eq should be a vector of length ", nfleet, ".")
+
+  if(is.null(LWT$s_CAA)) {
+    LWT$s_CAA <- rep(1, max(1, nsurvey))
+  } else if(length(LWT$s_CAA) == 1 && nsurvey > 1) {
+    LWT$s_CAA <- rep(LWT$s_CAA, nsurvey)
+  }
+  if(length(LWT$s_CAA) != max(1, nsurvey)) stop("LWT$s_CAA should be a vector of length ", nsurvey, ".")
+
+  if(is.null(LWT$s_CAL)) {
+    LWT$s_CAL <- rep(1, max(1, nsurvey))
+  } else if(length(LWT$s_CAL) == 1 && nsurvey > 1) {
+    LWT$s_CAL <- rep(LWT$s_CAL, nsurvey)
+  }
+  if(length(LWT$s_CAL) != max(1, nsurvey)) stop("LWT$s_CAL should be a vector of length ", nsurvey, ".")
+
+  return(LWT)
+}
+
 
 update_SRA_data <- function(data, OM, condition, dots) {
 
@@ -128,19 +312,9 @@ update_SRA_data <- function(data, OM, condition, dots) {
     } else stop("Index is neither a vector nor a matrix.", call. = FALSE)
 
     data$nsurvey <- ncol(data$Index)
-
-    # Match index to I_type
-    if(is.null(data$I_type)) data$I_type <- rep("B", data$nsurvey)
-    if(length(data$I_type) != ncol(data$Index)) {
-      stop("Length of I_type needs to be ", data$nsurvey, call. = FALSE)
-    }
-
-    I_type_check <- match(data$I_type, c("B", "SSB", "est", 1:data$nfleet))
-    if(any(is.na(I_type_check))) stop("I_type vector needs to be entries of either: \"est\", \"SSB\", \"B\", or 1 - ", data$nfleet, ".", call. = FALSE)
   } else {
     data$nsurvey <- 0
     data$Index <- matrix(NA, ncol = 1, nrow = data$nyears)
-    data$I_type <- "B"
   }
 
   if(!is.null(data$I_sd)) {
@@ -152,7 +326,6 @@ update_SRA_data <- function(data, OM, condition, dots) {
       if(ncol(data$I_sd) != data$nsurvey) stop("Number of columns of I_sd matrix does not equal nsurvey (", data$nsurvey, ").", call. = FALSE)
     }
   }
-
   message(data$nsurvey, " survey(s) detected.")
 
   # Process age comps
@@ -191,9 +364,12 @@ update_SRA_data <- function(data, OM, condition, dots) {
   on.exit(options(warn = old_warning))
 
   set.seed(OM@seed)
-  StockPars <- SampleStockPars(OM_samp, msg = FALSE)
-  ObsPars <- SampleObsPars(OM_samp)
-  FleetPars <- SampleFleetPars(OM_samp, msg = FALSE)
+  message("Getting biological parameters from OM...")
+  suppressMessages({
+    StockPars <- SampleStockPars(OM_samp, msg = FALSE)
+    ObsPars <- SampleObsPars(OM_samp)
+    FleetPars <- SampleFleetPars(OM_samp, msg = FALSE)
+  })
 
   # Process length comps
   if(!is.null(data$CAL)) {
@@ -216,22 +392,39 @@ update_SRA_data <- function(data, OM, condition, dots) {
     data$length_bin <- StockPars$CAL_binsmid
   }
 
-  # Process mean lengths
-  if(!is.null(data$ML)) {
-    if(is.vector(data$ML)) {
-      if(length(data$ML) != data$nyears) stop("Mean length vector (ML) must be of length ", data$nyears, ".", call. = FALSE)
-      data$ML <- matrix(data$ML, ncol = 1)
+  # Process mean size (either lengths or weights)
+  if(!is.null(data$ML) && is.null(data$MS)) { # Backwards compatibility
+    message("\n\n ** data$ML is no longer used. Use data$MS (mean size) instead. ** \n\n")
+    data$MS <- data$ML
+  }
+  if(!is.null(data$MS)) {
+    if(is.null(data$MS_type)) {
+      message("Mean size (data$MS) found, but not type (data$MS_type). Assuming it's mean length.")
+      data$MS_type <- "length"
+    } else {
+      data$MS_type <- match.arg(data$MS_type, choices = c("length", "weight"))
+      message("Mean ", data$MS_type, " data found.")
     }
-    if(nrow(data$ML) != data$nyears) stop("Number of ML rows (", nrow(data$ML), ") does not equal nyears (", data$nyears, "). NAs are acceptable.", call. = FALSE)
-    if(ncol(data$ML) != data$nfleet) stop("Number of ML columns (", ncol(data$ML), ") does not equal nfleet (", data$nfleet, "). NAs are acceptable.", call. = FALSE)
+    if(is.vector(data$MS)) {
+      if(length(data$MS) != data$nyears) stop("Mean size vector (MS) must be of length ", data$nyears, ".", call. = FALSE)
+      data$MS <- matrix(data$MS, ncol = 1)
+    }
+    if(nrow(data$MS) != data$nyears) stop("Number of MS rows (", nrow(data$ML), ") does not equal nyears (", data$nyears, "). NAs are acceptable.", call. = FALSE)
+    if(ncol(data$MS) != data$nfleet) stop("Number of MS columns (", ncol(data$ML), ") does not equal nfleet (", data$nfleet, "). NAs are acceptable.", call. = FALSE)
 
-    if(is.null(data$ML_sd)) {
-      data$ML_sd <- apply(data$ML, 2, mean, na.rm = TRUE)
-    } else if(length(data$ML_sd) == 1) data$ML_sd <- rep(data$ML_sd, data$nfleet)
-    if(length(data$ML_sd) != data$nfleet) stop("Mean length SD vector (ML_sd) must be of length ", data$nfleet, ".", call. = FALSE)
+    if(!is.null(data$ML_sd) && is.null(data$MS_cv)) { # Backwards compatibility
+      message("\n\n ** data$ML_sd is no longer used. Use data$MS_cv instead. ** \n\n")
+      data$MS_cv <- data$ML_sd/apply(data$MS, 2, mean, na.rm = TRUE)
+      message("data$MS_cv = ", paste(data$MS_cv, collapse = ", "))
+    }
+    if(is.null(data$MS_cv)) {
+      data$MS_cv <- rep(0.2, data$nfleet)
+    } else if(length(data$MS_cv) == 1) data$MS_cv <- rep(data$MS_cv, data$nfleet)
+    if(length(data$MS_cv) != data$nfleet) stop("Mean size CV vector (MS_cv) must be of length ", data$nfleet, ".", call. = FALSE)
   } else {
-    data$ML <- matrix(NA, nrow = data$nyears, ncol = data$nfleet)
-    data$ML_sd <- rep(0.1, data$nfleet)
+    data$MS <- matrix(NA, nrow = data$nyears, ncol = data$nfleet)
+    data$MS_cv <- rep(0.2, data$nfleet)
+    data$MS_type <- "length"
   }
 
   # Process equilibrium catch/effort - Ceq
@@ -242,7 +435,7 @@ update_SRA_data <- function(data, OM, condition, dots) {
   }
 
   if(data$condition == "catch2" && any(data$C_eq > 0)) {
-    message("Equilibrium catch was detected. Model conditioning will be switched to: \"catch\" (estimated F's)")
+    message("Equilibrium catch was detected. The corresponding equilibrium F will be estimated.")
   }
 
   if(is.null(data$E_eq)) data$E_eq <- rep(0, data$nfleet)
@@ -319,8 +512,20 @@ update_SRA_data <- function(data, OM, condition, dots) {
   if(is.null(data$age_error)) data$age_error <- diag(OM@maxage)
   if(any(dim(data$age_error) != OM@maxage)) stop("data$age_error should be a square matrix of OM@maxage rows and columns", call. = FALSE)
 
-  return(list(data = data, OM = OM, StockPars = StockPars, ObsPars = ObsPars, FleetPars = FleetPars))
+  # Sel_block dummy fleets
+  if(is.null(data$sel_block)) {
+    data$sel_block <- matrix(1:data$nfleet, nrow = data$nyears, ncol = data$nfleet, byrow = TRUE)
+  } else {
+    if(nrow(data$sel_block) != data$nyears) {
+      stop(paste("data$sel_block should be a matrix of", data$nyears, "rows."), call. = FALSE)
+    }
+    if(ncol(data$sel_block) != data$nfleet) {
+      stop(paste("data$sel_block should be a matrix of", data$nfleet, "columns."), call. = FALSE)
+    }
+  }
+  data$nsel_block <- as.numeric(data$sel_block) %>% unique() %>% length()
 
+  return(list(data = data, OM = OM, StockPars = StockPars, ObsPars = ObsPars, FleetPars = FleetPars))
 }
 
 check_OM_for_sampling <- function(OM, data) {

@@ -152,11 +152,11 @@ report <- function(Assessment, retro = NULL, filename = paste0("report_", Assess
   render_args$quiet <- quiet
 
   message("Rendering markdown file...")
-  output <- do.call(rmarkdown::render, render_args)
-  message("Rendering complete.")
+  output_filename <- do.call(rmarkdown::render, render_args)
+  message("Rendered file: ", output_filename)
 
-  if(open_file) browseURL(output)
-  invisible(output)
+  if(open_file) browseURL(output_filename)
+  invisible(output_filename)
 }
 
 
@@ -719,7 +719,7 @@ plot_composition <- function(Year = 1:nrow(obs), obs, fit = NULL, plot_type = c(
     obs_prob <- obs/rowSums(obs, na.rm = TRUE)
     fit_prob <- fit/rowSums(fit, na.rm = TRUE)
 
-    resid <- N * (obs_prob - fit_prob) / sqrt(N * fit_prob)
+    resid <- N * (obs_prob - fit_prob) / sqrt(N * fit_prob * (1 - fit_prob))
     diameter_max <- bubble_adj / pmin(10, max(abs(resid), na.rm = TRUE))
     plot(NULL, NULL, typ = 'n', xlim = range(Year), xlab = "Year", ylim = range(data_val), ylab = data_lab)
 

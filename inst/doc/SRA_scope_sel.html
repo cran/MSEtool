@@ -12,7 +12,7 @@
 
 <meta name="author" content="Quang Huynh (q.huynh@oceans.ubc.ca)" />
 
-<meta name="date" content="2020-06-24" />
+<meta name="date" content="2020-08-05" />
 
 <title>2b. Configuring selectivity for the SRA model</title>
 
@@ -315,7 +315,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">2b. Configuring selectivity for the SRA model</h1>
 <h4 class="author">Quang Huynh (<a href="mailto:q.huynh@oceans.ubc.ca" class="email">q.huynh@oceans.ubc.ca</a>)</h4>
-<h4 class="date">2020-06-24</h4>
+<h4 class="date">2020-08-05</h4>
 
 
 <div id="TOC">
@@ -324,14 +324,14 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <li><a href="#fleet-selectivity"><span class="toc-section-number">2</span> Fleet selectivity</a>
 <ul>
 <li><a href="#time-blocks-for-selectivity"><span class="toc-section-number">2.1</span> Time blocks for selectivity</a></li>
-<li><a href="#selectivity-of-each-block"><span class="toc-section-number">2.2</span> Selectivity of each block</a></li>
+<li><a href="#selectivity-of-each-dummy-fleet"><span class="toc-section-number">2.2</span> Selectivity of each dummy fleet</a></li>
 <li><a href="#starting-values-of-selectivity-parameters"><span class="toc-section-number">2.3</span> Starting values of selectivity parameters</a></li>
 <li><a href="#fixing-and-sharing-parameters"><span class="toc-section-number">2.4</span> Fixing and sharing parameters</a></li>
 </ul></li>
 <li><a href="#survey-selectivity"><span class="toc-section-number">3</span> Survey selectivity</a>
 <ul>
-<li><a href="#is-survey-selectivity-already-parameterized-elsewhere"><span class="toc-section-number">3.1</span> Is survey selectivity already parameterized elsewhere?</a></li>
-<li><a href="#selectivity-function"><span class="toc-section-number">3.2</span> Selectivity function</a></li>
+<li><a href="#is-survey-selectivity-already-defined-elsewhere"><span class="toc-section-number">3.1</span> Is survey selectivity already defined elsewhere?</a></li>
+<li><a href="#survey-selectivity-is-independent-of-anything-else-in-the-model"><span class="toc-section-number">3.2</span> Survey selectivity is independent of anything else in the model</a></li>
 <li><a href="#selectivity-parameters"><span class="toc-section-number">3.3</span> Selectivity parameters</a></li>
 </ul></li>
 </ul>
@@ -370,7 +370,7 @@ pre { /* Code block */
 <p><br></p>
 <div id="introduction" class="section level1" number="1">
 <h1 number="1"><span class="header-section-number">1</span> Introduction</h1>
-<p>There are a multitude of options available in how selectivity for fleets and surveys is parameterized in the model. This vignette is designed to be a step-by-step guide for setup of selectivity. Familiarity with the more general <a href="SRA_scope.html">SRA vignette</a> and the function help page (found by typing <code>?SRA_scope</code> into the R console) will be helpful.</p>
+<p>There are a multitude of options available in how selectivity for fleets and surveys is parameterized in the model. This vignette is designed to be a step-by-step guide for setup of selectivity. It is best to first think about fleet selectivity followed by survey selectivity. Familiarity with the more general <a href="SRA_scope.html">SRA vignette</a> and the function help page (found by typing <code>?SRA_scope</code> into the R console) will be helpful.</p>
 <p>This vignette is designed to provide step-by-step information on possible model configurations, but of course it is up to the user to decide whether those configurations are appropriate for the operating model conditioning.</p>
 <p>The general function call for <code>SRA_scope</code> is:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a>SRA &lt;-<span class="st"> </span><span class="kw">SRA_scope</span>(OM, data, ...)</span></code></pre></div>
@@ -380,26 +380,27 @@ pre { /* Code block */
 <h1 number="2"><span class="header-section-number">2</span> Fleet selectivity</h1>
 <div id="time-blocks-for-selectivity" class="section level2" number="2.1">
 <h2 number="2.1"><span class="header-section-number">2.1</span> Time blocks for selectivity</h2>
-<p>Fleet selectivity can be vary in time blocks. We define the selectivity for each block and then assign the blocks to fleets. Let’s say we have 2 fleets, a 10-year time series, and the first fleet selectivity changes in year 6. Thus, we have 3 selectivity blocks and assign the block for each fleet and year with a 10 by 2 matrix:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a>data<span class="op">$</span>nsel_block &lt;-<span class="st"> </span><span class="dv">3</span> <span class="co"># There are three blocks</span></span>
-<span id="cb2-2"><a href="#cb2-2"></a>data<span class="op">$</span>sel_block</span>
-<span id="cb2-3"><a href="#cb2-3"></a><span class="co">#&gt;       [,1] [,2]</span></span>
-<span id="cb2-4"><a href="#cb2-4"></a><span class="co">#&gt;  [1,]    1    3</span></span>
-<span id="cb2-5"><a href="#cb2-5"></a><span class="co">#&gt;  [2,]    1    3</span></span>
-<span id="cb2-6"><a href="#cb2-6"></a><span class="co">#&gt;  [3,]    1    3</span></span>
-<span id="cb2-7"><a href="#cb2-7"></a><span class="co">#&gt;  [4,]    1    3</span></span>
-<span id="cb2-8"><a href="#cb2-8"></a><span class="co">#&gt;  [5,]    1    3</span></span>
-<span id="cb2-9"><a href="#cb2-9"></a><span class="co">#&gt;  [6,]    2    3</span></span>
-<span id="cb2-10"><a href="#cb2-10"></a><span class="co">#&gt;  [7,]    2    3</span></span>
-<span id="cb2-11"><a href="#cb2-11"></a><span class="co">#&gt;  [8,]    2    3</span></span>
-<span id="cb2-12"><a href="#cb2-12"></a><span class="co">#&gt;  [9,]    2    3</span></span>
-<span id="cb2-13"><a href="#cb2-13"></a><span class="co">#&gt; [10,]    2    3</span></span></code></pre></div>
-<p>By default, a unique block is assigned to each fleet, i.e., no time-varying element, and the above code chunk is not needed.</p>
+<p>Fleet selectivity can be vary in time blocks. Let’s say we have 2 fleets, a 10-year time series, and the first fleet selectivity changes in year 6. Thus, we have 3 selectivity blocks, a.k.a. dummy fleets each with their own selectivity. For each ‘true’ fleet and year in the model, we will assign the selectivity to one of the three dummy fleets. To do so, we create a 10 by 2 integer matrix:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a>data<span class="op">$</span>sel_block</span>
+<span id="cb2-2"><a href="#cb2-2"></a><span class="co">#&gt;       [,1] [,2]</span></span>
+<span id="cb2-3"><a href="#cb2-3"></a><span class="co">#&gt;  [1,]    1    3</span></span>
+<span id="cb2-4"><a href="#cb2-4"></a><span class="co">#&gt;  [2,]    1    3</span></span>
+<span id="cb2-5"><a href="#cb2-5"></a><span class="co">#&gt;  [3,]    1    3</span></span>
+<span id="cb2-6"><a href="#cb2-6"></a><span class="co">#&gt;  [4,]    1    3</span></span>
+<span id="cb2-7"><a href="#cb2-7"></a><span class="co">#&gt;  [5,]    1    3</span></span>
+<span id="cb2-8"><a href="#cb2-8"></a><span class="co">#&gt;  [6,]    2    3</span></span>
+<span id="cb2-9"><a href="#cb2-9"></a><span class="co">#&gt;  [7,]    2    3</span></span>
+<span id="cb2-10"><a href="#cb2-10"></a><span class="co">#&gt;  [8,]    2    3</span></span>
+<span id="cb2-11"><a href="#cb2-11"></a><span class="co">#&gt;  [9,]    2    3</span></span>
+<span id="cb2-12"><a href="#cb2-12"></a><span class="co">#&gt; [10,]    2    3</span></span></code></pre></div>
+<p>Thus, for the first fleet (first column), we assign the selectivity of dummy fleet #1 to years 1-5 and that of dummy fleet #2 to years 6-10. The second fleet is assigned to dummy fleet #3 for all years.</p>
+<p>By default, a unique block is assigned to each fleet, indicating no time-varying selectivity, and the above code chunk is not needed. In other words, there’s no distinction between dummy fleets and the true fleets.</p>
 </div>
-<div id="selectivity-of-each-block" class="section level2" number="2.2">
-<h2 number="2.2"><span class="header-section-number">2.2</span> Selectivity of each block</h2>
-<p>We specify the selectivity as a character vector with each entry corresponding to block:</p>
+<div id="selectivity-of-each-dummy-fleet" class="section level2" number="2.2">
+<h2 number="2.2"><span class="header-section-number">2.2</span> Selectivity of each dummy fleet</h2>
+<p>We specify the selectivity as a character vector with each entry corresponding to dummy fleet:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a>selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span></code></pre></div>
+<p>Thus, the selectivity of the first dummy fleet is logistic, the second is dome, and the third is free, i.e., independent parameters for selectivity-at-age.</p>
 <p>These functions are described in <a href="SRA_scope_eq.html">Vignette #2a</a>.</p>
 </div>
 <div id="starting-values-of-selectivity-parameters" class="section level2" number="2.3">
@@ -412,7 +413,7 @@ pre { /* Code block */
 <span id="cb4-4"><a href="#cb4-4"></a><span class="co">#&gt; [1,]   55 55.0 20.0</span></span>
 <span id="cb4-5"><a href="#cb4-5"></a><span class="co">#&gt; [2,]   30 30.0 19.0</span></span>
 <span id="cb4-6"><a href="#cb4-6"></a><span class="co">#&gt; [3,]    1  0.5  0.9</span></span></code></pre></div>
-<p>Note that Vmaxlen is ultimately not used, and if <code>vul_par</code> is provided, another step is needed to turn off this parameter (see next subsection).</p>
+<p>Note that <code>Vmaxlen</code> is ultimately not used when the selectivity is logistic and the value in the third row, first column is merely an unused placeholder. If <code>vul_par</code> is provided, another step is needed to turn off this parameter (see next subsection).</p>
 <p>If we have selectivity as free parameters (independent parameters for each age), <code>vul_par</code> has <code>OM@maxage</code> rows with each row giving the selectivity value to the corresponding age (first row = age-1, etc.):</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a>OM<span class="op">@</span>maxage &lt;-<span class="st"> </span><span class="dv">6</span></span>
 <span id="cb5-2"><a href="#cb5-2"></a>selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span>
@@ -424,10 +425,11 @@ pre { /* Code block */
 <span id="cb5-8"><a href="#cb5-8"></a><span class="co">#&gt; [4,]   NA   NA  1.0</span></span>
 <span id="cb5-9"><a href="#cb5-9"></a><span class="co">#&gt; [5,]   NA   NA  1.0</span></span>
 <span id="cb5-10"><a href="#cb5-10"></a><span class="co">#&gt; [6,]   NA   NA  1.0</span></span></code></pre></div>
+<p>Rows 4 to maxage for logistic and dome selectivity are unused placeholders.</p>
 </div>
 <div id="fixing-and-sharing-parameters" class="section level2" number="2.4">
 <h2 number="2.4"><span class="header-section-number">2.4</span> Fixing and sharing parameters</h2>
-<p>Selectivity parameters may be fixed or shared. For TMB, this is accomplished by the <code>map</code> argument, which can be provided in <code>SRA_scope</code> via the <code>map_vul_par</code> matrix. Shared parameters are assigned a unique integer while fixed parameters are assigned <code>NA</code>. Let’s look at the first <code>vul_par</code> example again:</p>
+<p>Selectivity parameters may be fixed or shared. For TMB, this is accomplished by the <code>map</code> argument, which can be provided in <code>SRA_scope</code> via the <code>map_vul_par</code> matrix which is of identical dimension to <code>vul_par</code>. <code>map_vul_par</code> tells TMB what to do to the parameter of the corresponding row and column in <code>vul_par</code>. Shared parameters are assigned a unique integer amongst themselves while fixed/unused parameters are assigned <code>NA</code>. Let’s look at the first <code>vul_par</code> example again:</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a>selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;dome&quot;</span>)</span>
 <span id="cb6-2"><a href="#cb6-2"></a>vul_par</span>
 <span id="cb6-3"><a href="#cb6-3"></a><span class="co">#&gt;      [,1] [,2] [,3]</span></span>
@@ -436,9 +438,9 @@ pre { /* Code block */
 <span id="cb6-6"><a href="#cb6-6"></a><span class="co">#&gt; [3,]    1  0.5  0.9</span></span></code></pre></div>
 <p>We want:</p>
 <ul>
-<li>LFS and L5 for the first two blocks to be identical</li>
-<li>Vmaxlen in the third block to be fixed</li>
-<li>The parameter reserved for Vmaxlen for the first block to be turned off since it’s not needed</li>
+<li>LFS and L5 for the first two dummy fleets to be identical</li>
+<li>Vmaxlen in the third dummy fleet to be fixed</li>
+<li>The parameter reserved for Vmaxlen for the first dummy fleet to be turned off since it’s merely a placeholder</li>
 <li>All other parameters are estimated unique parameters</li>
 </ul>
 <p>The matrix <code>map_vul_par</code> that accomplishes these tasks will look like this:</p>
@@ -449,9 +451,9 @@ pre { /* Code block */
 <span id="cb7-5"><a href="#cb7-5"></a><span class="co">#&gt; [3,]   NA    3   NA</span></span></code></pre></div>
 <p>For the second <code>vul_par</code> example, we want:</p>
 <ul>
-<li>Selectivity of block three to be estimated only for age 1 and 2</li>
-<li>The parameter reserved for Vmaxlen for the first block to be turned off since it’s not needed</li>
-<li>Rows 4-6 for the first two blocks to be turned off (undefined in the model)</li>
+<li>Selectivity of dummy fleet #3 to be estimated only for ages 1 and 2</li>
+<li>The parameter reserved for Vmaxlen for the first block to be turned off since it’s a placeholder</li>
+<li>Rows 4-6 for the first two blocks to be turned off (they’re placeholders and undefined in the model)</li>
 </ul>
 <p>The matrix <code>map_vul_par</code> that accomplishes these tasks will look like this:</p>
 <div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a>selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span>
@@ -463,49 +465,53 @@ pre { /* Code block */
 <span id="cb8-7"><a href="#cb8-7"></a><span class="co">#&gt; [4,]   NA   NA   NA</span></span>
 <span id="cb8-8"><a href="#cb8-8"></a><span class="co">#&gt; [5,]   NA   NA   NA</span></span>
 <span id="cb8-9"><a href="#cb8-9"></a><span class="co">#&gt; [6,]   NA   NA   NA</span></span></code></pre></div>
+<p>Finally the function call looks like this:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>SRA &lt;-<span class="st"> </span><span class="kw">SRA_scope</span>(OM, data, <span class="dt">selectivity =</span> selectivity, <span class="dt">vul_par =</span> vul_par, <span class="dt">map_vul_par =</span> map_vul_par, ...)</span></code></pre></div>
 </div>
 </div>
 <div id="survey-selectivity" class="section level1" number="3">
 <h1 number="3"><span class="header-section-number">3</span> Survey selectivity</h1>
-<p>Next we can move on to survey selectivity. Unlike fleet selectivity, selectivity is unique to each survey and no time blocks are used.</p>
-<div id="is-survey-selectivity-already-parameterized-elsewhere" class="section level2" number="3.1">
-<h2 number="3.1"><span class="header-section-number">3.1</span> Is survey selectivity already parameterized elsewhere?</h2>
-<p>The vector <code>data$I_type</code> defines where the survey selectivity is defined (the terms index and survey are used interchangeably). Survey selectivity may be identical to fleet selectivity, i.e., vulnerable biomass, total biomass, or spawning biomass. If we have 5 surveys with:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>data<span class="op">$</span>I_type &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">2</span>, <span class="st">&quot;SSB&quot;</span>, <span class="st">&quot;B&quot;</span>, <span class="st">&quot;est&quot;</span>, <span class="st">&quot;est&quot;</span>)</span></code></pre></div>
-<p>The first survey has the selectivity of the second fleet (note the integer does not refer to selectivity blocks), while “SSB” indicates the second survey selectivity follows the maturity ogive, and “B” refers to a total biomass survey (selectivity = 1 for all ages).</p>
-<p>If selectivity is otherwise not defined elsewhere, then “est” is used to indicate that the survey selectivity is estimated, or more precisely, this survey has its own set of parameters.</p>
+<p>Next we can move on to survey selectivity. Unlike fleet selectivity, selectivity is unique to each survey and no dummy fleets are used.</p>
+<div id="is-survey-selectivity-already-defined-elsewhere" class="section level2" number="3.1">
+<h2 number="3.1"><span class="header-section-number">3.1</span> Is survey selectivity already defined elsewhere?</h2>
+<p>The vector <code>s_selectivity</code> defines where the survey selectivity is defined (the terms index and survey are used interchangeably). Survey selectivity may be identical to fleet selectivity, i.e., vulnerable biomass, total biomass, or spawning biomass. If we have 4 surveys with:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a>s_selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;SSB&quot;</span>, <span class="st">&quot;B&quot;</span>, <span class="dv">1</span>, <span class="dv">2</span>)</span></code></pre></div>
+<p>The first survey is a survey of spawning biomass as denoted by “SSB” (maturity is configured in the <code>OM</code>), the second survey indexes total biomass as denoted by “B” (selectivity = 1 for all ages), and the third and fourth surveys have the selectivity of the first and second fleets, respectively. Note that the integers for fleets refer to the true fleet and not to selectivity blocks/dummy fleets.</p>
+<p>No further consideration of survey selectivity is needed when selectivity is defined elsewhere, the function call can look like this:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a>SRA &lt;-<span class="st"> </span><span class="kw">SRA_scope</span>(OM, data, <span class="dt">selectivity =</span> selectivity, <span class="dt">s_selectivity =</span> s_selectivity, ...)</span></code></pre></div>
 </div>
-<div id="selectivity-function" class="section level2" number="3.2">
-<h2 number="3.2"><span class="header-section-number">3.2</span> Selectivity function</h2>
-<p>After declaring <code>I_type</code>, the selectivity function needs to be declared for surveys with estimated parameters.</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a>s_selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span></code></pre></div>
-<p>For the fourth and fifth surveys, the selectivity functions are dome-shaped and free parameters, respectively. A placeholder is needed for the first three surveys solely for internal organization so that the code correctly matches the selectivity to the survey.</p>
+<div id="survey-selectivity-is-independent-of-anything-else-in-the-model" class="section level2" number="3.2">
+<h2 number="3.2"><span class="header-section-number">3.2</span> Survey selectivity is independent of anything else in the model</h2>
+<p>On the other hand, if survey selectivity needs to be explicitly defined, then the <code>s_selectivity</code> vector can indicate the functional form, using one of <code>logistic</code>, <code>dome</code>, <code>dome</code>. Let’s look at another situation with 5 surveys:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a>s_selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">2</span>, <span class="st">&quot;SSB&quot;</span>, <span class="st">&quot;B&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span></code></pre></div>
+<p>For the fourth and fifth surveys, the selectivity functions are dome-shaped and free parameters, respectively. Next we need to consider what the parameters defining this functions are, either as starting values to be estimated or fixed values in the model.</p>
 </div>
 <div id="selectivity-parameters" class="section level2" number="3.3">
 <h2 number="3.3"><span class="header-section-number">3.3</span> Selectivity parameters</h2>
-<p>Just as in the fleet parameters, the survey selectivity parameters by default use <code>OM@LFS</code>, <code>OM@L5</code>, and <code>OM@Vmaxlen</code> for start values when s_selectivity = “logistic” or “dome”, and custom start values needed when selectivity uses free parameters.</p>
+<p>Just as in the fleet parameters, the survey selectivity parameters by default use <code>OM@LFS</code>, <code>OM@L5</code>, and <code>OM@Vmaxlen</code> for start values when <code>s_selectivity = &quot;logistic&quot;</code> or <code>&quot;dome&quot;</code>, and custom start values needed when selectivity uses free parameters.</p>
 <p>Custom start values are passed to the SRA in the <code>s_vul_par</code> matrix with the same layout as that for the fleet blocks:</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a>OM<span class="op">@</span>maxage &lt;-<span class="st"> </span><span class="dv">6</span></span>
-<span id="cb11-2"><a href="#cb11-2"></a>data<span class="op">$</span>I_type &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">2</span>, <span class="st">&quot;SSB&quot;</span>, <span class="st">&quot;B&quot;</span>, <span class="st">&quot;est&quot;</span>, <span class="st">&quot;est&quot;</span>)</span>
-<span id="cb11-3"><a href="#cb11-3"></a>s_selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span>
-<span id="cb11-4"><a href="#cb11-4"></a>s_vul_par</span>
-<span id="cb11-5"><a href="#cb11-5"></a><span class="co">#&gt;      [,1] [,2] [,3] [,4] [,5]</span></span>
-<span id="cb11-6"><a href="#cb11-6"></a><span class="co">#&gt; [1,]    0    0    0 55.0    1</span></span>
-<span id="cb11-7"><a href="#cb11-7"></a><span class="co">#&gt; [2,]    0    0    0 40.0    0</span></span>
-<span id="cb11-8"><a href="#cb11-8"></a><span class="co">#&gt; [3,]    0    0    0  0.5    0</span></span>
-<span id="cb11-9"><a href="#cb11-9"></a><span class="co">#&gt; [4,]    0    0    0  0.0    0</span></span>
-<span id="cb11-10"><a href="#cb11-10"></a><span class="co">#&gt; [5,]    0    0    0  0.0    0</span></span>
-<span id="cb11-11"><a href="#cb11-11"></a><span class="co">#&gt; [6,]    0    0    0  0.0    0</span></span></code></pre></div>
-<p>Parameter slots for surveys 1 - 3 are ignored, the first three rows in column four are the start values for the three paramaters of the dome function, and the fifth survey only selects age-1 animals, i.e., a survey of recruits.</p>
-<p>Finally, to remove parameters from estimation either because they’re just placeholders (surveys 1-3) or they should be fixed in the model (survey 5), we provide the map argument for <code>s_vul_par</code> with <code>map_s_vul_par</code>:</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a>map_s_vul_par</span>
-<span id="cb12-2"><a href="#cb12-2"></a><span class="co">#&gt;      [,1] [,2] [,3] [,4] [,5]</span></span>
-<span id="cb12-3"><a href="#cb12-3"></a><span class="co">#&gt; [1,]   NA   NA   NA    1   NA</span></span>
-<span id="cb12-4"><a href="#cb12-4"></a><span class="co">#&gt; [2,]   NA   NA   NA    2   NA</span></span>
-<span id="cb12-5"><a href="#cb12-5"></a><span class="co">#&gt; [3,]   NA   NA   NA    3   NA</span></span>
-<span id="cb12-6"><a href="#cb12-6"></a><span class="co">#&gt; [4,]   NA   NA   NA   NA   NA</span></span>
-<span id="cb12-7"><a href="#cb12-7"></a><span class="co">#&gt; [5,]   NA   NA   NA   NA   NA</span></span>
-<span id="cb12-8"><a href="#cb12-8"></a><span class="co">#&gt; [6,]   NA   NA   NA   NA   NA</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a>OM<span class="op">@</span>maxage &lt;-<span class="st"> </span><span class="dv">6</span></span>
+<span id="cb13-2"><a href="#cb13-2"></a>s_selectivity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">2</span>, <span class="st">&quot;SSB&quot;</span>, <span class="st">&quot;B&quot;</span>, <span class="st">&quot;dome&quot;</span>, <span class="st">&quot;free&quot;</span>)</span>
+<span id="cb13-3"><a href="#cb13-3"></a>s_vul_par</span>
+<span id="cb13-4"><a href="#cb13-4"></a><span class="co">#&gt;      [,1] [,2] [,3] [,4] [,5]</span></span>
+<span id="cb13-5"><a href="#cb13-5"></a><span class="co">#&gt; [1,]    0    0    0 55.0    1</span></span>
+<span id="cb13-6"><a href="#cb13-6"></a><span class="co">#&gt; [2,]    0    0    0 40.0    0</span></span>
+<span id="cb13-7"><a href="#cb13-7"></a><span class="co">#&gt; [3,]    0    0    0  0.5    0</span></span>
+<span id="cb13-8"><a href="#cb13-8"></a><span class="co">#&gt; [4,]    0    0    0  0.0    0</span></span>
+<span id="cb13-9"><a href="#cb13-9"></a><span class="co">#&gt; [5,]    0    0    0  0.0    0</span></span>
+<span id="cb13-10"><a href="#cb13-10"></a><span class="co">#&gt; [6,]    0    0    0  0.0    0</span></span></code></pre></div>
+<p>Parameter slots for surveys 1 - 3 are ignored. Again they’re placeholders for internal organization. The first three rows in column four are the start values for the three parameters of the dome function (to be estimated), and the fifth survey only selects age-1 animals, i.e., a survey of recruits.</p>
+<p>Finally, to remove parameters from estimation either because they’re just placeholders (surveys 1-4) or they should be fixed in the model (survey 5), we provide the map argument for <code>s_vul_par</code> with <code>map_s_vul_par</code>:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1"></a>map_s_vul_par</span>
+<span id="cb14-2"><a href="#cb14-2"></a><span class="co">#&gt;      [,1] [,2] [,3] [,4] [,5]</span></span>
+<span id="cb14-3"><a href="#cb14-3"></a><span class="co">#&gt; [1,]   NA   NA   NA    1   NA</span></span>
+<span id="cb14-4"><a href="#cb14-4"></a><span class="co">#&gt; [2,]   NA   NA   NA    2   NA</span></span>
+<span id="cb14-5"><a href="#cb14-5"></a><span class="co">#&gt; [3,]   NA   NA   NA    3   NA</span></span>
+<span id="cb14-6"><a href="#cb14-6"></a><span class="co">#&gt; [4,]   NA   NA   NA   NA   NA</span></span>
+<span id="cb14-7"><a href="#cb14-7"></a><span class="co">#&gt; [5,]   NA   NA   NA   NA   NA</span></span>
+<span id="cb14-8"><a href="#cb14-8"></a><span class="co">#&gt; [6,]   NA   NA   NA   NA   NA</span></span></code></pre></div>
+<p>A function call utilizing this custom set-up for survey selectivity would be:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a>SRA &lt;-<span class="st"> </span><span class="kw">SRA_scope</span>(OM, data, <span class="dt">selectivity =</span> selectivity, <span class="dt">s_selectivity =</span> s_selectivity, <span class="dt">s_vul_par =</span> s_vul_par, <span class="dt">map_s_vul_par =</span> map_s_vul_par, ...)</span></code></pre></div>
 </div>
 </div>
 

@@ -2,7 +2,7 @@
 % Please edit documentation in R/multiMSE_internal.R
 \name{TEG}
 \alias{TEG}
-\title{Toms expand grid}
+\title{Tom's expand grid}
 \usage{
 TEG(vec)
 }

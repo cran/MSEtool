@@ -34,7 +34,9 @@ popdynOneMICE(
   bx,
   Rel,
   SexPars,
-  x
+  x,
+  plusgroup,
+  SSB0x
 )
 }
 \arguments{
@@ -44,47 +46,50 @@ popdynOneMICE(
 
 \item{maxage}{Integer, maximum modelled age}
 
-\item{Ncur}{Array [stock, age, area] of stock numbers}
+\item{Ncur}{Array \verb{[stock, age, area]} of stock numbers}
 
-\item{Vcur}{Array [fleet, age, area] of the vulnerability curve}
+\item{Vcur}{Array \verb{[fleet, age, area]} of the vulnerability curve}
 
-\item{FMretx}{Array [stock, fleet, age, area] of the retention curve}
+\item{FMretx}{Array \verb{[stock, fleet, age, area]} of the retention curve}
 
-\item{FMx}{Array [stock, fleet, age, area] fishing mortality rate}
+\item{FMx}{Array \verb{[stock, fleet, age, area]} fishing mortality rate}
 
-\item{PerrYrp}{Vector [stock] process error - the lognormal factor for recruitment strength}
+\item{PerrYrp}{Vector \verb{[stock]} process error - the lognormal factor for
+recruitment strength}
 
-\item{hsx}{Vector [stock] steepness of the stock recruitment curve}
+\item{hsx}{Vector \verb{[stock]} steepness of the stock recruitment curve}
 
-\item{aRx}{Vector [stock] stock recruitment parameter alpha (for Ricker curve)}
+\item{aRx}{Vector \verb{[stock]} stock recruitment parameter alpha (for Ricker curve)}
 
-\item{bRx}{Vector [stock] stock recruitment parameter beta (for Ricker curve)}
+\item{bRx}{Vector \verb{[stock]} stock recruitment parameter beta (for Ricker curve)}
 
-\item{movy}{Array [stock,age,area,area] of movement transitions}
+\item{movy}{Array \verb{[stock,age,area,area]} of movement transitions}
 
-\item{Spat_targ}{Matrix [stock, fleet] of spatial targetting parameter (0 evenly spatial distributed, 1 proportional to vulnerable biomass)}
+\item{Spat_targ}{Matrix \verb{[stock, fleet]} of spatial targeting parameter
+(0 evenly spatial distributed, 1 proportional to vulnerable biomass)}
 
-\item{SRrelx}{Integer vector [stock] the form of the stock recruitment relationship (1 = Beverton-Holt, 2= Ricker)}
+\item{SRrelx}{Integer vector \verb{[stock]} the form of the stock recruitment
+relationship (1 = Beverton-Holt, 2= Ricker)}
 
-\item{M_agecur}{Matrix [stock, age] of Natural mortality rate at age}
+\item{M_agecur}{Matrix \verb{[stock, age]} of Natural mortality rate at age}
 
-\item{Mat_agecur}{Matrix [stock, age] of maturity (spawning fraction) age age}
+\item{Mat_agecur}{Matrix \verb{[stock, age]} of maturity (spawning fraction) age age}
 
-\item{Asizex}{Matrix [stock, area] of relative area sizes}
+\item{Asizex}{Matrix \verb{[stock, area]} of relative area sizes}
 
-\item{Kx}{Vector [stock] of von B growth parameter K}
+\item{Kx}{Vector \verb{[stock]} of von B growth parameter K}
 
-\item{Mx}{Vector [stock] mature natural mortality rate}
+\item{Mx}{Vector \verb{[stock]} mature natural mortality rate}
 
-\item{R0x}{Vector [stock] unfished recruitment}
+\item{R0x}{Vector \verb{[stock]} unfished recruitment}
 
-\item{R0ax}{Matrix [stock, area] unfished recruitment by area}
+\item{R0ax}{Matrix \verb{[stock, area]} unfished recruitment by area}
 
-\item{SSBpRx}{Matrix [stock, area] spawning biomass per recruit by area}
+\item{SSBpRx}{Matrix \verb{[stock, area]} spawning biomass per recruit by area}
 
-\item{ax}{Vector [stock] weight-length parameter a W=aL^b}
+\item{ax}{Vector \verb{[stock]} weight-length parameter a W=aL^b}
 
-\item{bx}{Vector [stock] weight-length parameter b W=aL^b}
+\item{bx}{Vector \verb{[stock]} weight-length parameter b W=aL^b}
 
 \item{Rel}{A list of inter-stock relationships see slot Rel of MOM object class}
 
@@ -92,14 +97,19 @@ popdynOneMICE(
 
 \item{x}{Integer. The simulation number}
 
+\item{plusgroup}{Numeric vector. Use plus-group (1) or not (0)}
+
+\item{SSB0x}{Unfished SSB0, Vector nstock length.}
+
 \item{nyears}{Integer, number of historical years (unfished til today)}
 
-\item{Linf}{Vector [stock] of von B asymptotic length parameter Linf}
+\item{Linf}{Vector \verb{[stock]} of von B asymptotic length parameter Linf}
 
-\item{t0}{Vector [stock] of von B theoretical age at zero length (t0)}
+\item{t0}{Vector \verb{[stock]} of von B theoretical age at zero length (t0)}
 }
 \description{
-Completes a single iteration of recruitment, mortality, fishing and movement given MICE model inputs
+Completes a single iteration of recruitment, mortality, fishing and
+movement given MICE model inputs
 }
 \author{
 T.Carruthers

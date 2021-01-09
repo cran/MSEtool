@@ -12,7 +12,10 @@ iSCAM2OM(
   Name = NULL,
   Source = "No source provided",
   length_timestep = 1,
-  Author = "No author provided"
+  nyr_par_mu = 2,
+  Author = "No author provided",
+  report = F,
+  silent = F
 )
 }
 \arguments{
@@ -32,7 +35,13 @@ uncertainty (for OM@cpars custom parameters)}
 \item{length_timestep}{How long is a model time step in years
 (e.g. a quarterly model is 0.25, a monthly model 1/12)}
 
+\item{nyr_par_mu}{integer, the number of recent years to estimate vulnerability over for future projections}
+
 \item{Author}{Who did the assessment}
+
+\item{report}{logical should a numbers at age reconstruction plot be produced?}
+
+\item{silent}{logical should progress reporting be printed to the console?}
 }
 \description{
 A function that uses the file location of a fitted iSCAM

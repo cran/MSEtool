@@ -37,13 +37,16 @@ popdynMICE(
   SRrelx,
   Rel,
   SexPars,
-  x
+  x,
+  plusgroup,
+  maxF,
+  SSB0x
 )
 }
 \arguments{
 \item{qsx}{Total catchability}
 
-\item{qfracx}{Vector [fleet], the fraction of total qs by fleet}
+\item{qfracx}{Vector \verb{[fleet]}, the fraction of total qs by fleet}
 
 \item{np}{Integer, the number of stocks}
 
@@ -53,49 +56,51 @@ popdynMICE(
 
 \item{nareas}{Integer, the number of spatial areas}
 
-\item{maxage}{Integer, maximum modelled age}
+\item{maxage}{Integer, maximum modeled age}
 
-\item{Nx}{Array [stock, age, year, area] of stock numbers}
+\item{Nx}{Array \verb{[stock, age, year, area]} of stock numbers}
 
-\item{VFx}{Array [fleet, age, year, area] of the vulnerability curve}
+\item{VFx}{Array \verb{[fleet, age, year, area]} of the vulnerability curve}
 
-\item{FretAx}{Array [fleet, age, year, area] of the retention curve}
+\item{FretAx}{Array \verb{[fleet, age, year, area]} of the retention curve}
 
-\item{Effind}{Array [fleet, year] of effort}
+\item{Effind}{Array \verb{[fleet, year]} of effort}
 
-\item{movx}{Array [stock,age,area,area] of movement transitions}
+\item{movx}{Array \verb{[stock,age,area,area]} of movement transitions}
 
-\item{Spat_targ}{Matrix [stock, fleet] of spatial targetting parameter (0 evenly spatial distributed, 1 proportional to vulnerable biomass)}
+\item{Spat_targ}{Matrix \verb{[stock, fleet]} of spatial targeting parameter
+(0 evenly spatial distributed, 1 proportional to vulnerable biomass)}
 
-\item{M_ageArrayx}{Array [stock, age,year] of Natural mortality rate at age}
+\item{M_ageArrayx}{Array \verb{[stock, age,year]} of Natural mortality rate at age}
 
-\item{Mat_agex}{Array [stock, age, year] of maturity (spawning fraction) age}
+\item{Mat_agex}{Array \verb{[stock, age, year]} of maturity (spawning fraction) age}
 
-\item{Asizex}{Array [stock, area] Area size}
+\item{Asizex}{Array \verb{[stock, area]} Area size}
 
-\item{Kx}{Vector [stock] of von B growth parameter K}
+\item{Kx}{Vector \verb{[stock]} of von B growth parameter K}
 
-\item{Mx}{Vector [stock] mature natural mortality rate}
+\item{Mx}{Vector \verb{[stock]} mature natural mortality rate}
 
-\item{R0x}{Vector [stock] unfished recruitment}
+\item{R0x}{Vector \verb{[stock]} unfished recruitment}
 
-\item{R0ax}{Matrix [stock, area] unfished recruitment by area}
+\item{R0ax}{Matrix \verb{[stock, area]} unfished recruitment by area}
 
-\item{SSBpRx}{Matrix [stock, area] spawning biomass per recruit by area}
+\item{SSBpRx}{Matrix \verb{[stock, area]} spawning biomass per recruit by area}
 
-\item{hsx}{Vector [stock] steepness of the stock recruitment curve}
+\item{hsx}{Vector \verb{[stock]} steepness of the stock recruitment curve}
 
-\item{aRx}{Vector [stock] stock recruitment parameter alpha (for Ricker curve)}
+\item{aRx}{Vector \verb{[stock]} stock recruitment parameter alpha (for Ricker curve)}
 
-\item{bRx}{Vector [stock] stock recruitment parameter beta (for Ricker curve)}
+\item{bRx}{Vector \verb{[stock]} stock recruitment parameter beta (for Ricker curve)}
 
-\item{ax}{Vector [stock] weight-length parameter a W=aL^b}
+\item{ax}{Vector \verb{[stock]} weight-length parameter a W=aL^b}
 
-\item{bx}{Vector [stock] weight-length parameter b W=aL^b}
+\item{bx}{Vector \verb{[stock]} weight-length parameter b W=aL^b}
 
-\item{Perrx}{Matrix [stock, year] process error - the lognormal factor for recruitment strength}
+\item{Perrx}{Matrix \verb{[stock, year]} process error - the lognormal factor for recruitment strength}
 
-\item{SRrelx}{Integer vector [stock] the form of the stock recruitment relationship (1 = Beverton-Holt, 2= Ricker)}
+\item{SRrelx}{Integer vector \verb{[stock]} the form of the stock recruitment
+relationship (1 = Beverton-Holt, 2= Ricker)}
 
 \item{Rel}{A list of inter-stock relationships see slot Rel of MOM object class}
 
@@ -103,9 +108,9 @@ popdynMICE(
 
 \item{x}{Integer the simulation number}
 
-\item{Linf}{Vector [stock] of von B asymptotic length parameter Linf}
+\item{Linf}{Vector \verb{[stock]} of von B asymptotic length parameter Linf}
 
-\item{t0}{Vector [stock] of von B theoretical age at zero length (t0)}
+\item{t0}{Vector \verb{[stock]} of von B theoretical age at zero length (t0)}
 }
 \description{
 Calls popdynOneMICE iteratively to reconstruct a time series given MICE model inputs

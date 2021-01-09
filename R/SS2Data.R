@@ -12,26 +12,25 @@
 #' minimum age for calculating the mean of age-dependent M from the SS assessment.
 #' @param gender An integer index for the sex for importing biological parameters (1 = female, 2 = male).
 #' @param comp_fleet A vector of indices corresponding to fleets in the assessment over which to aggregate the composition
-#' (catch-at-length and catch-at-age) data. By default, characer string \code{"all"} will aggregate across all fleets.
+#' (catch-at-length and catch-at-age) data. By default, character string \code{"all"} will aggregate across all fleets.
 #' @param comp_season Integer, for seasonal models, the season for which the value of the index will be used. By default, \code{"mean"}
 #' will take the average across seasons.
 #' @param comp_partition Integer vector for selecting length/age observations that are retained (2), discarded (1), or both (0). By default, \code{"all"}
 #' sums over all available partitions.
 #' @param comp_gender Integer vector for selecting length/age observations that are female (1), male (2), or both (0), or both scaled to sum to one (3).
 #' By default, \code{"all"} sums over all gender codes.
-#' @param index_fleet Obsolete as of DLMtool version 5.4 (all indices will now be included in the AddInd slot).
 #' @param index_season Integer, for seasonal models, the season for which the value of the index will be used. By default, \code{"mean"}
 #' will take the average across seasons.
 #' @param ... Arguments to pass to \link[r4ss]{SS_output}
 #' @return An object of class Data.
-#' @note Currently supports the  version of r4ss on CRAN (v.1.24) and Github (v.1.34-38). Function may be incompatible with other versions of r4ss.
+#' @note Currently supports the version of r4ss on CRAN (v.1.24) and Github (v.1.34-40). Function may be incompatible with other versions of r4ss.
 #' @author T. Carruthers and Q. Huynh
 #' @export
 #' @seealso \link{SS2OM}
 SS2Data <- function(SSdir, Name = "Imported by SS2Data", Common_Name = "", Species = "", Region = "",
                     min_age_M = 1, gender = 1,
                     comp_fleet = "all", comp_season = "sum", comp_partition = "all", comp_gender = "all",
-                    index_fleet = "SSB", index_season = "mean", ...) {
+                    index_season = "mean", ...) {
 
   replist <- SS_import(SSdir, ...)
 
@@ -40,11 +39,11 @@ SS2Data <- function(SSdir, Name = "Imported by SS2Data", Common_Name = "", Speci
     message(paste("Season-as-years detected in SS model. There is one season in the year with duration of", replist$seasduration, "year."))
     season_as_years <- TRUE
     nseas <- 1/replist$seasduration
-    message("DLMtool operates on annual basis. Since the SS model is seasonal, we need to aggregate over seasons.\n")
+    message("MSEtool operates on annual basis. Since the SS model is seasonal, we need to aggregate over seasons.\n")
   } else {
     nseas <- replist$nseasons
     if(nseas > 1) {
-      message("DLMtool operating model is an annual model. Since the SS model is seasonal, we need to aggregate over seasons.\n")
+      message("MSEtool operating model is an annual model. Since the SS model is seasonal, we need to aggregate over seasons.\n")
     }
   }
 
@@ -210,7 +209,7 @@ SS2Data <- function(SSdir, Name = "Imported by SS2Data", Common_Name = "", Speci
       Data@Lbar <- matrix(NA, nrow = 1, ncol = ncol(Data@Lc))
       for(i in 1:ncol(Data@Lbar)) {
         if(!is.na(lcpos[i])) {
-          Data@Lbar[1, i] <- weighted.mean(x = Data@CAL_mids[lcpos[i]:length(replist$lbins)],
+          Data@Lbar[1, i] <- stats::weighted.mean(x = Data@CAL_mids[lcpos[i]:length(replist$lbins)],
                                            w = Data@CAL[1, i, lcpos[i]:length(replist$lbins)],
                                            na.rm = TRUE)
         }
@@ -263,7 +262,7 @@ SS2Data <- function(SSdir, Name = "Imported by SS2Data", Common_Name = "", Speci
     CSD <- CSD[!is.na(CSD)]
     CSD[CSD <= 0] <- NA
     if(packageVersion("DLMtool") < 5.4) {
-      Csd_weighted <- weighted.mean(CSD, colSums(cbind(cat_weight, cat_numbers)), na.rm = TRUE)
+      Csd_weighted <- stats::weighted.mean(CSD, colSums(cbind(cat_weight, cat_numbers)), na.rm = TRUE)
       Data@CV_Cat <- sqrt(exp(Csd_weighted^2) - 1)
       message(paste0("CV of Catch (weighted by catch of individual fleets), Data@CV_Cat = ", round(Data@CV_Cat, 2)))
     } else {
@@ -462,7 +461,11 @@ SS2Data <- function(SSdir, Name = "Imported by SS2Data", Common_Name = "", Speci
   rows2 <- Z_at_age$Gender == 1 & Z_at_age$Bio_Pattern == 1
   if((all(!rows2, na.rm = TRUE) | all(is.na(rows2))) && packageVersion("r4ss") >= 1.35) rows2 <- Z_at_age$Sex == 1 & Z_at_age$Bio_Pattern == 1
 
-  F_at_age <- t(Z_at_age[rows2, cols] - M_at_age[rows2, cols])
+  Z_at_age <- Z_at_age[rows2, cols]
+  M_at_age <- suppressWarnings(M_at_age[rows2, cols] %>% apply(2, as.numeric))
+  #if(is.character(M_at_age[, ncol(M_at_age)])) M_at_age[, ncol(M_at_age)] <- NA_real_
+
+  F_at_age <- t(Z_at_age - M_at_age)
   F_at_age[nrow(F_at_age), ] <- F_at_age[nrow(F_at_age) - 1, ] # assume F at maxage = F at maxage-1
 
   if(ncol(F_at_age) == nyears - 1) { # Typically because forecast is off
@@ -500,6 +503,11 @@ SS2Data <- function(SSdir, Name = "Imported by SS2Data", Common_Name = "", Speci
 SS2Data_get_comps <- function(replist, mainyrs, maxage, season_as_years = FALSE, nseas = 1,
                       comp_gender = "all", comp_fleet = "all", comp_partition = "all", comp_season = "sum",
                       type = c("length", "age")) {
+
+  if(!requireNamespace("reshape2", quietly = TRUE)) {
+    stop("Package `reshape2` is required for this function. Install with `install.packages('reshape2')`", call. = FALSE)
+  }
+
   type <- match.arg(type)
   if(type == "length") dbase <- replist$lendbase else dbase <- replist$agedbase
 
@@ -530,7 +538,7 @@ SS2Data_get_comps <- function(replist, mainyrs, maxage, season_as_years = FALSE,
   dbase <- dbase[!is.na(dbase_ind), ]
   dbase$Obs2 <- dbase$Obs * dbase$N # Expand comp proportions to numbers
 
-  comp_mat <- split(dbase, dbase$Fleet) %>% lapply(acast, formula = list("Yr", "Bin"), fun.aggregate = sum, value.var = "Obs2", fill = 0) # Convert to matrix
+  comp_mat <- split(dbase, dbase$Fleet) %>% lapply(reshape2::acast, formula = list("Yr", "Bin"), fun.aggregate = sum, value.var = "Obs2", fill = 0) # Convert to matrix
   comp_mat <- comp_mat[match(comp_fleet, as.numeric(names(comp_mat)))] # Subset fleets
 
   expand_matrix <- function(x) {
@@ -643,5 +651,231 @@ SS2Data_get_index <- function(replist, mainyrs, season_as_years = FALSE, nseas =
   return(list(AddInd = AddInd, SE_AddInd = SE_AddInd, AddIunits = AddIunits,
               AddIndV = do.call(rbind, AddIndV), AddIndType = rep(1, length(cpue_split)),
               Iname = cpue_name))
+}
+
+# #' Extracts growth parameters from a SS3 r4ss replist
+# #'
+# #' @param replist the list output of the r4ss SS_output function (a list of assessment inputs / outputs)
+# #' @param seas The reference season for the growth (not actually sure what this does yet)
+# #' @author T. Carruthers
+# #' @export getGpars
+getGpars <- function(replist, seas = 1) { # This is a rip-off of SSPlotBiology
+
+  if(packageVersion("r4ss") == 1.24) {
+    res <- getGpars_r4ss_124(replist, seas)
+  } else res <- getGpars_r4ss_134(replist, seas)
+  #if(nrow(res) == 0) warning("No growth parameters were retrieved from r4ss output.")
+  return(res)
+}
+
+getGpars_r4ss_124 <- function(replist, seas = 1) {
+
+  nseasons <- replist$nseasons
+  growdat <- replist$endgrowth[replist$endgrowth$Seas == seas, ]
+  growdat$CV_Beg <- growdat$SD_Beg/growdat$Len_Beg
+  growthCVtype <- replist$growthCVtype
+  biology <- replist$biology
+  startyr <- replist$startyr
+  FecType <- replist$FecType
+  FecPar1name <- replist$FecPar1name
+  FecPar2name <- replist$FecPar2name
+  FecPar1 <- replist$FecPar1
+  FecPar2 <- replist$FecPar2
+  parameters <- replist$parameters
+  nsexes <- replist$nsexes
+  mainmorphs <- replist$mainmorphs
+  accuage <- replist$accuage
+  startyr <- replist$startyr
+  endyr <- replist$endyr
+  growthvaries <- replist$growthvaries
+  growthseries <- replist$growthseries
+  ageselex <- replist$ageselex
+  MGparmAdj <- replist$MGparmAdj
+  wtatage <- replist$wtatage
+  Growth_Parameters <- replist$Growth_Parameters
+  Grow_std <- replist$derived_quants[grep("Grow_std_", replist$derived_quants$LABEL), ]
+  if (nrow(Grow_std) == 0) {
+    Grow_std <- NULL
+  }  else {
+    Grow_std$pattern <- NA
+    Grow_std$sex_char <- NA
+    Grow_std$sex <- NA
+    Grow_std$age <- NA
+    for (irow in 1:nrow(Grow_std)) {
+      tmp <- strsplit(Grow_std$LABEL[irow], split = "_")[[1]]
+      Grow_std$pattern[irow] <- as.numeric(tmp[3])
+      Grow_std$sex_char[irow] <- tmp[4]
+      Grow_std$age[irow] <- as.numeric(tmp[6])
+    }
+    Grow_std$sex[Grow_std$sex_char == "Fem"] <- 1
+    Grow_std$sex[Grow_std$sex_char == "Mal"] <- 2
+  }
+  if (!is.null(replist$wtatage_switch)) {
+    wtatage_switch <- replist$wtatage_switch
+  } else{ stop("SSplotBiology function doesn't match SS_output function. Update one or both functions.")
+  }
+  if (wtatage_switch)
+    cat("Note: this model uses the empirical weight-at-age input.\n",
+        "     Therefore many of the parametric biology quantities which are plotted\n",
+        "     are not used in the model.\n")
+  if (!seas %in% 1:nseasons)
+    stop("'seas' input should be within 1:nseasons")
+
+  if (length(mainmorphs) > nsexes) {
+    cat("!Error with morph indexing in SSplotBiology function.\n",
+        " Code is not set up to handle multiple growth patterns or birth seasons.\n")
+  }
+  #if (FecType == 1) {
+  #  fec_ylab <- "Eggs per kg"
+  #  FecX <- biology$Wt_len_F
+  #  FecY <- FecPar1 + FecPar2 * FecX
+  #}
+
+  growdatF <- growdat[growdat$Gender == 1 & growdat$Morph ==
+                        mainmorphs[1], ]
+  growdatF$Sd_Size <- growdatF$SD_Beg
+
+  if (growthCVtype == "logSD=f(A)") {
+    growdatF$high <- qlnorm(0.975, meanlog = log(growdatF$Len_Beg),
+                            sdlog = growdatF$Sd_Size)
+    growdatF$low <- qlnorm(0.025, meanlog = log(growdatF$Len_Beg),
+                           sdlog = growdatF$Sd_Size)
+  }  else {
+    growdatF$high <- qnorm(0.975, mean = growdatF$Len_Beg,
+                           sd = growdatF$Sd_Size)
+    growdatF$low <- qnorm(0.025, mean = growdatF$Len_Beg,
+                          sd = growdatF$Sd_Size)
+  }
+  if (nsexes > 1) {
+    growdatM <- growdat[growdat$Gender == 2 & growdat$Morph ==
+                          mainmorphs[2], ]
+    xm <- growdatM$Age_Beg
+    growdatM$Sd_Size <- growdatM$SD_Beg
+    if (growthCVtype == "logSD=f(A)") {
+      growdatM$high <- qlnorm(0.975, meanlog = log(growdatM$Len_Beg),
+                              sdlog = growdatM$Sd_Size)
+      growdatM$low <- qlnorm(0.025, meanlog = log(growdatM$Len_Beg),
+                             sdlog = growdatM$Sd_Size)
+    }    else {
+      growdatM$high <- qnorm(0.975, mean = growdatM$Len_Beg,
+                             sd = growdatM$Sd_Size)
+      growdatM$low <- qnorm(0.025, mean = growdatM$Len_Beg,
+                            sd = growdatM$Sd_Size)
+    }
+  } else growdatM <- NULL
+
+  list(Female = growdatF, Male = growdatM)
+
+}
+
+getGpars_r4ss_134 <- function(replist, seas = 1) {
+  nseasons <- replist$nseasons
+  growdat <- replist$endgrowth[replist$endgrowth$Seas == seas,
+  ]
+  growdat$CV_Beg <- growdat$SD_Beg/growdat$Len_Beg
+  growthCVtype <- replist$growthCVtype
+  biology <- replist$biology
+  startyr <- replist$startyr
+  FecType <- replist$FecType
+  FecPar1name <- replist$FecPar1name
+  FecPar2name <- replist$FecPar2name
+  FecPar1 <- replist$FecPar1
+  FecPar2 <- replist$FecPar2
+  parameters <- replist$parameters
+  nsexes <- replist$nsexes
+  accuage <- replist$accuage
+  startyr <- replist$startyr
+  endyr <- replist$endyr
+  growthvaries <- replist$growthvaries
+  growthseries <- replist$growthseries
+  ageselex <- replist$ageselex
+  MGparmAdj <- replist$MGparmAdj
+  wtatage <- replist$wtatage
+  if ("comment" %in% names(wtatage)) {
+    wtatage <- wtatage[, -grep("comment", names(wtatage))]
+  }
+  M_at_age <- replist$M_at_age
+  Growth_Parameters <- replist$Growth_Parameters
+  #if (is.null(morphs)) {
+  morphs <- replist$mainmorphs
+  #}
+  Grow_std <- replist$derived_quants[grep("Grow_std_", replist$derived_quants$Label), ]
+  if (nrow(Grow_std) == 0) {
+    Grow_std <- NULL
+  } else {
+    Grow_std$pattern <- NA
+    Grow_std$sex_char <- NA
+    Grow_std$sex <- NA
+    Grow_std$age <- NA
+    for (irow in 1:nrow(Grow_std)) {
+      tmp <- strsplit(Grow_std$Label[irow], split = "_")[[1]]
+      Grow_std$pattern[irow] <- as.numeric(tmp[3])
+      Grow_std$sex_char[irow] <- tmp[4]
+      Grow_std$age[irow] <- as.numeric(tmp[6])
+    }
+    Grow_std$sex[Grow_std$sex_char == "Fem"] <- 1
+    Grow_std$sex[Grow_std$sex_char == "Mal"] <- 2
+  }
+  if (!is.null(replist$wtatage_switch)) {
+    wtatage_switch <- replist$wtatage_switch
+  } else {
+    stop("SSplotBiology function doesn't match SS_output function.",
+         "Update one or both functions.")
+  }
+  #if (wtatage_switch) {
+  #  cat("Note: this model uses the empirical weight-at-age input.\n",
+  #      "      Plots of many quantities related to growth are skipped.\n")
+  #}
+  if (!seas %in% 1:nseasons)
+    stop("'seas' input should be within 1:nseasons")
+  #if (nseasons > 1) {
+  #  labels[6] <- gsub("beginning of the year", paste("beginning of season",
+  #                                                   seas), labels[6])
+  #}
+
+  if (length(morphs) > nsexes) {
+    cat("!Error with morph indexing in SSplotBiology function.\n",
+        " Code is not set up to handle multiple growth patterns or birth seasons.\n")
+  }
+  #if (FecType == 1) {
+  #  fec_ylab <- "Eggs per kg"
+  #  fec_xlab <- labels[8]
+  #  FecX <- biology$Wt_len_F
+  #  FecY <- FecPar1 + FecPar2 * FecX
+  #}
+  #if (labels[11] != "Default fecundity label")
+  #  fec_ylab <- labels[11]
+  growdatF <- growdat[growdat$Sex == 1 & growdat$Morph == morphs[1], ]
+  growdatF$Sd_Size <- growdatF$SD_Beg
+  if (growthCVtype == "logSD=f(A)") {
+    growdatF$high <- qlnorm(0.975, meanlog = log(growdatF$Len_Beg),
+                            sdlog = growdatF$Sd_Size)
+    growdatF$low <- qlnorm(0.025, meanlog = log(growdatF$Len_Beg),
+                           sdlog = growdatF$Sd_Size)
+  } else {
+    growdatF$high <- qnorm(0.975, mean = growdatF$Len_Beg,
+                           sd = growdatF$Sd_Size)
+    growdatF$low <- qnorm(0.025, mean = growdatF$Len_Beg,
+                          sd = growdatF$Sd_Size)
+  }
+  if (nsexes > 1) {
+    growdatM <- growdat[growdat$Sex == 2 & growdat$Morph == morphs[2], ]
+    xm <- growdatM$Age_Beg
+    growdatM$Sd_Size <- growdatM$SD_Beg
+    if (growthCVtype == "logSD=f(A)") {
+      growdatM$high <- qlnorm(0.975, meanlog = log(growdatM$Len_Beg),
+                              sdlog = growdatM$Sd_Size)
+      growdatM$low <- qlnorm(0.025, meanlog = log(growdatM$Len_Beg),
+                             sdlog = growdatM$Sd_Size)
+    } else {
+      growdatM$high <- qnorm(0.975, mean = growdatM$Len_Beg,
+                             sd = growdatM$Sd_Size)
+      growdatM$low <- qnorm(0.025, mean = growdatM$Len_Beg,
+                            sd = growdatM$Sd_Size)
+    }
+  } else growdatM <- NULL
+
+  list(Female = growdatF, Male = growdatM)
+
 }
 

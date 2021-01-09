@@ -3,34 +3,32 @@
 # =======================================================================================================================================
 
 # T. Carruthers
-# A function for converting stochastic (bootstrap VPA) outputs to a DLMtool / MSEtool operating model
-
-
+# A function for converting stochastic (bootstrap VPA) outputs to a MSEtool operating model
 
 #' Reads bootstrap estimates from a VPA stock assessment into an operating model.
 #'
 #'
 #' @description A function that uses a set of VPA bootstrap estimates of numbers-at-age, fishing mortality rate-at-age, M-at-age,
-#' weight-at-age, length-at-age and Maturity-at-age to define a fully described DLMtool / MSEtool operating model. The user still
+#' weight-at-age, length-at-age and Maturity-at-age to define a fully described MSEtool operating model. The user still
 #' needs to parameterize most of the observation and implementation portions of the operating model.
 #' @param Name Character string. The name of the operating model.
 #' @param proyears Positive integer. The number of projection years for MSE.
-#' @param interval Positive integer. The interval at which management procedures will update the management advice in \link[DLMtool]{runMSE}, e.g., 1 = annual updates.
+#' @param interval Positive integer. The interval at which management procedures will update the management advice in \link[MSEtool]{runMSE}, e.g., 1 = annual updates.
 #' @param CurrentYr Positive integer. The current year (final year of VPA fitting to data)
 #' @param h Numeric value greater than 0.2 and less than 1. The steepness of the stock-recruitment curve (assumed to be close to 1 to match VPA assumption).
 #' @param Obs The observation model (class Obs). This function only updates the catch and index observation error.
 #' @param Imp The implementation model (class Imp). This function does not update implementation parameters.
-#' @param naa Numeric array [sim, ages, year]. Numbers-at-age [first age is age zero].
-#' @param faa Numeric array [sim, ages, year]. Fishing mortality rate-at-age [first age is age zero].
-#' @param waa Numeric array [sim, ages, year]. Weight-at-age [first age is age zero].
-#' @param Mataa Numeric array [sim, ages, year]. Maturity (spawning fraction)-at-age [first age is age zero].
-#' @param Maa Numeric array [sim, ages, year]. Natural mortality rate-at-age [first age is age zero].
-#' @param laa Numeric array [sim, ages, year]. Length-at-age [first age is age zero].
+#' @param naa Numeric array `[sim, ages, year]`. Numbers-at-age `[first age is age zero]`.
+#' @param faa Numeric array `[sim, ages, year]`. Fishing mortality rate-at-age `[first age is age zero]`.
+#' @param waa Numeric array `[sim, ages, year]`. Weight-at-age `[first age is age zero]`.
+#' @param Mataa Numeric array `[sim, ages, year]`. Maturity (spawning fraction)-at-age `[first age is age zero]`.
+#' @param Maa Numeric array `[sim, ages, year]`. Natural mortality rate-at-age `[first age is age zero]`.
+#' @param laa Numeric array `[sim, ages, year]`. Length-at-age `[first age is age zero]`.
 #' @param nyr_par_mu Positive integer. The number of recent years that natural mortality, age vulnerability, weight, length and maturity parameters are averaged over for defining future projection conditions.
 #' @param LowerTri Integer. The number of recent years for which model estimates of recruitment are ignored (not reliably estimated by the VPA)
 #' @param recind Positive integer. The first age class that fish 'recruit to the fishery'. The default is 2 - ie the first position in the age dimension of naa is age zero
 #' @param plusgroup Logical. Does the VPA assume that the oldes age class is a plusgroup?
-#' @param altinit Integer. Various assumptions for how VPAs set up the initial numbers. 0: standard, 1: no plus group, 2: temporary fix for DLMtool plus group initialization
+#' @param altinit Integer. Various assumptions for how VPAs set up the initial numbers. 0: standard, 1: no plus group, 2: temporary fix for MSEtool plus group initialization
 #' @param fixq1 Logical. Should q be fixed (ie assume the F-at-age array faa is accurate?
 #' @param report Logical, if TRUE, a diagnostic will be reported showing the matching of the OM reconstructed numbers at age vs the VPA assessment.
 #' @param silent Whether to silence messages to the console.
@@ -42,7 +40,7 @@
 VPA2OM<-function(Name="A fishery made by VPA2OM",
                  proyears=50, interval=2, CurrentYr=2019,
                  h=0.999,
-                 Obs = DLMtool::Imprecise_Unbiased, Imp=DLMtool::Perfect_Imp,
+                 Obs = MSEtool::Imprecise_Unbiased, Imp=MSEtool::Perfect_Imp,
                  naa, faa, waa, Mataa, Maa, laa,
                  nyr_par_mu = 3, LowerTri=1,
                  recind=2, plusgroup=TRUE, altinit=0, fixq1=TRUE,
@@ -111,13 +109,13 @@ VPA2OM<-function(Name="A fishery made by VPA2OM",
   # Dimensions
   OM@nsim<-nsim
   OM@nyears<-nyears
-  OM@maxage<-maxage
+  OM@maxage<-maxage-1
   OM@proyears<-proyears
   OM@interval<-interval
 
   # Sampled parameters
 
-  OM<-simup(h,OM);
+  OM<-simup(h,OM)
   Size_area_1<-Frac_area_1<-Prob_staying<-0.5
   OM<-simup(Size_area_1,OM); OM<-simup(Frac_area_1,OM); OM<-simup(Prob_staying,OM)
   OM<-simup(D,OM); OM<-simup(R0,OM)
@@ -146,7 +144,7 @@ VPA2OM<-function(Name="A fishery made by VPA2OM",
   OM@qinc<-rep(0,2)
 
   # Invent an OM with full observation error model for replacing
-  temp<-new('OM', DLMtool::Albacore, DLMtool::Generic_Fleet, Obs, Imp)
+  temp<-new('OM', MSEtool::Albacore, MSEtool::Generic_Fleet, Obs, Imp)
   OM<-Replace(OM,temp,Sub="Obs")
   OM<-Replace(OM,temp,Sub="Imp")
 
@@ -213,12 +211,18 @@ VPA2OM<-function(Name="A fishery made by VPA2OM",
   for (y in maxage+((nyears-LowerTri):(nyears + proyears))-1) Perr[, y] <- AC * Perr[, y - 1] +   Perr[, y] * (1 - AC * AC)^0.5  # apply process error
   Perr<-exp(Perr)
 
-  OM@cpars$Perr<-Perr
+  OM@cpars$Perr_y<-Perr
   OM@Perr<-rep(mean(procsd),2)
 
   if(fixq1) OM@cpars$qs<-rep(1,nsim) # Overrides q estimation to fix q at 1 for VPA for which F history is
 
   OM@maxF<-10
+
+  OM@Linf<-rep(1,2)
+  OM@K<-rep(0.3,2)
+  OM@t0<-rep(0,2)
+  OM@DR<-rep(0,2)
+  OM@MPA<-FALSE
 
   if(report){ # Produce a quick diagnostic plot of OM vs VPA numbers at age
 
@@ -237,15 +241,16 @@ VPA2OM<-function(Name="A fishery made by VPA2OM",
     cols[nyears-(0:LowerTri)]<-"blue";pch[nyears-(0:LowerTri)]<-4
 
     for(a in 1:maxage){
-      ylim=c(0,max(naa[1,a,],Hist@AtAge$Nage[1,a,])*1.05)
+      N_OM<-apply(Hist@AtAge$Number[1,a,,],1,sum)
+      ylim=c(0,max(naa[1,a,],N_OM)*1.05)
       if(a==1)plot(yrs,naa[1,a,],xlab="",ylab="",col=cols,pch=pch,ylim=ylim,yaxs='i')
       if(a>1)plot(yrs,naa[1,a,],xlab="",ylab="",ylim=ylim,yaxs='i')
-      lines(yrs,Hist@AtAge$Nage[1,a,],col='green')
+      lines(yrs,N_OM,col='green')
       mtext(paste("Age ",a),3,line=0.5,cex=0.9)
-      if(a==1)legend('top',legend=c("VPA","OM","Recr. ignored (LowerTri)"),text.col=c('black','green','blue'),bty='n')
-      res<-Hist@AtAge$Nage[1,a,]-naa[1,a,]
+      if(a==1)legend('top',legend=c("Assessment","OM","Recr. ignored (LowerTri)"),text.col=c('black','green','blue'),bty='n')
+      res<-N_OM-naa[1,a,]
       plotres<-abs(res)>(mean(naa[1,a,]*0.025))
-      if(any(plotres))for(y in 1:nyears)if(plotres[y])lines(rep(yrs[y],2),c(naa[1,a,y],Hist@AtAge$Nage[1,a,y]),col='red')
+      if(any(plotres))for(y in 1:nyears)if(plotres[y])lines(rep(yrs[y],2),c(naa[1,a,y],N_OM[y]),col='red')
     } #plot(Hist)
 
     mtext("Year",1,line=0.3,outer=T)

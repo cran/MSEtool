@@ -16,7 +16,6 @@ SS2Data(
   comp_season = "sum",
   comp_partition = "all",
   comp_gender = "all",
-  index_fleet = "SSB",
   index_season = "mean",
   ...
 )
@@ -38,7 +37,7 @@ minimum age for calculating the mean of age-dependent M from the SS assessment.}
 \item{gender}{An integer index for the sex for importing biological parameters (1 = female, 2 = male).}
 
 \item{comp_fleet}{A vector of indices corresponding to fleets in the assessment over which to aggregate the composition
-(catch-at-length and catch-at-age) data. By default, characer string \code{"all"} will aggregate across all fleets.}
+(catch-at-length and catch-at-age) data. By default, character string \code{"all"} will aggregate across all fleets.}
 
 \item{comp_season}{Integer, for seasonal models, the season for which the value of the index will be used. By default, \code{"mean"}
 will take the average across seasons.}
@@ -48,8 +47,6 @@ sums over all available partitions.}
 
 \item{comp_gender}{Integer vector for selecting length/age observations that are female (1), male (2), or both (0), or both scaled to sum to one (3).
 By default, \code{"all"} sums over all gender codes.}
-
-\item{index_fleet}{Obsolete as of DLMtool version 5.4 (all indices will now be included in the AddInd slot).}
 
 \item{index_season}{Integer, for seasonal models, the season for which the value of the index will be used. By default, \code{"mean"}
 will take the average across seasons.}
@@ -64,7 +61,7 @@ A function that uses the file location of a fitted SS3 model including input fil
 the various slots of an Data object.
 }
 \note{
-Currently supports the  version of r4ss on CRAN (v.1.24) and Github (v.1.34-38). Function may be incompatible with other versions of r4ss.
+Currently supports the version of r4ss on CRAN (v.1.24) and Github (v.1.34-40). Function may be incompatible with other versions of r4ss.
 }
 \seealso{
 \link{SS2OM}

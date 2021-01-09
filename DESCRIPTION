@@ -1,34 +1,31 @@
 Package: MSEtool
-Type: Package
 Title: Management Strategy Evaluation Toolkit
-Version: 2.0.1
-Authors@R: c(person("Quang", "Huynh", email = "q.huynh@oceans.ubc.ca", role = "aut"), 
-  person("Tom", "Carruthers", email = "t.carruthers@oceans.ubc.ca", role = c("aut", "cre")),
-  person("Adrian", "Hordyk", email = "a.hordyk@oceans.ubc.ca", role = "aut"),
+Version: 3.0.0
+Authors@R: c(
+  person("Adrian", "Hordyk", email = "adrian@bluematterscience.com", role = c("aut", "cre")),
+  person("Quang", "Huynh", email = "quang@bluematterscience.com", role = "aut"), 
+  person("Tom", "Carruthers", email = "tom@bluematterscience.com", role = c("aut")),
   person("Chris", "Grandin", rol = "ctb", comment = "iSCAM functions"))
-Date: 2020-09-28
-Maintainer: Tom Carruthers <t.carruthers@oceans.ubc.ca>
-Description: Simulation tools for management strategy evaluation are provided for the 'DLMtool' operating model to inform data-rich fisheries. 
-  'MSEtool' provides complementary assessment models of varying complexity with standardized reporting, diagnostic tools for evaluating 
-  assessment models within closed-loop simulation, and helper functions for building more complex operating models and model-based management procedures.
+Description: Development, simulation testing, and implementation of management procedures for fisheries 
+    (see Carruthers & Hordyk (2018) <doi:10.1111/2041-210X.13081>).
 License: GPL-3
-Depends: R (>= 3.3.0), DLMtool (>= 5.3.1)
-Imports: MASS, TMB, coda, corpcor, dplyr, gplots, grDevices, graphics,
-        methods, mvtnorm, reshape2, snowfall, stats, utils, abind,
-        rmarkdown
-LinkingTo: TMB, RcppEigen
-LazyData: yes
-LazyLoad: yes
+Encoding: UTF-8
+LazyData: true
 RoxygenNote: 7.1.1
-Suggests: knitr, testthat, r4ss, shiny
-VignetteBuilder: knitr
-URL: https://www.datalimitedtoolkit.org/
-BugReports: https://github.com/tcarruth/MSEtool/issues
+Depends: R (>= 3.5.0), snowfall
+Imports: abind, dplyr, methods, grDevices, ggplot2, parallel, Rcpp,
+        stats, utils
+Suggests: boot, broom, crayon, devtools, DT, fmsb, ggrepel, gridExtra,
+        kableExtra, knitr, MASS, openxlsx, purrr, r4ss, readxl,
+        reshape2, rfishbase, rmarkdown, shiny, testthat, tidyr
+LinkingTo: Rcpp, RcppArmadillo
+BugReports: https://github.com/Blue-Matter/MSEtool/issues
 NeedsCompilation: yes
-Packaged: 2020-09-28 19:21:57 UTC; qhuynh
-Author: Quang Huynh [aut],
-  Tom Carruthers [aut, cre],
-  Adrian Hordyk [aut],
+Packaged: 2021-01-08 16:57:30 UTC; Adrian
+Author: Adrian Hordyk [aut, cre],
+  Quang Huynh [aut],
+  Tom Carruthers [aut],
   Chris Grandin [ctb] (iSCAM functions)
+Maintainer: Adrian Hordyk <adrian@bluematterscience.com>
 Repository: CRAN
-Date/Publication: 2020-09-29 06:10:02 UTC
+Date/Publication: 2021-01-09 02:20:09 UTC

@@ -2,7 +2,7 @@
 % Please edit documentation in R/multi_q_estimation.R
 \name{getq_multi_MICE}
 \alias{getq_multi_MICE}
-\title{optimize for catchability (q) and fishing dist for a MICE model}
+\title{Optimize for catchability (q) and fishing dist for a MICE model}
 \usage{
 getq_multi_MICE(
   x,
@@ -22,7 +22,9 @@ getq_multi_MICE(
   bounds = c(1e-05, 15),
   tol = 1e-06,
   Rel,
-  SexPars
+  SexPars,
+  plusgroup,
+  optVB = FALSE
 )
 }
 \arguments{
@@ -30,7 +32,8 @@ getq_multi_MICE(
 
 \item{StockPars}{A list of sampled stock parameters, one list element per stock}
 
-\item{FleetPars}{A hierarcical list of sampled fleet parameters, first list level is stock, second is fleet}
+\item{FleetPars}{A hierarchical list of sampled fleet parameters,
+first list level is stock, second is fleet}
 
 \item{np}{The number of stocks}
 
@@ -38,25 +41,29 @@ getq_multi_MICE(
 
 \item{nareas}{The number of areas}
 
-\item{maxage}{The maximum number of modelled ages}
+\item{maxage}{The maximum number of modeled ages}
 
 \item{nyears}{The number of historical 'spool-up' years (from unfished to now)}
 
-\item{N}{An array of stock numbers [nsim,np,maxage,nyears,nareas] - only the values from the first year are used}
+\item{N}{An array of stock numbers \verb{[nsim,np,maxage,nyears,nareas]} -
+only the values from the first year are used}
 
-\item{VF}{An array of vulnerability [nsim,np,nf,maxage,nyears+proyears]}
+\item{VF}{An array of vulnerability \verb{[nsim,np,nf,maxage,nyears+proyears]}}
 
-\item{FretA}{An array of retention [nsim,np,nf,maxage,nyears+proyears]}
+\item{FretA}{An array of retention \verb{[nsim,np,nf,maxage,nyears+proyears]}}
 
-\item{maxF}{A numeric value specifying the maximum fishing mortality for any single age class}
+\item{maxF}{A numeric value specifying the maximum fishing mortality for any
+single age class}
 
-\item{MPA}{An of spatial closures by year [np,nf,nyears+proyears,nareas]}
+\item{MPA}{An of spatial closures by year \verb{[np,nf,nyears+proyears,nareas]}}
 
-\item{CatchFrac}{A list of stock-specific fleet fractions of current catch list[[stock]][nsim, nf]}
+\item{CatchFrac}{A list of stock-specific fleet fractions of current catch
+list\verb{[[stock]][nsim, nf]}}
 
 \item{bounds}{Bounds for total q estimation}
 
-\item{tol}{A numeric value that is the fraction of machine tolerance (once reduction in objective function steps below this, optimization ends)}
+\item{tol}{A numeric value that is the fraction of machine tolerance
+(once reduction in objective function steps below this, optimization ends)}
 
 \item{Rel}{A list of inter-stock relationships see slot Rel of MOM object class}
 

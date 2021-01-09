@@ -10,8 +10,8 @@ VPA2OM(
   interval = 2,
   CurrentYr = 2019,
   h = 0.999,
-  Obs = DLMtool::Imprecise_Unbiased,
-  Imp = DLMtool::Perfect_Imp,
+  Obs = MSEtool::Imprecise_Unbiased,
+  Imp = MSEtool::Perfect_Imp,
   naa,
   faa,
   waa,
@@ -33,7 +33,7 @@ VPA2OM(
 
 \item{proyears}{Positive integer. The number of projection years for MSE.}
 
-\item{interval}{Positive integer. The interval at which management procedures will update the management advice in \link[DLMtool]{runMSE}, e.g., 1 = annual updates.}
+\item{interval}{Positive integer. The interval at which management procedures will update the management advice in \link[MSEtool]{runMSE}, e.g., 1 = annual updates.}
 
 \item{CurrentYr}{Positive integer. The current year (final year of VPA fitting to data)}
 
@@ -43,17 +43,17 @@ VPA2OM(
 
 \item{Imp}{The implementation model (class Imp). This function does not update implementation parameters.}
 
-\item{naa}{Numeric array [sim, ages, year]. Numbers-at-age [first age is age zero].}
+\item{naa}{Numeric array \verb{[sim, ages, year]}. Numbers-at-age \verb{[first age is age zero]}.}
 
-\item{faa}{Numeric array [sim, ages, year]. Fishing mortality rate-at-age [first age is age zero].}
+\item{faa}{Numeric array \verb{[sim, ages, year]}. Fishing mortality rate-at-age \verb{[first age is age zero]}.}
 
-\item{waa}{Numeric array [sim, ages, year]. Weight-at-age [first age is age zero].}
+\item{waa}{Numeric array \verb{[sim, ages, year]}. Weight-at-age \verb{[first age is age zero]}.}
 
-\item{Mataa}{Numeric array [sim, ages, year]. Maturity (spawning fraction)-at-age [first age is age zero].}
+\item{Mataa}{Numeric array \verb{[sim, ages, year]}. Maturity (spawning fraction)-at-age \verb{[first age is age zero]}.}
 
-\item{Maa}{Numeric array [sim, ages, year]. Natural mortality rate-at-age [first age is age zero].}
+\item{Maa}{Numeric array \verb{[sim, ages, year]}. Natural mortality rate-at-age \verb{[first age is age zero]}.}
 
-\item{laa}{Numeric array [sim, ages, year]. Length-at-age [first age is age zero].}
+\item{laa}{Numeric array \verb{[sim, ages, year]}. Length-at-age \verb{[first age is age zero]}.}
 
 \item{nyr_par_mu}{Positive integer. The number of recent years that natural mortality, age vulnerability, weight, length and maturity parameters are averaged over for defining future projection conditions.}
 
@@ -63,7 +63,7 @@ VPA2OM(
 
 \item{plusgroup}{Logical. Does the VPA assume that the oldes age class is a plusgroup?}
 
-\item{altinit}{Integer. Various assumptions for how VPAs set up the initial numbers. 0: standard, 1: no plus group, 2: temporary fix for DLMtool plus group initialization}
+\item{altinit}{Integer. Various assumptions for how VPAs set up the initial numbers. 0: standard, 1: no plus group, 2: temporary fix for MSEtool plus group initialization}
 
 \item{fixq1}{Logical. Should q be fixed (ie assume the F-at-age array faa is accurate?}
 
@@ -76,7 +76,7 @@ An object of class \linkS4class{OM}.
 }
 \description{
 A function that uses a set of VPA bootstrap estimates of numbers-at-age, fishing mortality rate-at-age, M-at-age,
-weight-at-age, length-at-age and Maturity-at-age to define a fully described DLMtool / MSEtool operating model. The user still
+weight-at-age, length-at-age and Maturity-at-age to define a fully described MSEtool operating model. The user still
 needs to parameterize most of the observation and implementation portions of the operating model.
 }
 \seealso{

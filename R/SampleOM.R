@@ -89,7 +89,7 @@ SampleCpars <- function(cpars, nsim=48, silent=FALSE) {
   sampCpars <- list()
 
   # ---- Non-stochastic parameters ----
-  Names <- c('CAL_bins', #'CAL_binsmid', 'binWidth', 'nCALbins',
+  Names <- c('CAL_bins', 'CAL_binsmid', 'binWidth', 'nCALbins',
              'maxage', 'n_age', 'CurrentYr',
              'plusgroup', 'control', 'AddIUnits', 'Data', 'MPA',
              'nareas', 'a', 'b', 'maxF', 'Sample_Area', 'Asize')
@@ -112,7 +112,7 @@ SampleCpars <- function(cpars, nsim=48, silent=FALSE) {
     invdf <- data.frame(not_used_cpars=invalid, stringsAsFactors = FALSE)
 
     if(!silent) {
-      message("invalid names found in custom parameters (OM@cpars):")
+      message("Invalid names found in custom parameters:")
       base::message(paste0(capture.output(invdf), collapse = "\n"))
     }
   }
@@ -120,12 +120,12 @@ SampleCpars <- function(cpars, nsim=48, silent=FALSE) {
   valid <- which(CNames %in% ValNames)
   cpars <- cpars[valid]
   if (length(valid) == 0) {
-    message("No valid names found in custompars (OM@cpars). Ignoring `OM@cpars`")
+    message("No valid names found in custompars. Ignoring `OM@cpars`")
     return(list())
   }
   CNames <- names(cpars)
   outNames <- paste(CNames, "")
-  if(!silent) message("valid custom parameters (OM@cpars) found: \n", paste0(outNames, collapse="\n"))
+  if(!silent) message("Valid custom parameters found: \n", paste0(outNames, collapse="\n"))
 
   # ---- Sample custom pars ----
 
@@ -265,17 +265,22 @@ SampleStockPars <- function(Stock, nsim=48, nyears=80, proyears=50, cpars=NULL, 
   D <- sample_unif('D', cpars, Stock, nsim)
 
   # ---- Recruitment Deviations ----
-
   # have rec devs been passed in cpars?
   if (is.null(cpars$Perr_y)) { # no - sample recruitment deviations
+
+    if (!is.null(cpars[['Perr']])) cpars$procsd <- cpars[['Perr']]
     procsd <-  sample_unif('procsd', cpars, Stock, nsim, 'Perr')
+
     AC <- sample_unif('AC', cpars, Stock, nsim)
     # adjusted log normal mean http://dx.doi.org/10.1139/cjfas-2016-0167
     procmu <- -0.5 * procsd^2  * (1 - AC)/sqrt(1 - AC^2)
+
+    procsd[procsd==0] <- tiny # for reproducibility in rnorm
     Perr_y <- array(rnorm((nyears + proyears+maxage) * nsim,
                           rep(procmu, nyears + proyears+maxage),
                           rep(procsd, nyears + proyears+maxage)),
                     c(nsim, nyears + proyears+maxage))
+
     # add auto-correlation
     for (y in 2:(nyears + proyears+maxage))
       Perr_y[, y] <- AC * Perr_y[, y - 1] + Perr_y[, y] * (1 - AC * AC)^0.5
@@ -336,7 +341,7 @@ SampleStockPars <- function(Stock, nsim=48, nyears=80, proyears=50, cpars=NULL, 
     Karray <- cpars$Karray
   } else {
     Karray <- GenerateRandomWalk(K, Ksd, nyears + proyears,
-                                 nsim, Linfrand)
+                                 nsim, Krand)
   }
   if (!is.null(cpars$Agearray)) {
     Agearray <- cpars$Agearray
@@ -1323,9 +1328,29 @@ SampleObsPars <- function(Obs, nsim=NULL, cpars=NULL, Stock=NULL,
 
   # ---- Index Observation Error -----
   betas <- cpars$betas
+  if (is.null(betas)) betas <- cpars$beta
+
   if (is.null(betas))
     betas <- exp(myrunif(nsim, log(Obs@beta[1]), log(Obs@beta[2])))  # the sampled hyperstability /
-  ObsOut$betas <- betas
+
+  if (!is.null(cpars$I_beta)) {
+    ObsOut$I_beta <- cpars$I_beta
+  } else {
+    ObsOut$I_beta <- betas
+  }
+
+  if (!is.null(cpars$SpI_beta)) {
+    ObsOut$SpI_beta <- cpars$SpI_beta
+  } else {
+    ObsOut$SpI_beta <- betas
+  }
+
+  if (!is.null(cpars$VI_beta)) {
+    ObsOut$VI_beta <- cpars$VI_beta
+  } else {
+    ObsOut$VI_beta <- betas
+  }
+
 
   # Sampled index observation error (lognormal sd)
   Isd <- sample_unif('Isd', cpars, Obs, nsim, 'Iobs')

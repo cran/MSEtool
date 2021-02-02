@@ -116,14 +116,15 @@ XL2Data <- function(name, dec=c(".", ","), sheet=1, silent=FALSE) {
     Ncol <- max(unlist(lapply(strsplit(readLines(file.path(dir,name)), ","), length)))
     col.names <- paste0("V", 1:Ncol)
     if (dec == ".") {
-      datasheet <- read.csv(file.path(dir,name), header = F,
+      datasheet <- read.csv(file.path(dir,name), header = T,
                             colClasses = "character", col.names=col.names,
                             stringsAsFactors = FALSE)
     } else {
-      datasheet <- read.csv2(file.path(dir,name), header = F,
+      datasheet <- read.csv2(file.path(dir,name), header = T,
                              colClasses = "character", col.names=col.names,
                              stringsAsFactors = FALSE)
     }
+
   } else if(tools::file_ext(name) %in% c("xls", "xlsx")) {
     datasheet <- readxl::read_excel(file.path(dir,name), sheet = sheet,
                                     col_names = TRUE, .name_repair = "minimal")
@@ -304,9 +305,10 @@ XL2Data <- function(name, dec=c(".", ","), sheet=1, silent=FALSE) {
   if (n_vuln != n_indices)
     stop("Vulnerability-at-age schedule missing for some or all additional indices", call. = FALSE)
 
-  addInd <- datasheet[which(datasheet$Name == "Index 3"),2:(Nyears+1)] %>% unlist()
+  addInd <- datasheet[which(datasheet$Name == "Index 1"),2:(Nyears+1)] %>% unlist()
+  n.temp <- nchar(addInd)
 
-  if (!(any(nchar(addInd) == 0) | any(is.na(addInd)) | length(addInd)<1)) {
+  if (!(all(n.temp[!is.na(n.temp)]==0)) | all(is.na(addInd)) | (length(addInd)<1)) {
     indexexist <- TRUE
   } else {
     indexexist <- FALSE
@@ -325,13 +327,16 @@ XL2Data <- function(name, dec=c(".", ","), sheet=1, silent=FALSE) {
   if (indexexist) {
     for (x in 1:n_indices) {
       ind <- which(datasheet$Name == paste("Index", x))
+      if (length(ind)>1)
+        stop('Additional indices must be uniquely numbered.',
+             paste(" Index", x), ' appears ', length(ind), ' times', call.=FALSE)
       Data@AddInd[1,x,] <- suppressWarnings(datasheet[ind, 2:(Nyears+1)] %>% as.numeric())
       ind <- which(datasheet$Name == paste("CV Index", x))
       Data@CV_AddInd[1,x,] <- suppressWarnings(datasheet[ind, 2:(Nyears+1)] %>% as.numeric())
       ind <- which(datasheet$Name == paste("Vuln Index", x))
       Data@AddIndV[1,x,] <- suppressWarnings(datasheet[ind, 2:(Data@MaxAge+2)] %>% as.numeric())
-      # if (any(is.na(Data@AddIndV[1,x,])))
-        # warning("Vuln Index must be length `Maximum age`+1 and contain only numeric values (no NA)")
+      if (!all(is.na(Data@AddIndV[1,x,])) & any(is.na(Data@AddIndV[1,x,])))
+        warning("Vuln Index ", x, " must be length `Maximum age`+1 and contain only numeric values (no NA)")
     }
 
     ind <- which(datasheet$Name == 'AddIndType')
@@ -352,7 +357,7 @@ XL2Data <- function(name, dec=c(".", ","), sheet=1, silent=FALSE) {
 
   # ---- Catch-at-Age ----
   ind <- which(datasheet$Name == "Vuln CAA")
-  if (length(ind>0) && !is.na(datasheet[ind, 2])) {
+  if (length(ind)>0 && !is.na(datasheet[ind, 2])) {
     VulnCAA <- datasheet[ind, 2:(Data@MaxAge+2)]
     VulnCAA <- suppressWarnings(as.numeric(VulnCAA))
     if (!all(is.na(VulnCAA))) {
@@ -398,9 +403,15 @@ XL2Data <- function(name, dec=c(".", ","), sheet=1, silent=FALSE) {
   }
 
   # ---- Catch-at-Length ----
+  CAL_bins <- suppressWarnings(datasheet[which(datasheet$Name == "CAL_bins"),] %>% as.numeric())
+  CAL_bins <- CAL_bins[!is.na(CAL_bins)]
+
+  CAL_mids <- suppressWarnings(datasheet[which(datasheet$Name == "CAL_mids"),] %>% as.numeric())
+  CAL_mids <- CAL_mids[!is.na(CAL_mids)]
+
   ind <- which(datasheet$Name == "Vuln CAL")
-  if (length(ind>0) && !is.na(datasheet[ind, 2])) {
-    VulnCAL <- datasheet[ind, 2:(Data@MaxAge+2)]
+  if (length(ind)>0 && !is.na(datasheet[ind, 2])) {
+    VulnCAL <- datasheet[ind, 2:(length(CAL_mids)+2)]
     VulnCAL <- suppressWarnings(as.numeric(VulnCAL))
     if (!all(is.na(VulnCAL))) {
       if (any(is.na(VulnCAL)))
@@ -408,12 +419,6 @@ XL2Data <- function(name, dec=c(".", ","), sheet=1, silent=FALSE) {
     }
     Data@Vuln_CAL <- matrix(VulnCAL, nrow=1)
   }
-
-  CAL_bins <- suppressWarnings(datasheet[which(datasheet$Name == "CAL_bins"),] %>% as.numeric())
-  CAL_bins <- CAL_bins[!is.na(CAL_bins)]
-
-  CAL_mids <- suppressWarnings(datasheet[which(datasheet$Name == "CAL_mids"),] %>% as.numeric())
-  CAL_mids <- CAL_mids[!is.na(CAL_mids)]
 
   ind <- which(grepl('CAL', datasheet$Name) & !grepl('CAL_bins', datasheet$Name) &
                  !grepl('Vuln CAL', datasheet$Name) &
@@ -1780,9 +1785,25 @@ Report <- function(Data=NULL, md=NULL, name="Data-Report",
 
   }
 
-  cat("```{r, echo=FALSE, out.width='90%'} \n", file = rmdfile, sep = " ", append = TRUE)
-  cat("fignum <- ts_plots(Data,fignum=fignum+1)\n", file = rmdfile, sep = " ", append = TRUE)
+
+
+  cat("```{r, echo=FALSE} \n", file = rmdfile, sep = " ", append = TRUE)
+  cat("ts_data <- ts_plots(Data,fignum=fignum+1)\n", file = rmdfile, sep = " ", append = TRUE)
+  cat("DF <- ts_data[[1]] \n", file = rmdfile, sep = " ", append = TRUE)
+  cat("p1 <- ts_data[[2]] \n", file = rmdfile, sep = " ", append = TRUE)
+  cat("height <- length(levels(DF$Data))/2 *2\n", file = rmdfile, sep = " ", append = TRUE)
+  cat("fignum <- ts_data[[3]] \n", file = rmdfile, sep = " ", append = TRUE)
   cat("```\n\n", file = rmdfile, sep = " ", append = TRUE)
+
+  cat("```{r, echo=FALSE, out.width='90%', fig.height=height} \n", file = rmdfile, sep = " ", append = TRUE)
+  cat("suppressWarnings(suppressMessages(plot(p1))) \n", file = rmdfile, sep = " ", append = TRUE)
+  cat("```\n\n", file = rmdfile, sep = " ", append = TRUE)
+
+  cat("```{r, echo=FALSE, out.width='90%'} \n", file = rmdfile, sep = " ", append = TRUE)
+  cat("fignum <- vuln_addInd_plot(Data,fignum=fignum)\n", file = rmdfile, sep = " ", append = TRUE)
+  cat("fignum <- meanLen_plot(Data,fignum=fignum)\n", file = rmdfile, sep = " ", append = TRUE)
+  cat("```\n\n", file = rmdfile, sep = " ", append = TRUE)
+
 
 
   # Catch-at-Age section
@@ -2051,6 +2072,8 @@ select_plots <- function(Data, i=1, n=20000, fignum=1) {
   }
 
   plist <- do.call("rbind", lout)
+
+
   df <- plist %>% group_by(Var) %>% dplyr::distinct(mean, cv)
   df$x <- df$mean
   # df$mean[df$mean>0.01] <-round(df$mean[df$mean>0.01],)
@@ -2068,22 +2091,26 @@ select_plots <- function(Data, i=1, n=20000, fignum=1) {
     addText <- TRUE
   }
 
+  inc <- 0
+  if (!all(is.na(plist$mean))) {
+    inc <- 1
+    p3 <- ggplot2::ggplot(plist, ggplot2::aes(x=val, y=..scaled..)) +
+      ggplot2::geom_density(show.legend = F, fill="lightgray") +
+      ggplot2::facet_wrap(~Var, scales="free") +
+      ggplot2::theme_minimal() + ggplot2::theme(axis.title.y = ggplot2::element_blank(),
+                                                axis.text.y = ggplot2::element_blank(),
+                                                axis.title.x=ggplot2::element_blank()) +
+      ggplot2::geom_text(data=df, ggplot2::aes(x=x, y=1.3), parse=TRUE, label=lab) +
+      ggplot2::geom_text(data=df, ggplot2::aes(x=x, y=1.1), parse=TRUE, label=lab2) +
 
-  p3 <- ggplot2::ggplot(plist, ggplot2::aes(x=val, y=..scaled..)) +
-    ggplot2::geom_density(show.legend = F, fill="lightgray") +
-    ggplot2::facet_wrap(~Var, scales="free") +
-    ggplot2::theme_minimal() + ggplot2::theme(axis.title.y = ggplot2::element_blank(),
-                                              axis.text.y = ggplot2::element_blank(),
-                                              axis.title.x=ggplot2::element_blank()) +
-    ggplot2::geom_text(data=df, ggplot2::aes(x=x, y=1.3), parse=TRUE, label=lab) +
-    ggplot2::geom_text(data=df, ggplot2::aes(x=x, y=1.1), parse=TRUE, label=lab2) +
+      ggplot2::labs(title=paste0('Figure ', fignum, '. Density plots of selectivity parameters')) +
+      ggplot2::expand_limits(y=1.4) +
+      ggplot2::theme(strip.text = ggplot2::element_text(size=14))
+    if (addText) p3 <- p3 + ggplot2::geom_text(data=textdf, ggplot2::aes(x=0, y=3, label=Text) )
 
-    ggplot2::labs(title=paste0('Figure ', fignum, '. Density plots of selectivity parameters')) +
-    ggplot2::expand_limits(y=1.4) +
-    ggplot2::theme(strip.text = ggplot2::element_text(size=14))
-  if (addText) p3 <- p3 + ggplot2::geom_text(data=textdf, ggplot2::aes(x=0, y=3, label=Text) )
+    suppressWarnings(plot(p3))
+  }
 
-  suppressWarnings(plot(p3))
 
   if (all(!is.na(df$mean)) && all(df$mean >0) ) {
     if(!is.na(Data@MaxAge)) {
@@ -2103,7 +2130,7 @@ select_plots <- function(Data, i=1, n=20000, fignum=1) {
 
       DF <- data.frame(Age=Age[Age>0], Select=SelA)
 
-      fignum <- fignum +1
+      fignum <- fignum +inc
       p4 <- ggplot2::ggplot(DF, ggplot2::aes(x=Age, y=Select)) +
         ggplot2::geom_line(size=1.2) +
         ggplot2::expand_limits(y=c(0,1), x=0) +
@@ -2191,7 +2218,10 @@ ts_plots <- function(Data, i=1, fignum=1) {
   }
   Year <- y <- dw <- up <- X <- Ind <- value <- key <- NA
   DF <- makeDF(Data, "Cat", i)
+  DF <- rbind(DF, makeDF(Data, "Effort", i))
   DF <- rbind(DF, makeDF(Data, "Ind", i))
+  DF <- rbind(DF, makeDF(Data, "VInd", i))
+  DF <- rbind(DF, makeDF(Data, "SpInd", i))
 
   AddInd <- makeDF(Data, "AddInd", i)
   vDF <- NULL
@@ -2204,41 +2234,72 @@ ts_plots <- function(Data, i=1, fignum=1) {
 
   DF$Data[DF$Data == "Cat"] <- paste0("Catch (", Data@Units, ")")
   DF$Data[DF$Data == "Ind"] <- "Index"
+  DF$Data[DF$Data == "VInd"] <- "Vulnerable Index"
+  DF$Data[DF$Data == "SpInd"] <- "Spawning Index"
   DF$Data[DF$Data == "Rec"] <- "Recruitment"
   DF$Data <- factor(DF$Data, ordered = TRUE,
                     levels=unique(DF$Data))
+
+  # drop NAs
+  Range <- suppressWarnings(
+    DF %>% dplyr::group_by(Data) %>% dplyr::summarise(Range=range(y, na.rm=T), .groups="keep")
+  )
+  Groups <- Range %>% dplyr::filter(is.finite(Range)==TRUE)
+  DF <- DF %>% dplyr::filter(DF$Data %in% unique(Groups$Data))
 
   p1 <- ggplot2::ggplot(DF, ggplot2::aes(x=Year, y=y, ymin=dw, ymax=up)) +
     ggplot2::facet_wrap(~Data, scales="free", ncol=2) +
     ggplot2::expand_limits(y=0) +
     ggplot2::geom_ribbon(fill='lightgray') + ggplot2::geom_line(size=1.1) +
+    ggplot2::geom_point() +
     ggplot2::labs(x="Year", y="Mean (95% intervals)",
                   title=paste0('Figure ', fignum, '. Time-Series Data')) +
     ggplot2::theme_minimal() +
     ggplot2::theme(strip.text = ggplot2::element_text(size=14))
+
+
+  p1
+
+  list(DF, p1, fignum+1)
+}
+
+
+vuln_addInd_plot <- function(Data, i=1, fignum=1) {
+  Year <- y <- dw <- up <- X <- Ind <- value <- key <- NA
+  AddInd <- makeDF(Data, "AddInd", i)
+  vDF <- NULL
+  if (!is.null(AddInd)) {
+    vDF <- AddInd[[2]]
+  }
 
   p2 <- NULL
   if (!is.null(vDF)) {
     fignum <- fignum+1
     vDF$Ind <- factor(vDF$Ind)
     nind <- length(levels(vDF$Ind))
-    vDF$X <- rep(1:Data@MaxAge, nind)
+    vDF$X <- rep(1:(Data@MaxAge+1), nind)
     p2 <- ggplot2::ggplot(vDF, ggplot2::aes(x=X, y=V, linetype=Ind)) +
       ggplot2::geom_line() +
       ggplot2::expand_limits(y=c(0,1)) +
       ggplot2::labs(x="Age", y="Vulnerability",
-                    title=paste0('\n\nFigure ', fignum, '. Vulnerability-at-age schedules for Additional Indices'),
+                    title=paste0('\n\nFigure ',
+                                 fignum, '. Vulnerability-at-age schedules for Additional Indices'),
                     linetype="Additional Index") +
       ggplot2::theme_minimal()
 
   }
 
+  if (!is.null(p2)) suppressWarnings(plot(p2))
+  fignum
+}
 
+
+meanLen_plot <- function(Data, i=1, fignum=1) {
+  Year <- y <- dw <- up <- X <- Ind <- value <- key <- NA
   DF <- data.frame(Year=Data@Year, ML=Data@ML[i,], Lc=Data@Lc[i,], Lbar=Data@Lbar[i,])
   p3 <- NULL
   if (!all(is.na(DF[,2:4]))) {
     fignum <- fignum+1
-
     DF <- tidyr::gather(DF, "key", "value", 2:4)
     DF$key[DF$key == "ML"] <- "Mean length"
     DF$key[DF$key == "Lc"] <- "Modal length (Lc)"
@@ -2257,14 +2318,12 @@ ts_plots <- function(Data, i=1, fignum=1) {
 
   }
 
-
-  suppressWarnings(plot(p1))
-  if (!is.null(p2)) suppressWarnings(plot(p2))
   if (!is.null(p3)) suppressWarnings(plot(p3))
-
 
   fignum
 }
+
+
 
 
 caa_plot <- function(Data, i=1, fignum=1) {
@@ -2543,21 +2602,24 @@ ref_plots <- function(Data, i=1, n=20000, fignum=1) {
     addText <- TRUE
   }
 
-  p1 <- ggplot2::ggplot(plist, ggplot2::aes(x=val, y=..scaled..)) +
-    ggplot2::geom_density(show.legend = F, fill="lightgray") +
-    ggplot2::facet_wrap(~Var, scales="free") +
-    ggplot2::theme_minimal() + ggplot2::theme(axis.title.y = ggplot2::element_blank(),
-                                              axis.text.y = ggplot2::element_blank(),
-                                              axis.title.x=ggplot2::element_blank()) +
-    ggplot2::geom_text(data=df, ggplot2::aes(x=x, y=1.3), parse=TRUE, label=lab) +
-    ggplot2::geom_text(data=df, ggplot2::aes(x=x, y=1.1), parse=TRUE, label=lab2) +
+  if (!all(is.na(plist$mean))) {
+    p1 <- ggplot2::ggplot(plist, ggplot2::aes(x=val, y=..scaled..)) +
+      ggplot2::geom_density(show.legend = F, fill="lightgray") +
+      ggplot2::facet_wrap(~Var, scales="free") +
+      ggplot2::theme_minimal() + ggplot2::theme(axis.title.y = ggplot2::element_blank(),
+                                                axis.text.y = ggplot2::element_blank(),
+                                                axis.title.x=ggplot2::element_blank()) +
+      ggplot2::geom_text(data=df, ggplot2::aes(x=x, y=1.3), parse=TRUE, label=lab) +
+      ggplot2::geom_text(data=df, ggplot2::aes(x=x, y=1.1), parse=TRUE, label=lab2) +
 
-    ggplot2::labs(title=paste0('Figure ', fignum, '. Density plots of Reference parameters')) +
-    ggplot2::expand_limits(y=1.4) +
-    ggplot2::theme(strip.text = ggplot2::element_text(size=14))
-  if (addText) p1 <- p1 + ggplot2::geom_text(data=textdf, ggplot2::aes(x=0, y=3, label=Text) )
+      ggplot2::labs(title=paste0('Figure ', fignum, '. Density plots of Reference parameters')) +
+      ggplot2::expand_limits(y=1.4) +
+      ggplot2::theme(strip.text = ggplot2::element_text(size=14))
+    if (addText) p1 <- p1 + ggplot2::geom_text(data=textdf, ggplot2::aes(x=0, y=3, label=Text) )
 
-  suppressWarnings(plot(p1))
+    suppressWarnings(plot(p1))
+  }
+
 
   fignum
 

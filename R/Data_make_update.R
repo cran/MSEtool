@@ -29,7 +29,7 @@ makeData <- function(Biomass, CBret, Cret, N, SSB, VBiomass, StockPars,
   # --- Index of total abundance ----
   # Index of abundance from total biomass - beginning of year before fishing
   # apply hyperstability / hyperdepletion
-  II <- (apply(Biomass*Sample_Area$BInd[,,1:nyears,], c(1, 3), sum)^ObsPars$betas) *
+  II <- (apply(Biomass*Sample_Area$BInd[,,1:nyears,], c(1, 3), sum)^ObsPars$I_beta) *
     ObsPars$Ierr_y[, 1:nyears]
   II <- II/apply(II, 1, mean)  # normalize
   Data@Ind <- II # index of total abundance
@@ -38,7 +38,7 @@ makeData <- function(Biomass, CBret, Cret, N, SSB, VBiomass, StockPars,
   # --- Index of spawning abundance ----
   # Index of abundance from total biomass - beginning of year before fishing
   # apply hyperstability / hyperdepletion
-  II <- (apply(SSB*Sample_Area$SBInd[,,1:nyears,], c(1, 3), sum)^ObsPars$betas) *
+  II <- (apply(SSB*Sample_Area$SBInd[,,1:nyears,], c(1, 3), sum)^ObsPars$SpI_beta) *
     ObsPars$SpIerr_y[, 1:nyears]
   II <- II/apply(II, 1, mean)  # normalize
   Data@SpInd <- II # index of spawning abundance
@@ -47,7 +47,7 @@ makeData <- function(Biomass, CBret, Cret, N, SSB, VBiomass, StockPars,
   # --- Index of vulnerable abundance ----
   # Index of abundance from vulnerable biomass - beginning of year before fishing
   # apply hyperstability / hyperdepletion
-  II <- (apply(VBiomass*Sample_Area$VInd[,,1:nyears,], c(1, 3), sum)^ObsPars$betas) *
+  II <- (apply(VBiomass*Sample_Area$VInd[,,1:nyears,], c(1, 3), sum)^ObsPars$VI_beta) *
     ObsPars$VIerr_y[, 1:nyears]
   II <- II/apply(II, 1, mean)  # normalize
   Data@VInd <- II # index of vulnerable abundance
@@ -99,7 +99,7 @@ makeData <- function(Biomass, CBret, Cret, N, SSB, VBiomass, StockPars,
 
   # Generate values for reference SBMSY/SB0
   # should be calculated from unfished - won't be correct if initD is set
-  I3 <- apply(Biomass, c(1, 3), sum)^ObsPars$betas  # apply hyperstability / hyperdepletion
+  I3 <- apply(Biomass, c(1, 3), sum)^ObsPars$I_beta  # apply hyperstability / hyperdepletion
   I3 <- I3/apply(I3, 1, mean)  # normalize index to mean 1
   if (!is.null(initD)) {
     b1 <- apply(Biomass, c(1, 3), sum)
@@ -166,12 +166,12 @@ makeData <- function(Biomass, CBret, Cret, N, SSB, VBiomass, StockPars,
   imp <- as.data.frame(ImpPars[ind])
   refs <- RefPoints[!names(RefPoints) %in% names(stock)]
 
-  OMtable <- data.frame(stock, fleet, imp, refs, ageM=StockPars$ageM[,nyears],
-                        L5=FleetPars$L5[,nyears ], LFS=FleetPars$LFS[,nyears ],
-                        Vmaxlen=FleetPars$Vmaxlen[,nyears ],
-                        LR5=FleetPars$LR5[,nyears], LFR=FleetPars$LFR[,nyears],
-                        Rmaxlen=FleetPars$Rmaxlen[,nyears],
-                        DR=FleetPars$DR[,nyears], OFLreal, maxF=StockPars$maxF,
+  OMtable <- data.frame(stock, fleet, imp, refs, ageM=StockPars$ageMarray[,nyears],
+                        L5=FleetPars$L5_y[,nyears ], LFS=FleetPars$LFS_y[,nyears ],
+                        Vmaxlen=FleetPars$Vmaxlen_y[,nyears ],
+                        LR5=FleetPars$LR5_y[,nyears], LFR=FleetPars$LFR_y[,nyears],
+                        Rmaxlen=FleetPars$Rmaxlen_y[,nyears],
+                        DR=FleetPars$DR_y[,nyears], OFLreal, maxF=StockPars$maxF,
                         A=A, Asp=Asp, CurrentYr=CurrentYr)
 
   OMtable <- OMtable[,order(names(OMtable))]
@@ -202,7 +202,7 @@ makeData <- function(Biomass, CBret, Cret, N, SSB, VBiomass, StockPars,
 updateData <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_Pret,
                        N_P, SSB, SSB_P, VBiomass, VBiomass_P, RefPoints,
                        retA_P,
-                       retL_P, StockPars, FleetPars, ObsPars,
+                       retL_P, StockPars, FleetPars, ObsPars, ImpPars,
                        V_P,
                        upyrs, interval, y=2,
                        mm=1, Misc, RealData, Sample_Area) {
@@ -251,7 +251,8 @@ updateData <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_Pret
               apply(Biomass_P*Sample_Area$BInd[,,(nyears+1):(nyears+proyears),], c(1, 3), sum)[, 1:(y - 1)])
 
   # standardize, apply  beta & obs error
-  I2 <- exp(lcs(I2))^ObsPars$betas * ObsPars$Ierr_y[,yr.ind:(nyears + (y - 1))]
+  I2 <- exp(lcs(I2))^ObsPars$I_beta * ObsPars$Ierr_y[,yr.ind:(nyears + (y - 1))]
+  # I2 <- exp(lcs(I2)) * ObsPars$Ierr_y[,yr.ind:(nyears + (y - 1))]
   year.ind <- max(which(!is.na(Data@Ind[1,1:nyears])))
   scaler <- Data@Ind[,year.ind]/I2[,1]
   scaler <- matrix(scaler, nrow=nsim, ncol=ncol(I2))
@@ -281,7 +282,7 @@ updateData <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_Pret
               apply(SSB_P*Sample_Area$SBInd[,,(nyears+1):(nyears+proyears),], c(1, 3), sum)[, 1:(y - 1)])
 
   # standardize, apply  beta & obs error
-  I2 <- exp(lcs(I2))^ObsPars$betas * ObsPars$SpIerr_y[,yr.ind:(nyears + (y - 1))]
+  I2 <- exp(lcs(I2))^ObsPars$SpI_beta * ObsPars$SpIerr_y[,yr.ind:(nyears + (y - 1))]
   year.ind <- max(which(!is.na(Data@SpInd[1,1:nyears])))
   scaler <- Data@SpInd[,year.ind]/I2[,1]
   scaler <- matrix(scaler, nrow=nsim, ncol=ncol(I2))
@@ -311,7 +312,7 @@ updateData <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_Pret
               apply(VBiomass_P*Sample_Area$VInd[,,(nyears+1):(nyears+proyears),], c(1, 3), sum)[, 1:(y - 1)])
 
   # standardize, apply  beta & obs error
-  I2 <- exp(lcs(I2))^ObsPars$betas * ObsPars$VIerr_y[,yr.ind:(nyears + (y - 1))]
+  I2 <- exp(lcs(I2))^ObsPars$VI_beta * ObsPars$VIerr_y[,yr.ind:(nyears + (y - 1))]
   year.ind <- max(which(!is.na(Data@VInd[1,1:nyears])))
   scaler <- Data@VInd[,year.ind]/I2[,1]
   scaler <- matrix(scaler, nrow=nsim, ncol=ncol(I2))
@@ -510,6 +511,32 @@ updateData <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_Pret
     Data@MPeff <- Effort[, mm, y-1] # last recommended effort
   }
 
+  # --- Store OM Parameters ----
+  # put all the operating model parameters in one table
+  ind <- which(lapply(StockPars, length) == nsim)
+  stock <- as.data.frame(StockPars[ind])
+  stock$Fdisc <- NULL
+  stock$CAL_bins <- NULL
+  stock$CAL_binsmid <- NULL
+  ind <- which(lapply(FleetPars, length) == nsim)
+  fleet <- as.data.frame(FleetPars[ind])
+
+  ind <- which(lapply(ImpPars, length) == nsim)
+  imp <- as.data.frame(ImpPars[ind])
+  refs <- RefPoints# [!names(RefPoints) %in% names(stock)]
+
+  OFLreal <- A * (1-exp(-RefPoints$FMSY))  # the true simulated Over Fishing Limit
+
+  OMtable <- data.frame(stock, fleet, imp, refs, ageM=StockPars$ageMarray[,nyears+y],
+                        L5=FleetPars$L5_y[,nyears+y], LFS=FleetPars$LFS_y[,nyears+y],
+                        Vmaxlen=FleetPars$Vmaxlen_y[,nyears+y],
+                        LR5=FleetPars$LR5_y[,nyears], LFR=FleetPars$LFR_y[,nyears+y],
+                        Rmaxlen=FleetPars$Rmaxlen_y[,nyears+y],
+                        DR=FleetPars$DR_y[,nyears+y], OFLreal, maxF=StockPars$maxF,
+                        A=A, Asp=Asp, CurrentYr=OM@CurrentYr)
+
+  OMtable <- OMtable[,order(names(OMtable))]
+  Data@OM <- OMtable
 
   Data@Misc <- Misc
 
@@ -750,6 +777,7 @@ AddRealData <- function(SimData, RealData, ObsPars, StockPars, FleetPars, nsim,
   Data_out@MPrec <- SimData@MPrec
   Data_out@MPeff <- SimData@MPeff
   Data_out@nareas <- SimData@nareas
+  Data_out@LHYear <- SimData@LHYear
 
   # ---- Update Life-history parameters ----
   Data_out@Mort <- UpdateSlot('Mort', RealData, SimData, msg)
@@ -840,7 +868,8 @@ AddRealData <- function(SimData, RealData, ObsPars, StockPars, FleetPars, nsim,
     Cerr <- cbind(Cerr, Cerr_proj)
 
     ObsPars$Cbias <- Cbias[,1]
-    ObsPars$Cerr_y <- Cerr * Cbias
+    ObsPars$Cerr_y <- Cerr
+    ObsPars$Cobs_y <- Cerr * Cbias
 
   }
 
@@ -857,11 +886,15 @@ AddRealData <- function(SimData, RealData, ObsPars, StockPars, FleetPars, nsim,
 
     # Calculate Error
     SimBiomass <- apply(StockPars$Biomass, c(1, 3), sum)
-    I_Err <- lapply(1:nsim, function(i) indfit(SimBiomass[i,],  Data_out@Ind[i,]))
+    I_Err <- lapply(1:nsim, function(i) indfit(sim.index=SimBiomass[i,], obs.ind=Data_out@Ind[i,]))
     I_Err <- do.call('rbind', I_Err)
 
-    Ierr <- exp(lcs(Data_out@Ind))/exp(lcs(SimBiomass))^I_Err$beta
+    ind <- is.na(Data_out@Ind[1,])
+    Ierr_temp <- exp(lcs(Data_out@Ind[,!ind]))/exp(lcs(SimBiomass[,!ind]))^I_Err$beta
+    Ierr <- array(NA, dim(Data_out@Ind))
+    Ierr[,!ind] <- Ierr_temp
 
+    ObsPars$I_beta <- I_Err$beta
     if (!is.null(SampCpars$Ierr_y)) {
       if (msg) message('Total Index Observation Error found (cpars$Ierr_y) - not updating observation error')
     } else {
@@ -869,7 +902,7 @@ AddRealData <- function(SimData, RealData, ObsPars, StockPars, FleetPars, nsim,
       ObsPars$Ierr_y[, 1:nyears] <- Ierr # update Obs Error
       # Sample for projection years
       yr.ind <- max(which(!is.na(RealData@Ind[1,1:nyears])))
-      ObsPars$Ierr[, (nyears+1):(nyears+proyears)] <- generateRes(df=I_Err,
+      ObsPars$Ierr_y[, (nyears+1):(nyears+proyears)] <- generateRes(df=I_Err,
                                                                   nsim, proyears,
                                                                   lst.err=log(ObsPars$Ierr[,yr.ind]))
     }
@@ -889,13 +922,17 @@ AddRealData <- function(SimData, RealData, ObsPars, StockPars, FleetPars, nsim,
     I_Err <- lapply(1:nsim, function(i) indfit(SimBiomass[i,],  Data_out@SpInd[i,]))
     I_Err <- do.call('rbind', I_Err)
 
-    Ierr <- exp(lcs(Data_out@SpInd))/exp(lcs(SimBiomass))^I_Err$beta
+    ind <- is.na(Data_out@SpInd[1,])
+    Ierr_temp <- exp(lcs(Data_out@SpInd[,!ind]))/exp(lcs(SimBiomass[,!ind]))^I_Err$beta
+    Ierr <- array(NA, dim(Data_out@SpInd))
+    Ierr[,!ind] <- Ierr_temp
 
-    ObsPars$SpIerr[,1:nyears] <- Ierr
+    ObsPars$SpIerr_y[,1:nyears] <- Ierr
+    ObsPars$SpI_beta <- I_Err$beta
 
     # Sample for projection years
     yr.ind <- max(which(!is.na(RealData@SpInd[1,1:nyears])))
-    ObsPars$SpIerr[, (nyears+1):(nyears+proyears)] <- generateRes(df=I_Err, nsim, proyears, lst.err=log(ObsPars$SpIerr[,yr.ind]))
+    ObsPars$SpIerr_y[, (nyears+1):(nyears+proyears)] <- generateRes(df=I_Err, nsim, proyears, lst.err=log(ObsPars$SpIerr[,yr.ind]))
     ObsPars$SpInd_Stat <- I_Err # return index statistics
   }
 
@@ -911,13 +948,17 @@ AddRealData <- function(SimData, RealData, ObsPars, StockPars, FleetPars, nsim,
     I_Err <- lapply(1:nsim, function(i) indfit(SimBiomass[i,],  Data_out@VInd[i,]))
     I_Err <- do.call('rbind', I_Err)
 
-    Ierr <- exp(lcs(Data_out@VInd))/exp(lcs(SimBiomass))^I_Err$beta
+    ind <- is.na(Data_out@VInd[1,])
+    Ierr_temp <- exp(lcs(Data_out@VInd[,!ind]))/exp(lcs(SimBiomass[,!ind]))^I_Err$beta
+    Ierr <- array(NA, dim(Data_out@VInd))
+    Ierr[,!ind] <- Ierr_temp
 
-    ObsPars$VIerr[,1:nyears] <- Ierr
+    ObsPars$VIerr_y[,1:nyears] <- Ierr
+    ObsPars$VI_beta <- I_Err$beta
 
     # Sample for projection years
     yr.ind <- max(which(!is.na(RealData@VInd[1,1:nyears])))
-    ObsPars$VIerr[, (nyears+1):(nyears+proyears)] <- generateRes(df=I_Err, nsim, proyears, lst.err=log(ObsPars$VIerr[,yr.ind]))
+    ObsPars$VIerr_y[, (nyears+1):(nyears+proyears)] <- generateRes(df=I_Err, nsim, proyears, lst.err=log(ObsPars$VIerr[,yr.ind]))
     ObsPars$VInd_Stat <- I_Err # return index statistics
   }
 
@@ -1125,7 +1166,7 @@ AddRealData <- function(SimData, RealData, ObsPars, StockPars, FleetPars, nsim,
   # ---- Index Reference -----
   Data_out@Iref <- UpdateSlot('Iref', RealData, SimData, msg)
   Data_out@CV_Iref <- UpdateSlot('CV_Iref', RealData, SimData, msg)
-  ObsPars$Irefbias <- rep(NA, nsim) # not calculated
+  # ObsPars$Irefbias <- rep(NA, nsim) # not calculated
 
   NotUpdated <- function(RealData, sl, msg) {
     if (!all(is.na(slot(RealData, sl)))) {

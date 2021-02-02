@@ -1,8 +1,57 @@
-# MSEtool V3.0.0
+<!-- README.md is generated from README.Rmd. Please edit that file -->
 
-[![R build status](https://github.com/Blue-Matter/MSEtool/workflows/R-CMD-check/badge.svg)](https://github.com/Blue-Matter/MSEtool/actions)
+MSEtool <img src='man/figures/logo.png' align="right" height="139" />
+=====================================================================
 
-This is a new major release of the `MSEtool` package. It is not backwards compatible with previous versions of `MSEtool` or `DLMtool`.
+<!-- badges: start -->
 
-This README will be updated when the package is released on CRAN.
+[![R build
+status](https://github.com/Blue-Matter/MSEtool/workflows/R-CMD-check/badge.svg)](https://github.com/Blue-Matter/MSEtool/actions)
+[![CRAN
+status](https://www.r-pkg.org/badges/version/MSEtool)](https://CRAN.R-project.org/package=MSEtool)
+[![](https://img.shields.io/badge/devel%20version-3.0.9003-blue.svg)](https://github.com/blue-matter/MSEtool)
 
+<!-- badges: end -->
+
+The goal of MSEtool is to …
+
+Installation
+------------
+
+You can install the released version of MSEtool from
+[CRAN](https://CRAN.R-project.org) with:
+
+    install.packages("MSEtool")
+
+And the development version from [GitHub](https://github.com/) with:
+
+    # install.packages("devtools")
+    devtools::install_github("Blue-Matter/MSEtool")
+
+Example
+-------
+
+This is a basic example which shows you how to solve a common problem:
+
+    library(MSEtool)
+    #> Loading required package: snowfall
+    #> Loading required package: snow
+    ## basic example code
+
+What is special about using `README.Rmd` instead of just `README.md`?
+You can include R chunks like so:
+
+    summary(cars)
+    #>      speed           dist       
+    #>  Min.   : 4.0   Min.   :  2.00  
+    #>  1st Qu.:12.0   1st Qu.: 26.00  
+    #>  Median :15.0   Median : 36.00  
+    #>  Mean   :15.4   Mean   : 42.98  
+    #>  3rd Qu.:19.0   3rd Qu.: 56.00  
+    #>  Max.   :25.0   Max.   :120.00
+
+You’ll still need to render `README.Rmd` regularly, to keep `README.md`
+up-to-date.
+
+In that case, don’t forget to commit and push the resulting figure
+files, so they display on GitHub!

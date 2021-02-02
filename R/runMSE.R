@@ -1233,6 +1233,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
                        plusgroup=StockPars$plusgroup))
 
       N_P[,,y,] <- aperm(array(unlist(NextYrN), dim=c(n_age, nareas, nsim, 1)), c(3,1,4,2))
+
       Biomass_P[SAYR] <- N_P[SAYR] * StockPars$Wt_age[SAYt]  # Calculate biomass
       SSN_P[SAYR] <- N_P[SAYR] * StockPars$Mat_age[SAYt]  # Calculate spawning stock numbers
       SSB_P[SAYR] <- SSN_P[SAYR] * StockPars$Wt_age[SAYt]  # Calculate spawning stock biomass
@@ -1270,7 +1271,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
                               SSB_P, VBiomass=StockPars$VBiomass, VBiomass_P,
                               RefPoints=ReferencePoints,
                               retA_P, retL_P, StockPars,
-                              FleetPars, ObsPars, V_P,
+                              FleetPars, ObsPars, ImpPars, V_P,
                               upyrs, interval, y, mm,
                               Misc=Data_p@Misc, RealData,
                               Sample_Area=ObsPars$Sample_Area)
@@ -1346,7 +1347,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
                                   StockPars$VBiomass, VBiomass_P,
                                   RefPoints=ReferencePoints,
                                   retA_P, retL_P, StockPars,
-                                  FleetPars, ObsPars, V_P,
+                                  FleetPars, ObsPars, ImpPars, V_P,
                                   upyrs=c(upyrs, proyears),
                                   interval=rep(proyears-max(upyrs), length(interval)), y, mm,
                                   Misc=Data_p@Misc, RealData, ObsPars$Sample_Area

@@ -86,7 +86,10 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
     if(!silent) message(Stocks[[p]]@Name)
     for(f in 1:nf){
       # --- Sample custom parameters ----
+
       if(length(cpars)>0 && length(cpars[[p]][[f]])>0){
+        if(!silent)
+          message('Sampling custom parameters for ', Fleets[[p]][[f]]@Name)
         SampCpars[[p]][[f]] <- SampleCpars(cpars[[p]][[f]], nsim,
                                            silent=silent)
       }else{
@@ -1852,6 +1855,7 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
                                                   StockPars=StockPars[[p]],
                                                   FleetPars=FleetPars[[p]][[f]],
                                                   ObsPars=ObsPars[[p]][[f]],
+                                                  ImpPars=ImpPars[[p]][[f]],
                                                   V_P=FleetPars[[p]][[f]]$V_P,
                                                   upyrs=upyrs,
                                                   interval=interval,
@@ -1972,6 +1976,7 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
             } # end of MPcond conditional
           } # end of stock loop
         } # end of MMP
+
         for(p in 1:np){
           for(f in 1:nf){
             # calculate pstar quantile of TAC recommendation dist
@@ -2172,7 +2177,7 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
     }
   }
   Misc <- list()
-  Misc$Data <-MSElist
+  # Misc$Data <-MSElist
   Misc[['MOM']]<-MOM
 
   # need to reformat MMP and complex mode to work with MSEout slot

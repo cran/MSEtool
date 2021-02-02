@@ -21,50 +21,15 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 ```{r, echo=FALSE, results="asis"}
 if (params$tabs) {
   cat('### Catch Observations {.tabset .tabset-fade .tabset-pills}' )
 } else {
   cat('### Catch Observations')
 }
-
 Pars <- params$Pars
 nsim <- Pars$Obs$Csd %>% length()
-
-# ErrList <- list()
-# ErrList$Cbiasa <- array(Pars$Obs$Cbias, c(nsim, nyears + proyears))  # Catch bias array
-#  
-# # composite of bias and observation error
-# ErrList$Cerr <- array(rlnorm((nyears + proyears) * nsim, 
-#                      mconv(1, rep(Pars$Obs$Csd, (nyears + proyears))), 
-#                      sdconv(1, rep(Pars$Obs$Csd, nyears + proyears))), 
-#               c(nsim, nyears + proyears))  
-# # Index error
-# ErrList$Ierr <- array(rlnorm((nyears + proyears) * nsim, 
-#                      mconv(1, rep(Pars$Obs$Isd, nyears + proyears)), 
-#                      sdconv(1, rep(Pars$Obs$Isd, nyears + proyears))), 
-#               c(nsim, nyears + proyears))
-# 
-# # Simulate error in observed recruitment index 
-# ErrList$Recerr <- array(rlnorm((nyears + proyears) * nsim, 
-#                                mconv(1, rep(Pars$Obs$Recsd, (nyears + proyears))),
-#                                sdconv(1, rep(Pars$Obs$Recsd, nyears + proyears))),
-#                         c(nsim, nyears + proyears))
-#   
-# # Simulate error in observed depletion 
-# ErrList$Derr <- array(rlnorm((nyears + proyears) * nsim, 
-#                                mconv(1, rep(Pars$Obs$Derr, (nyears + proyears))),
-#                                sdconv(1, rep(Pars$Obs$Derr, nyears + proyears))),
-#                         c(nsim, nyears + proyears))
-# ErrList$Dbiasa <- array(Pars$Obs$Dbias, c(nsim, nyears + proyears))  # Catch bias array
-# 
-# # Simulate error in observed abundance 
-# ErrList$Aerr <- array(rlnorm((nyears + proyears) * nsim, 
-#                                mconv(1, rep(Pars$Aerr, (nyears + proyears))),
-#                                sdconv(1, rep(Pars$Aerr, nyears + proyears))),
-#                         c(nsim, nyears + proyears))
-# ErrList$Abiasa <- array(Pars$Obs$Abias, c(nsim, nyears + proyears))  # Catch bias array
-
 ```
 
 
@@ -200,16 +165,43 @@ if (params$tabs) {
 Histograms of `r nsim` simulations of inter-annual variability in index observations (`Iobs`) and hyper-stability/depletion in observed index (`beta`), with vertical colored lines indicating `r nsamp` randomly drawn values used in other plots:
 
 ```{r, echo=FALSE}
-par(mfrow=c(1,2))
+if (!is.null(Pars$Obs$betas)) {
+  par(mfrow=c(1,2))  
+}
+
+if (!is.null(Pars$Obs$I_beta)) {
+  par(mfrow=c(1,4))  
+}
+
 hist2(Pars$Obs$Isd, main="Iobs", col=params$plotPars$col, axes=params$plotPars$axes,
       breaks=params$plotPars$breaks, cex.main=params$plotPars$cex.main)
 abline(v=Pars$Obs$Isd[params$its], col=1:nsamp, lwd=params$plotPars$lwd)
 axis(side=1) 
 
-hist2(Pars$Obs$betas, main="beta", col=params$plotPars$col, axes=params$plotPars$axes,
+if (!is.null(Pars$Obs$betas)) {
+  hist2(Pars$Obs$betas, main="beta", col=params$plotPars$col, axes=params$plotPars$axes,
       breaks=params$plotPars$breaks, cex.main=params$plotPars$cex.main)
 abline(v=Pars$Obs$betas[params$its], col=1:nsamp, lwd=params$plotPars$lwd)
 axis(side=1) 
+}
+
+if (!is.null(Pars$Obs$I_beta)) {
+  hist2(Pars$Obs$I_beta, main="I_beta", col=params$plotPars$col, axes=params$plotPars$axes,
+      breaks=params$plotPars$breaks, cex.main=params$plotPars$cex.main)
+  abline(v=Pars$Obs$I_beta[params$its], col=1:nsamp, lwd=params$plotPars$lwd)
+  axis(side=1) 
+  
+  hist2(Pars$Obs$SpI_beta, main="SpI_beta", col=params$plotPars$col, axes=params$plotPars$axes,
+      breaks=params$plotPars$breaks, cex.main=params$plotPars$cex.main)
+  abline(v=Pars$Obs$SpI_beta[params$its], col=1:nsamp, lwd=params$plotPars$lwd)
+  axis(side=1) 
+  
+  hist2(Pars$Obs$VI_beta, main="VI_beta", col=params$plotPars$col, axes=params$plotPars$axes,
+     breaks=params$plotPars$breaks, cex.main=params$plotPars$cex.main)
+  abline(v=Pars$Obs$VI_beta[params$its], col=1:nsamp, lwd=params$plotPars$lwd)
+  axis(side=1) 
+}
+
 
 ```
 
@@ -235,7 +227,16 @@ Plot showing an example true abundance index (blue) with `r nsamp` samples of in
 par(mfrow=c(1,1), oma=c(3,3,1,1), mar=c(4,1,3,1))
 ind<-seq(1,0.1,length.out=nyears)
 
-Imu<-array(rep(ind,each=nsamp)^rep(Pars$Obs$betas[params$its],nyears),
+
+if (!is.null(Pars$Obs$betas)) {
+  beta <- Pars$Obs$betas[params$its]
+}
+
+if (!is.null(Pars$Obs$I_beta)) {
+  beta <- Pars$Obs$I_beta[params$its]
+}
+
+Imu<-array(rep(ind,each=nsamp)^rep(beta,nyears),
            c(nsamp,nyears))*Pars$Obs$Ierr_y[params$its, 1:nyears]
 Imu<-Imu/apply(Imu,1,mean)
 ind <- ind/mean(ind)

@@ -113,28 +113,32 @@ XL2Data <- function(name, dec=c(".", ","), sheet=1, silent=FALSE) {
     name <- c(xl.fname1, xl.fname2)[fls]
   }
   if (tools::file_ext(name) == "csv") {
-    Ncol <- max(unlist(lapply(strsplit(readLines(file.path(dir,name)), ","), length)))
+    tempin <- strsplit(readLines(file.path(dir,name)), ",")
+    # detect header
+    header <- ifelse(tempin[[2]][1] == 'Name', TRUE, FALSE)
+    somechar <- function(x) sum(nchar(x) > 0)
+    Ncol <- max(unlist(lapply(tempin, somechar)))
     col.names <- paste0("V", 1:Ncol)
     if (dec == ".") {
-      datasheet <- read.csv(file.path(dir,name), header = T,
+      datasheet <- read.csv(file.path(dir,name), header = header,
                             colClasses = "character", col.names=col.names,
-                            stringsAsFactors = FALSE)
+                            stringsAsFactors = FALSE, row.names = NULL)
     } else {
-      datasheet <- read.csv2(file.path(dir,name), header = T,
+      datasheet <- read.csv2(file.path(dir,name), header = header,
                              colClasses = "character", col.names=col.names,
-                             stringsAsFactors = FALSE)
+                             stringsAsFactors = FALSE, row.names = NULL)
     }
 
   } else if(tools::file_ext(name) %in% c("xls", "xlsx")) {
     datasheet <- readxl::read_excel(file.path(dir,name), sheet = sheet,
                                     col_names = TRUE, .name_repair = "minimal")
+
+    if (datasheet[1,1] == "Common Name") { # no header in data file
+      datasheet <- readxl::read_excel(file.path(dir,name), sheet = sheet,
+                                      col_names = FALSE, .name_repair = "minimal")
+    }
   } else {
     stop("File extension must be .csv, .xls, or .xlsx")
-  }
-
-  if (datasheet[1,1] == "Common Name") { # no header in data file
-    datasheet <- readxl::read_excel(file.path(dir,name), sheet = sheet,
-                                    col_names = FALSE, .name_repair = "minimal")
   }
 
   if (ncol(datasheet) == 1)  stop("Data file has no data") # no data in data file
@@ -308,7 +312,7 @@ XL2Data <- function(name, dec=c(".", ","), sheet=1, silent=FALSE) {
   addInd <- datasheet[which(datasheet$Name == "Index 1"),2:(Nyears+1)] %>% unlist()
   n.temp <- nchar(addInd)
 
-  if (!(all(n.temp[!is.na(n.temp)]==0)) | all(is.na(addInd)) | (length(addInd)<1)) {
+  if (!(all(n.temp[!is.na(n.temp)]==0)) & !all(is.na(addInd)) & !(length(addInd)<1)) {
     indexexist <- TRUE
   } else {
     indexexist <- FALSE

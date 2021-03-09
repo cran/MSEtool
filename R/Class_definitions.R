@@ -299,7 +299,6 @@ importslot <- function(name, length=2, Data, Names, numeric=TRUE, essential=TRUE
 #'
 #' @docType class
 #'
-#' @slot Name The name of the Stock object. Single value. Character string
 #' @template Stock_template
 #'
 #' @section Objects from the Class: Objects can be created by calls of the form
@@ -412,7 +411,6 @@ setClassUnion(name="char.log", members=c("character", "logical"))
 #'
 #' @name Fleet-class
 #' @docType class
-#' @slot Name Name of the Fleet object. Single value. Character string.
 #' @template Fleet_template
 #'
 #' @section Creating Object:
@@ -559,7 +557,6 @@ NULL
 #' An operating model component that controls the observation model
 #'
 #'
-#' @name Obs-class
 #' @docType class
 #' @note Its questionable whether the hyperstability/hyperdepletion should be
 #' categorised as an observation model characteristic as it is most often

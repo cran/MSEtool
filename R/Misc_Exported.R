@@ -78,13 +78,22 @@ avail <- function(classy, package=NULL, msg=TRUE) {
       MSEextra_funs <- get_funcs('MSEextra', classy, msg)
       temp <- c(temp, MSEextra_funs)
     }
+    
+    packagex <- package[!package %in% packages]
+    if (length(packagex)>0) {
+      other <- sapply(1:length(packagex), function(i)
+        get_funcs(packagex[i], classy, msg))  
+      other <- unlist(other)
+      temp <- c(temp, other)
+    }
+    
     if (length(temp) < 1) stop("No objects of class '", classy, "' found", call. = FALSE)
     return(unique(temp))
   }
 }
 
 
-#' Directory of the installed package on your computer
+#' Directory of the data in the installed package on your computer
 #'
 #' A way of locating where the package was installed so you can find example
 #' data files and code etc.
@@ -101,9 +110,9 @@ avail <- function(classy, package=NULL, msg=TRUE) {
 #' @export DataDir
 DataDir <- function(stock = NA) {
   if (is.na(stock)) {
-    system.file(package = "MSEtool")
+    file.path(system.file(package = "MSEtool"), "Data")
   } else {
-    system.file(paste0(stock, ".csv"), package = "MSEtool", mustWork = TRUE)
+    system.file(paste0('Data/', stock, ".csv"), package = "MSEtool", mustWork = TRUE)
   }
 }
 
@@ -1211,7 +1220,7 @@ optCPU <- function(nsim=96, thresh=5, plot=TRUE, msg=TRUE, maxn=NULL) {
 #' @export
 #'
 #' @keywords internal
-MPurl <- function(topic, url='https://blue-matter.github.io/DLMtool/reference/',
+MPurl <- function(topic, url='https://dlmtool.openmse.com/reference/',
                   nameonly=FALSE) {
 
   paths <- file.path(.libPaths()[1], "DLMtool")

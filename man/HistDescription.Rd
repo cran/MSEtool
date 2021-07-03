@@ -5,7 +5,7 @@
 \alias{HistDescription}
 \title{HistDescription}
 \format{
-An object of class \code{data.frame} with 69 rows and 2 columns.
+An object of class \code{data.frame} with 75 rows and 2 columns.
 }
 \usage{
 HistDescription

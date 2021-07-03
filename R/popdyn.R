@@ -16,12 +16,16 @@
 CalculateQ <- function(x, StockPars, FleetPars, pyears,
                   bounds = c(1e-05, 15), control) {
 
+  # realized vulnerability schedule - accounting for discard mortality on discards
+  V_real <- FleetPars$V *(FleetPars$retA+(1-FleetPars$retA)*FleetPars$Fdisc_array1)
+  ret_real <- V_real * FleetPars$retA # realized retention curve (prob of retention x prob of selection)
+  
   opt <- optimize(optQ, log(bounds), depc=StockPars$D[x], SSB0c=StockPars$SSB0[x],
                   StockPars$nareas, StockPars$maxage, Ncurr=StockPars$N[x,,1,],
                   pyears, M_age=StockPars$M_ageArray[x,,],
                   MatAge=StockPars$Mat_age[x,,], Asize_c=StockPars$Asize[x,],
-                  WtAge=StockPars$Wt_age[x,,], Vuln=FleetPars$V[x,,],
-                  Retc=FleetPars$retA[x,,], Prec=StockPars$Perr_y[x,],
+                  WtAge=StockPars$Wt_age[x,,], Vuln=V_real[x,,],
+                  Retc=ret_real[x,,], Prec=StockPars$Perr_y[x,],
                   movc=split.along.dim(StockPars$mov[x,,,,],4),
                   SRrelc=StockPars$SRrel[x], Effind=FleetPars$Find[x,],
                   Spat_targc=FleetPars$Spat_targ[x], hc=StockPars$hs[x],
@@ -29,7 +33,9 @@ CalculateQ <- function(x, StockPars, FleetPars, pyears,
                   aRc=StockPars$aR[x,], bRc=StockPars$bR[x,],
                   maxF=StockPars$maxF, MPA=FleetPars$MPA,
                   plusgroup=StockPars$plusgroup,
-                  StockPars$VB0[x], control)
+                  StockPars$VB0[x],
+                  SBMSYc=StockPars$SSBMSY[x],
+                  control)
 
   return(exp(opt$minimum))
 }
@@ -63,13 +69,14 @@ CalculateQ <- function(x, StockPars, FleetPars, pyears,
 #' @param MPA A matrix of spatial closures by year
 #' @param plusgroup Integer. Default = 0 = no plus-group. Use 1 to include a plus-group
 #' @param VB0c  Unfished vulnerable biomass
+#' @param SBMSYc  Spawning biomass at MSY for simulation x
 #' @param control List. Control parameters including `optVB=TRUE` to optimize
 #' for vulnerable biomass instead of SSB?
 #' @author A. Hordyk
 #' @keywords internal
 optQ <- function(logQ, depc, SSB0c, nareas, maxage, Ncurr, pyears, M_age, Asize_c,
                  MatAge, WtAge, Vuln, Retc, Prec, movc, SRrelc, Effind, Spat_targc, hc,
-                 R0c, SSBpRc, aRc, bRc, maxF, MPA, plusgroup, VB0c, control) {
+                 R0c, SSBpRc, aRc, bRc, maxF, MPA, plusgroup, VB0c, SBMSYc, control) {
 
   simpop <- popdynCPP(nareas, maxage, Ncurr, pyears, M_age, Asize_c,
                       MatAge, WtAge, Vuln, Retc, Prec, movc, SRrelc, Effind,
@@ -82,6 +89,10 @@ optQ <- function(logQ, depc, SSB0c, nareas, maxage, Ncurr, pyears, M_age, Asize_
     N_at_end_yr <- rowSums(simpop[[9]])
     SB_end <- sum(N_at_end_yr * WtAge[,pyears] * MatAge[,pyears])
     VB_end <- sum(N_at_end_yr * WtAge[,pyears] * Vuln[,pyears])
+
+    if (control$optSBMSY) {
+      return((log(depc) - log(ssb/SBMSYc))^2)
+    }
     if (control$optVB) {
       return((log(depc) - log(VB_end/VB0c))^2)
     }
@@ -92,6 +103,10 @@ optQ <- function(logQ, depc, SSB0c, nareas, maxage, Ncurr, pyears, M_age, Asize_
     # Calculate depletion using biomass at the beginning of last projection year
     ssb <- sum(simpop[[4]][,pyears,])
     vb <- sum(simpop[[5]][,pyears,])
+
+    if (control$optSBMSY) {
+      return((log(depc) - log(ssb/SBMSYc))^2)
+    }
 
     if (control$optVB) {
       return((log(depc) - log(vb/VB0c))^2)
@@ -109,7 +124,7 @@ split.along.dim <- function(a, n) {
 }
 
 
-#' Internal wrapper function to calculate MSY reference points
+#' Internal wrapper function to calculate MSY reference points (now using MSYCalcs)
 #'
 #' @param x Simulation number
 #' @param M_ageArray Array of M-at-age
@@ -140,107 +155,81 @@ optMSY_eq <- function(x, M_ageArray, Wt_age, Mat_age, V, maxage, R0, SRrel, hs,
     V_at_Age <- apply(V[x,, yr.ind], 1, mean)
   }
 
-  boundsF <- c(1E-8, 3)
+  boundsF <- c(1E-4, 3)
 
   doopt <- optimise(MSYCalcs, log(boundsF), M_at_Age, Wt_at_Age, Mat_at_Age,
-                    V_at_Age, maxage, R0x=R0[x], SRrelx=SRrel[x], hx=hs[x], opt=1,
-                    plusgroup=plusgroup)
-
-  #UMSY <- exp(doopt$minimum)
+                     V_at_Age, maxage, R0[x], SRrel[x], hs[x], opt=1,
+                     plusgroup=plusgroup)
 
   MSYs <- MSYCalcs(doopt$minimum, M_at_Age, Wt_at_Age, Mat_at_Age,
-                   V_at_Age, maxage, R0x=R0[x], SRrelx=SRrel[x], hx=hs[x], opt=2,
+                   V_at_Age, maxage, R0[x], SRrel[x], hs[x], opt=2,
                    plusgroup=plusgroup)
 
   return(MSYs)
 }
 
 
-#' Internal function to calculate MSY Reference Points
-#'
-#' @param logF log fishing mortality
-#' @param M_at_Age Vector of M-at-age
-#' @param Wt_at_Age Vector of weight-at-age
-#' @param Mat_at_Age Vector of maturity-at-age
-#' @param V_at_Age Vector of selectivity-at-age
-#' @param maxage Maximum age
-#' @param R0x R0 for this simulation
-#' @param SRrelx SRR type for this simulation
-#' @param hx numeric. Steepness value for this simulation
-#' @param opt Option. 1 = return -Yield, 2= return all MSY calcs
-#' @param plusgroup Integer. Default = 0 = no plus-group. Use 1 to include a plus-group
-#' @return See `opt`
-#' @export
-#'
-#' @keywords internal
-MSYCalcs <- function(logF, M_at_Age, Wt_at_Age, Mat_at_Age, V_at_Age,
-                     maxage, R0x, SRrelx, hx, opt=1, plusgroup=0) {
-  # Box 3.1 Walters & Martell 2004
-  n_age <- maxage + 1
-  FF <- exp(logF)
-  lx <- rep(1, n_age)
-  l0 <- c(1, exp(cumsum(-M_at_Age[1:(n_age-1)]))) # unfished survival
-
-  surv <- exp(-M_at_Age - FF * V_at_Age)
-  for (a in 2:n_age) {
-    lx[a] <- lx[a-1] * surv[a-1] # fished survival
-  }
-
-  if (plusgroup == 1) {
-    l0[length(l0)] <- l0[length(l0)]+l0[length(l0)]*exp(-M_at_Age[length(l0)])/(1-exp(-M_at_Age[length(l0)]))
-    lx[length(lx)] <- lx[length(lx)]+lx[length(lx)]*exp(-M_at_Age[length(lx)])/(1-exp(-M_at_Age[length(lx)]))
-  }
-
-  Egg0 <- sum(l0 * Wt_at_Age * Mat_at_Age) # unfished egg-per-recruit (assuming fecundity proportional to weight)
-  EggF <- sum(lx * Wt_at_Age * Mat_at_Age) # fished egg-per-recruit (assuming fecundity proportional to weight)
-
-  vB0 <- sum(l0 * Wt_at_Age * V_at_Age) # unfished and fished vuln. biomass per-recruit
-  vBF <- sum(lx * Wt_at_Age * V_at_Age)
-
-  SB0 <- sum(l0 * Wt_at_Age * Mat_at_Age) # spawning biomas per-recruit - same as eggs atm
-  SBF <- sum(lx * Wt_at_Age * Mat_at_Age)
-
-  B0 <- sum(l0 * Wt_at_Age) # biomass-per-recruit
-  BF <- sum(lx * Wt_at_Age)
-
-  hx[hx>0.999] <- 0.999
-  recK <- (4*hx)/(1-hx) # Goodyear compensation ratio
-  reca <- recK/Egg0
-
-  SPR <- EggF/Egg0
-  # Calculate equilibrium recruitment at this SPR
-  if (SRrelx ==1) { # BH SRR
-    recb <- (reca * Egg0 - 1)/(R0x*Egg0)
-    RelRec <- (reca * EggF-1)/(recb*EggF)
-  }
-  if (SRrelx ==2) { # Ricker
-    bR <- (log(5*hx)/(0.8*SB0))
-    aR <- exp(bR*SB0)/(SB0/R0x)
-    RelRec <- (log(aR*EggF/R0x))/(bR*EggF/R0x)
-  }
-
-  RelRec[RelRec<0] <- 0
-
-  Z_at_Age <- FF * V_at_Age + M_at_Age
-  YPR <- sum(lx * Wt_at_Age * FF * V_at_Age * (1 - exp(-Z_at_Age))/Z_at_Age)
-  Yield <- YPR * RelRec
-
-  if (opt == 1)  return(-Yield)
-  if (opt == 2) {
-    out <- c(Yield=Yield,
-             F= FF,
-             SB = SBF * RelRec,
-             SB_SB0 = (SBF * RelRec)/(SB0 * R0x),
-             B_B0 = (BF * RelRec)/(B0 * R0x),
-             B = BF * RelRec,
-             VB = vBF * RelRec,
-             VB_VB0 = (vBF * RelRec)/(vB0 * R0x),
-             RelRec=RelRec,
-             SB0 = SB0 * R0x,
-             B0=B0 * R0x)
-    return(out)
-  }
+Ref_int <- function(logF, M_at_Age, Wt_at_Age, Mat_at_Age, V_at_Age, maxage, plusgroup) {
+  out <- MSYCalcs(logF, M_at_Age = M_at_Age, Wt_at_Age = Wt_at_Age, Mat_at_Age = Mat_at_Age,
+                  V_at_Age = V_at_Age, maxage = maxage, R0x = 1, SRrelx = 3, hx = 1, opt = 2, plusgroup = plusgroup)
+  out[c(1,4)]
 }
+
+per_recruit_F_calc <- function(x, M_ageArray, Wt_age, Mat_age, V, maxage,
+                               yr.ind=1, plusgroup=0, SPR_target = seq(0.2, 0.6, 0.05),
+                               StockPars) {
+  if (length(yr.ind)==1) {
+    M_at_Age <- M_ageArray[x,,yr.ind]
+    Wt_at_Age <- Wt_age[x,, yr.ind]
+    Mat_at_Age <- Mat_age[x,, yr.ind]
+    V_at_Age <- V[x,, yr.ind]
+  } else {
+    M_at_Age <- apply(M_ageArray[x,,yr.ind], 1, mean)
+    Wt_at_Age <- apply(Wt_age[x,, yr.ind], 1, mean)
+    Mat_at_Age <- apply(Mat_age[x,, yr.ind], 1, mean)
+    V_at_Age <- apply(V[x,, yr.ind], 1, mean)
+  }
+
+  boundsF <- c(1E-3, 2)
+
+  F_search <- exp(seq(log(min(boundsF)), log(max(boundsF)), length.out = 50))
+
+  Ref_search <- Ref_int_cpp(F_search, M_at_Age = M_at_Age,
+                            Wt_at_Age = Wt_at_Age, Mat_at_Age = Mat_at_Age,
+                            V_at_Age = V_at_Age,
+                            StockPars$SRrel[x],
+                            maxage = maxage,
+                            plusgroup = plusgroup)
+
+  YPR_search <- Ref_search[1,]
+  SPR_search <- Ref_search[2,]
+  RPS <- Ref_search[3,]
+
+  FSPR <- vapply(SPR_target, function(xx)
+    LinInterp_cpp(SPR_search, F_search, xlev = xx), numeric(1))
+
+  dYPR_dF <- (YPR_search[-1] - YPR_search[-length(YPR_search)])/(F_search[-1] - F_search[-length(F_search)])
+  F01 <- LinInterp_cpp(dYPR_dF, F_search[-length(YPR_search)], xlev = 0.1 * dYPR_dF[1])
+  Fmax <- F_search[which.max(YPR_search)]
+  
+  if(StockPars$SRrel[x] == 1) {
+    CR <- 4 * StockPars$hs[x]/(1 - StockPars$hs[x])
+  } else if(StockPars$SRrel[x] == 2) {
+    CR <- (5 * StockPars$hs[x])^1.25
+  }
+  SPRcrash <- CR^-1
+
+  Fcrash <- LinInterp_cpp(SPR_search, F_search, xlev = SPRcrash)
+
+  SSB <- apply(StockPars$SSB[x,,,], 2, sum)
+  R <- apply(StockPars$N[x, 1, , ], 1, sum)
+  Fmed <- LinInterp_cpp(RPS, F_search, xlev = median(R/SSB))
+
+  return(list(FSPR, FYPR = c(YPR_F01 = F01, YPR_Fmax = Fmax,
+                             SPRcrash=SPRcrash, Fcrash=Fcrash,
+                             Fmed=Fmed)))
+}
+
 
 #' Calculate Reference Yield
 #'
@@ -263,8 +252,8 @@ calcRefYield <- function(x, StockPars, FleetPars, pyears, Ncurr, nyears, proyear
                   M_age=StockPars$M_ageArray[x,,(nyears):(nyears+proyears)],
                   MatAge=StockPars$Mat_age[x,,(nyears):(nyears+proyears)],
                   WtAge=StockPars$Wt_age[x,,(nyears):(nyears+proyears)],
-                  Vuln=FleetPars$V[x,,(nyears):(nyears+proyears)],
-                  Retc=FleetPars$retA[x,,(nyears):(nyears+proyears)],
+                  Vuln=FleetPars$V_real[x,,(nyears):(nyears+proyears)],
+                  Retc=FleetPars$retA_real[x,,(nyears):(nyears+proyears)],
                   Prec=StockPars$Perr_y[x,(nyears):(nyears+proyears+StockPars$maxage)],
                   movc=split.along.dim(StockPars$mov[x,,,,(nyears):(nyears+proyears)],4),
                   SRrelc=StockPars$SRrel[x],
@@ -413,7 +402,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
                            Fdisc_P, DR_P,
                            FM_P, FM_Pret, Z_P, CB_P, CB_Pret, Effort_pot,
                            StockPars, FleetPars, ImpPars,
-                           checks=FALSE) {
+                           checks=FALSE, control) {
 
   n_age <- StockPars$maxage + 1 # include age-0
 
@@ -422,7 +411,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   SL_Imp_Error <- ImpPars$SizeLim_y
   TAC_Imp_Error <- ImpPars$TAC_y
 
-  if (MPRecs$type == 'reference') {
+  if (!is.null(MPRecs$type) && MPRecs$type == 'reference') {
     Effort_Imp_Error[Effort_Imp_Error!=1] <- 1
     SL_Imp_Error[SL_Imp_Error!=1] <- 1
     TAC_Imp_Error[TAC_Imp_Error!=1] <- 1
@@ -465,6 +454,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
 
   # Retention Curve
   RetentFlag <- FALSE # should retention curve be updated for future years?
+  RetParsFlag <- FALSE
   # LR5
   if (length(MPRecs$LR5) == 0) { # no  recommendation
     LR5_P[,(y + nyears):(nyears+proyears)] <- matrix(LR5_P[,y + nyears-1],
@@ -477,7 +467,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     LR5_P[,(y + nyears):(nyears+proyears)] <- matrix(MPRecs$LR5 *  SL_Imp_Error[,y],
                                                      ncol=(length((y + nyears):(nyears+proyears))),
                                                      nrow=nsim, byrow=FALSE) # recommendation with implementation error
-    RetentFlag <- TRUE
+    RetentFlag <- TRUE; RetParsFlag <- TRUE
   }
   # LFR
   if (length(MPRecs$LFR) == 0) { # no  recommendation
@@ -490,7 +480,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     LFR_P[,(y + nyears):(nyears+proyears)] <- matrix(MPRecs$LFR *  SL_Imp_Error[,y],
                                                      ncol=(length((y + nyears):(nyears+proyears))),
                                                      nrow=nsim, byrow=FALSE) # recommendation with implementation error
-    RetentFlag <- TRUE
+    RetentFlag <- TRUE; RetParsFlag <- TRUE
   }
   # Rmaxlen
   if (length(MPRecs$Rmaxlen) == 0) { # no  recommendation
@@ -504,7 +494,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     Rmaxlen_P[,(y + nyears):(nyears+proyears)] <- matrix(MPRecs$Rmaxlen,
                                                          ncol=(length((y + nyears):(nyears+proyears))),
                                                          nrow=nsim, byrow=FALSE) # recommendation
-    RetentFlag <- TRUE
+    RetentFlag <- TRUE; RetParsFlag <- TRUE
   }
 
   # HS - harvest slot
@@ -514,11 +504,12 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     stop("HS recommmendation is not 'nsim' long.\n Does MP return HS recommendation under all conditions?")
   } else {
     HS <- MPRecs$HS  *  SL_Imp_Error[,y] # recommendation
-    RetentFlag <- TRUE
+    RetentFlag <- TRUE; RetParsFlag <- TRUE
   }
 
   # Selectivity Curve
   SelectFlag <- FALSE # has selectivity been updated?
+  SelectParsFlag <- FALSE
   # L5
   if (length(MPRecs$L5) == 0) { # no  recommendation
     L5_P[,(y + nyears):(nyears+proyears)] <- matrix(L5_P[,y + nyears-1],
@@ -531,7 +522,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     L5_P[,(y + nyears):(nyears+proyears)] <- matrix(MPRecs$L5 *  SL_Imp_Error[,y],
                                                     ncol=(length((y + nyears):(nyears+proyears))),
                                                     nrow=nsim, byrow=FALSE) # recommendation with implementation error
-    SelectFlag <- TRUE
+    SelectFlag <- TRUE; SelectParsFlag <- TRUE
   }
   # LFS
   if (length(MPRecs$LFS) == 0) { # no  recommendation
@@ -544,7 +535,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     LFS_P[,(y + nyears):(nyears+proyears)] <- matrix(MPRecs$LFS *  SL_Imp_Error[,y],
                                                      ncol=(length((y + nyears):(nyears+proyears))),
                                                      nrow=nsim, byrow=FALSE) # recommendation with implementation error
-    SelectFlag <- TRUE
+    SelectFlag <- TRUE; SelectParsFlag <- TRUE
   }
   # Vmaxlen
   if (length(MPRecs$Vmaxlen) == 0) { # no  recommendation
@@ -558,7 +549,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     Vmaxlen_P[,(y + nyears):(nyears+proyears)] <- matrix(MPRecs$Vmaxlen,
                                                          ncol=(length((y + nyears):(nyears+proyears))),
                                                          nrow=nsim, byrow=FALSE) # recommendation
-    SelectFlag <- TRUE
+    SelectFlag <- TRUE; SelectParsFlag <- TRUE
   }
 
   # Discard Mortality
@@ -583,21 +574,38 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     srs <- (StockPars$Linf - LFS_P[,yr]) / ((-log(Vmaxlen_P[,yr],2))^0.5) # descending limb
     srs[!is.finite(srs)] <- Inf
     sls <- (LFS_P[,yr] - L5_P[,yr]) / ((-log(0.05,2))^0.5) # ascending limb
-
+    
     CAL_binsmidMat <- matrix(StockPars$CAL_binsmid, nrow=nsim, ncol=length(StockPars$CAL_binsmid), byrow=TRUE)
     selLen <- t(sapply(1:nsim, getsel, lens=CAL_binsmidMat, lfs=LFS_P[,yr], sls=sls, srs=srs))
-
+    
     for (yy in allyrs) {
-      # calculate new selectivity at age curve
-      V_P[ , , yy] <- t(sapply(1:nsim, getsel, lens=StockPars$Len_age[,,yy], lfs=LFS_P[,yy], sls=sls, srs=srs))
+      # update new selectivity at length curve
       SLarray_P[,, yy] <- selLen # calculate new selectivity at length curve
+    } 
+  
+    # calculate selectivity-at-age from selectivity-at-length
+    if (snowfall::sfIsRunning()) {
+      VList <- snowfall::sfLapply(1:nsim, calcV, Len_age=StockPars$Len_age[,,allyrs, drop=FALSE],
+                                  LatASD=StockPars$LatASD[,,allyrs, drop=FALSE], SLarray=SLarray_P[,,allyrs, drop=FALSE],
+                                  n_age=n_age, nyears=0, proyears=length(allyrs),
+                                  CAL_binsmid=StockPars$CAL_binsmid)
+    } else {
+      VList <- lapply(1:nsim, calcV, Len_age=StockPars$Len_age[,,allyrs, drop=FALSE],
+                      LatASD=StockPars$LatASD[,,allyrs, drop=FALSE], SLarray=SLarray_P[,,allyrs, drop=FALSE],
+                      n_age=n_age, nyears=0, proyears=length(allyrs),
+                      CAL_binsmid=StockPars$CAL_binsmid)
+      
     }
+    newV <- aperm(array(as.numeric(unlist(VList, use.names=FALSE)), dim=c(n_age, length(allyrs), nsim)), c(3,1,2))
+    V_P[ , , allyrs] <- newV
+    
 
-    # sim <- 158
-    # plot(CAL_binsmid, selLen[sim,], type="b")
-    # lines(c(L5_P[yr,sim], L5_P[yr,sim]), c(0, 0.05), lty=2)
-    # lines(c(LFS_P[yr,sim], LFS_P[yr,sim]), c(0, 1), lty=2)
-    # lines(c(StockPars$Linf[sim], StockPars$Linf[sim]), c(0, Vmaxlen_P[yr,sim]), lty=2)
+ 
+    # sim <- 3
+    # plot(StockPars$CAL_binsmid, selLen[sim,], type="b")
+    # lines(c(L5_P[sim,yr], L5_P[sim,yr]), c(0, 0.05), lty=2)
+    # lines(c(LFS_P[sim,yr], LFS_P[sim,yr]), c(0, 1), lty=2)
+    # lines(c(StockPars$Linf[sim], StockPars$Linf[sim]), c(0, Vmaxlen_P[sim,yr]), lty=2)
 
     # calculate new retention curve
     yr <- y+nyears
@@ -612,10 +620,26 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
 
     for (yy in allyrs) {
       # calculate new retention at age curve
-      retA_P[ , , yy] <- t(sapply(1:nsim, getsel, lens=StockPars$Len_age[,,yy], lfs=LFR_P[,yy], sls=sls, srs=srs))
       retL_P[,, yy] <- relLen  # calculate new retention at length curve
     }
 
+    # calculate retention-at-age from retention-at-length
+    if (snowfall::sfIsRunning()) {
+      VList <- snowfall::sfLapply(1:nsim, calcV, Len_age=StockPars$Len_age[,,allyrs, drop=FALSE],
+                                  LatASD=StockPars$LatASD[,,allyrs, drop=FALSE], SLarray=retL_P[,,allyrs, drop=FALSE],
+                                  n_age=n_age, nyears=0, proyears=length(allyrs),
+                                  CAL_binsmid=StockPars$CAL_binsmid)
+    } else {
+      VList <- lapply(1:nsim, calcV, Len_age=StockPars$Len_age[,,allyrs, drop=FALSE],
+                      LatASD=StockPars$LatASD[,,allyrs, drop=FALSE], SLarray=retL_P[,,allyrs, drop=FALSE],
+                      n_age=n_age, nyears=0, proyears=length(allyrs),
+                      CAL_binsmid=StockPars$CAL_binsmid)
+    }
+    
+    newretA <- aperm(array(as.numeric(unlist(VList, use.names=FALSE)), dim=c(n_age, length(allyrs), nsim)), c(3,1,2))
+    retA_P[ , , allyrs] <- newretA
+
+    
     # upper harvest slot
     aboveHS <- StockPars$Len_age[,,allyrs, drop=FALSE]>array(HS, dim=c(nsim, n_age, length(allyrs)))
     tretA_P <- retA_P[,,allyrs]
@@ -633,20 +657,18 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
 
     # update realized vulnerablity curve with retention and dead discarded fish
     Fdisc_array1 <- array(Fdisc_P, dim=c(nsim, n_age, length(allyrs)))
-
-    V_P2 <- V_P
-    V_P2[,,allyrs] <- V_P[,,allyrs, drop=FALSE] * (retA_P[,,allyrs, drop=FALSE] + (1-retA_P[,,allyrs, drop=FALSE])*Fdisc_array1)
-
     Fdisc_array2 <- array(Fdisc_P, dim=c(nsim, StockPars$nCALbins, length(allyrs)))
-    SLarray_P[,,allyrs]  <- SLarray_P[,,allyrs, drop=FALSE] * (retL_P[,,allyrs, drop=FALSE]+ (1-retL_P[,,allyrs, drop=FALSE])*Fdisc_array2)
 
-    # Realised Retention curves
-    retA_P[,,allyrs] <- retA_P[,,allyrs] * V_P[,,allyrs]
-    retL_P[,,allyrs] <- retL_P[,,allyrs] * SLarray_P[,,allyrs]
-
-    V_P <- V_P2
+    retA_P[,,allyrs] <- retA_P[,,allyrs, drop=FALSE] * V_P[,,allyrs, drop=FALSE] # realized retention curve (prob of retention x prob of selection)
+    V_P[,,allyrs] <- retA_P[,,allyrs, drop=FALSE] + ((V_P[,,allyrs, drop=FALSE]-retA_P[,,allyrs, drop=FALSE]) * Fdisc_array1)
+    
+    retL_P[,,allyrs] <- retL_P[,,allyrs, drop=FALSE] * SLarray_P[,,allyrs, drop=FALSE]
+    SLarray_P[,,allyrs]  <- retL_P[,,allyrs, drop=FALSE]  + ((SLarray_P[,,allyrs, drop=FALSE]-retL_P[,,allyrs, drop=FALSE] ) * Fdisc_array2)
   }
 
+  # ---- over-write biomass - with fleet-specific weight-at-age
+  Biomass_P <- StockPars$N_P * replicate(StockPars$nareas, FleetPars$Wt_age_C[,,(nyears+1):((nyears)+proyears)])
+  
   CurrentB <- Biomass_P[,,y,] # biomass at the beginning of year
   CurrentVB <- array(NA, dim=dim(CurrentB))
   Catch_tot <- Catch_retain <- array(NA, dim=dim(CurrentB)) # catch this year arrays
@@ -713,11 +735,12 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     expC <- TACusedE
     expC[TACusedE> availB] <- availB[TACusedE> availB] * 0.99
 
-    Ftot <- sapply(1:nsim, calcF, expC, V_P, Biomass_P, fishdist,
+    Ftot <- sapply(1:nsim, calcF, expC, V_P, retA_P, Biomass_P, fishdist,
                    StockPars$Asize,
                    StockPars$maxage,
                    StockPars$nareas,
-                   StockPars$M_ageArray,nyears, y)
+                   StockPars$M_ageArray,nyears, y,
+                   control)
 
     # apply max F constraint
     Ftot[Ftot<0] <- maxF
@@ -730,50 +753,18 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     Z_P[SAYR] <- FM_P[SAYR] + StockPars$M_ageArray[SAYt] # calculate total mortality
 
     # Calculate total and retained catch
-    CB_P[SAYR] <- FM_P[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR]
-    CB_Pret[SAYR] <- FM_Pret[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR]
+    CB_P[SAYR] <- FM_P[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR] # removals
+    CB_Pret[SAYR] <- FM_Pret[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR] # retained
 
-    # Calculate total removals when CB_Pret == TAC - total removal > retained when discarding
-    actualremovals <- apply(CB_P[,,y,], 1, sum)
-    retained <- apply(CB_Pret[,,y,], 1, sum)
-    ratio <- actualremovals/retained # ratio of actual removals to retained catch
-    ratio[!is.finite(ratio)] <- 0
-    ratio[ratio>1E5] <- 1E5
-
-    temp <- CB_Pret[,,y,]/apply(CB_Pret[,,y,], 1, sum) # distribution by age & area of retained fish
-    Catch_retain <- TACusedE * temp  # retained catch
-    Catch_tot <- CB_P[,,y,]/apply(CB_P[,,y,], 1, sum) # distribution by age & area of caught fish
-    temp <- Catch_tot/apply(Catch_tot, 1, sum) # distribution of removals
-    Catch_tot <- TACusedE * ratio * temp # scale up total removals (if applicable)
-
-    # total removals can't be more than available biomass
-    chk <- apply(Catch_tot, 1, sum) > availB
-    if (sum(chk)>0) {
-      c_temp <- apply(Catch_tot[chk,,, drop=FALSE], 1, sum)
-      ratio_temp <- (availB[chk]/c_temp) * 0.99
-      # scale total catches to 0.99 available biomass
-      if (sum(chk)>1) Catch_tot[chk,, ] <- Catch_tot[chk,,] * array(ratio_temp, dim=c(sum(chk), n_age, StockPars$nareas))
-      if (sum(chk)==1) Catch_tot[chk,, ] <- Catch_tot[chk,,] * array(ratio_temp, dim=c(n_age, StockPars$nareas))
-    }
-
-    # check where actual catches are higher than TAC due to discarding (with imp error)
-    ind <- which(apply(Catch_tot, 1, sum) > TACusedE)
-    if (length(ind)>0) {
-      # update Ftot calcs
-      Ftot[ind] <- sapply(ind, calcF, TACusedE, V_P, Biomass_P, fishdist, StockPars$Asize,
-                          StockPars$maxage, StockPars$nareas, StockPars$M_ageArray,nyears, y)
-    }
+    # for debugging info:
+    # actualremovals <- apply(CB_P[,,y,], 1, sum)
+    # retained <- apply(CB_Pret[,,y,], 1, sum)
+    # ratio <- actualremovals/retained # ratio of actual removals to retained catch
 
     # Effort relative to last historical with this catch
     Effort_req <- Ftot/(FleetPars$FinF * FleetPars$qs*FleetPars$qvar[,y]*
                           (1 + FleetPars$qinc/100)^y) * apply(fracE2, 1, sum) # effort required
-
     Effort_req[Ftot<=1E-3] <- tiny
-
-    # Calculate F & Z by age class
-    FM_P[SAYR] <- Ftot[S] * V_P[SAYt] * fishdist[SR]/StockPars$Asize[SR]
-    FM_Pret[SAYR] <- Ftot[S] * retA_P[SAYt] * fishdist[SR]/StockPars$Asize[SR]
-    Z_P[SAYR] <- FM_P[SAYR] + StockPars$M_ageArray[SAYt] # calculate total mortality
   }
 
   # Effort_req - effort required to catch TAC
@@ -815,11 +806,11 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   CB_Pret[SAYR] <- FM_Pret[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR]
 
   # Calculate total F (using Steve Martell's approach http://api.admb-project.org/baranov_8cpp_source.html)
-  totalCatch <- apply(CB_P[,,y,], 1, sum)
+  retainedCatch <- apply(CB_Pret[,,y,], 1, sum)
 
-  Ftot <- sapply(1:nsim, calcF, totalCatch, V_P, Biomass_P, fishdist,
+  Ftot <- sapply(1:nsim, calcF, retainedCatch, V_P, retA_P, Biomass_P, fishdist,
                  Asize=StockPars$Asize, maxage=StockPars$maxage, StockPars$nareas,
-                 M_ageArray=StockPars$M_ageArray,nyears, y) # update if effort has changed
+                 M_ageArray=StockPars$M_ageArray,nyears, y, control) # update if effort has changed
 
   # Effort relative to last historical with this catch
   Effort_act <- Ftot/(FleetPars$FinF * FleetPars$qs*FleetPars$qvar[,y]*
@@ -863,32 +854,46 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
 
 
 
-calcF <- function(x, TACusedE, V_P, Biomass_P, fishdist, Asize, maxage, nareas,
-                  M_ageArray, nyears, y) {
+calcF <- function(x, TACusedE, V_P, retA_P, Biomass_P, fishdist, Asize, maxage, nareas,
+                  M_ageArray, nyears, y, control) {
   ct <- TACusedE[x]
   ft <- ct/sum(Biomass_P[x,,y,] * V_P[x,,y+nyears]) # initial guess
-
   fishdist[x,] <- fishdist[x,]/sum(fishdist[x,])
 
   if (ft <= 1E-3) return(tiny)
-  for (i in 1:50) {
+  for (i in 1:100) {
     Fmat <- ft * matrix(V_P[x,,y+nyears], nrow=maxage+1, ncol=nareas) *
       matrix(fishdist[x,], maxage+1, nareas, byrow=TRUE)/
       matrix(Asize[x,], maxage+1, nareas, byrow=TRUE) # distribute F over age and areas
-    Zmat <- Fmat + matrix(M_ageArray[x,,y+nyears], nrow=maxage+1, ncol=nareas, byrow=FALSE)
-    predC <- Fmat/Zmat * (1-exp(-Zmat)) * Biomass_P[x,,y,] # predicted catch
-    pct <- sum(predC)
 
+    Fmat_ret <- ft * matrix(retA_P[x,,y+nyears], nrow=maxage+1, ncol=nareas) *
+      matrix(fishdist[x,], maxage+1, nareas, byrow=TRUE)/
+      matrix(Asize[x,], maxage+1, nareas, byrow=TRUE) # distribute F over age and areas
+
+    Zmat <- Fmat + matrix(M_ageArray[x,,y+nyears], nrow=maxage+1, ncol=nareas, byrow=FALSE) # total mortality
+    if (is.null(control$TAC)) {
+      predC <- Fmat_ret/Zmat * (1-exp(-Zmat)) * Biomass_P[x,,y,] # predicted retained catch
+    } else {
+      if (control$TAC == 'removals') {
+        predC <- Fmat/Zmat * (1-exp(-Zmat)) * Biomass_P[x,,y,] # TAC applied to predicted removals
+      }
+      else {
+        stop('invalid entry for `OM@cpars$control$TAC`. Must be `OM@cpars$control$TAC="removals"`')
+      }
+    }
+    pct <- sum(predC)
     Omat <- (1-exp(-Zmat)) * Biomass_P[x,,y,]
     # derivative of catch wrt ft
     dct <- sum(Omat/Zmat - ((Fmat * Omat)/Zmat^2) + Fmat/Zmat * exp(-Zmat) * Biomass_P[x,,y,])
     ft <-  ft - (pct - ct)/dct
-
-    if (abs(pct - ct)<1E-6) break
+    if (abs(pct - ct)/ct<1E-4) break
   }
-
   ft
 }
+
+
+
+
 
 
 optDfun <- function(Perrmulti, x, initD, Nfrac, R0, Perr_y, surv,
@@ -1005,3 +1010,140 @@ projectEq <- function(x, Asize, nareas, maxage, N, pyears, M_ageArray, Mat_age, 
   simpop[[1]][,Nyrs,]
 
 }
+
+
+
+CalcSPReq <- function(FM, StockPars, n_age, nareas, nyears, proyears, nsim, Hist = FALSE) {
+  if(Hist) {
+    yind <- 1:nyears
+  } else {
+    yind <- 1:proyears + nyears
+  }
+  n_y <- length(yind)
+  M <- replicate(nareas, StockPars$M_ageArray[, , yind])
+  Wt_age <- replicate(nareas, StockPars$Wt_age[, , yind])
+  Mat_age <- replicate(nareas, StockPars$Mat_age[, , yind])
+  Z <- FM + M
+  
+  initdist <- replicate(n_y, StockPars$initdist[, 1, ]) %>% aperm(c(1, 3, 2))
+  NPR_M <- NPR_F <- array(NA_real_, c(nsim, n_age, n_y, nareas))
+  NPR_M[, 1, , ] <- NPR_F[, 1, , ] <- initdist
+  
+  for(a in 2:n_age) {
+    NPR_M[, a, , ] <- NPR_M[, a-1, , ] * exp(-M[, a-1, , ])
+    NPR_F[, a, , ] <- NPR_F[, a-1, , ] * exp(-Z[, a-1, , ])
+  }
+  if(StockPars$plusgroup) {
+    NPR_M[, n_age, , ] <- NPR_M[, n_age, , ]/(1 - exp(-M[, n_age, , ]))
+    NPR_F[, n_age, , ] <- NPR_F[, n_age, , ]/(1 - exp(-Z[, n_age, , ]))
+  }
+  SPReq <- apply(NPR_F * Wt_age * Mat_age, c(1, 3), sum)/apply(NPR_M * Wt_age * Mat_age, c(1, 3), sum)
+  return(SPReq = SPReq)
+}
+
+CalcSPRdyn <- function(FM, StockPars, n_age, nareas, nyears, proyears, nsim, Hist = FALSE) {
+  if(Hist) {
+    yind <- 1:nyears
+  } else {
+    yind <- 1:(proyears + nyears)
+  }
+  n_y <- length(yind)
+  M <- replicate(nareas, StockPars$M_ageArray[, , yind])
+  Wt_age <- replicate(nareas, StockPars$Wt_age[, , yind])
+  Mat_age <- replicate(nareas, StockPars$Mat_age[, , yind])
+  Z <- FM + M
+  
+  initdist <- replicate(n_y, StockPars$initdist[, 1, ]) %>% aperm(c(1, 3, 2))
+  cumsurv_F <- cumsurv_M <- array(NA_real_, c(nsim, n_age, n_y, nareas))
+  cumsurv_F[, 1, , ] <- cumsurv_M[, 1, , ] <- initdist
+  
+  #### Dynamic SPR
+  # Boundary condition (first historical year) - assume unfished in cumsurv_F in first year
+  for(a in 2:n_age) {
+    Msum <- replicate(nareas, apply(StockPars$M_ageArray[, 2:a - 1, 1, drop = FALSE], 1, sum))
+    cumsurv_M[, a, 1, ] <- StockPars$initdist[, 1, ] * exp(-Msum)
+  }
+  if(StockPars$plusgroup) {
+    cumsurv_M[, n_age, 1, ] <- cumsurv_M[, n_age, 1, ]/
+      (1 - exp(-StockPars$M_ageArray[, n_age, 1]))
+  }
+  cumsurv_F[, , 1, ] <- cumsurv_M[, , 1, ]
+  
+  for(y in 2:n_y) {
+    for(a in 2:n_age) {
+      cumsurv_M[, a, y, ] <- cumsurv_M[, a-1, y-1, ] * exp(-M[, a-1, y-1, ])
+      cumsurv_F[, a, y, ] <- cumsurv_F[, a-1, y-1, ] * exp(-Z[, a-1, y-1, ])
+      if(a == n_age && StockPars$plusgroup) {
+        cumsurv_M[, a, y, ] <- cumsurv_M[, a, y, ] + cumsurv_M[, a, y-1, ] * exp(-M[, a, y-1, ])
+        cumsurv_F[, a, y, ] <- cumsurv_F[, a, y, ] + cumsurv_F[, a, y-1, ] * exp(-Z[, a, y-1, ])
+      }
+      stockmovM <- vapply(1:nsim, function(x) cumsurv_M[x, a, y, ] %*% StockPars$mov[x, a, , , y],
+                          numeric(nareas))
+      stockmovF <- vapply(1:nsim, function(x) cumsurv_F[x, a, y, ] %*% StockPars$mov[x, a, , , y],
+                          numeric(nareas))
+      cumsurv_M[, a, y, ] <- t(stockmovM)
+      cumsurv_F[, a, y, ] <- t(stockmovF)
+    }
+  }
+  SPRdyn <- apply(cumsurv_F * Wt_age * Mat_age, c(1, 3), sum)/apply(cumsurv_M * Wt_age * Mat_age, c(1, 3), sum)
+  if(!Hist) SPRdyn <- SPRdyn[, 1:proyears + nyears]
+  return(SPRdyn)
+}
+
+#CalcSPR <- function(FM_P, StockPars, n_age, nareas, nyears, proyears, nsim) {
+#  M <- replicate(nareas, StockPars$M_ageArray[, , 1:proyears + nyears])
+#  Wt_age <- replicate(nareas, StockPars$Wt_age[, , 1:proyears + nyears])
+#  Mat_age <- replicate(nareas, StockPars$Mat_age[, , 1:proyears + nyears])
+#  Z <- FM_P + M
+#  
+#  initdist <- replicate(proyears, StockPars$initdist[, 1, ]) %>% aperm(c(1, 3, 2))
+#  NPR_M <- NPR_F <- cumsurv_F <- cumsurv_M <- array(NA_real_, c(nsim, n_age, proyears, nareas))
+#  
+#  NPR_M[, 1, , ] <- NPR_F[, 1, , ] <- cumsurv_F[, 1, , ] <- cumsurv_M[, 1, , ] <- initdist
+#
+#  # Equilibrium SPR
+#  for(a in 2:n_age) {
+#    NPR_M[, a, , ] <- NPR_M[, a-1, , ] * exp(-M[, a-1, , ])
+#    NPR_F[, a, , ] <- NPR_F[, a-1, , ] * exp(-Z[, a-1, , ])
+#  }
+#  if(StockPars$plusgroup) {
+#    NPR_M[, n_age, , ] <- NPR_M[, n_age, , ]/(1 - exp(-M[, n_age, , ]))
+#    NPR_F[, n_age, , ] <- NPR_F[, n_age, , ]/(1 - exp(-Z[, n_age, , ]))
+#  }
+#  SPReq <- apply(NPR_F * Wt_age * Mat_age, c(1, 3), sum)/apply(NPR_M * Wt_age * Mat_age, c(1, 3), sum)
+#  
+#  #### Dynamic SPR
+#  # Boundary condition
+#  # No plusgroup in boundary condition for now - cumsurv_F[, n_age, 1, ]
+#  # Ideally, calculate cumsurv_F from historical period and continue to projection
+#  for(a in 2:n_age) {
+#    Msum <- replicate(nareas, StockPars$M_ageArray[, 2:a - 1, nyears:(nyears - a + 2), drop = FALSE])
+#    Zsum <- StockPars$FM[, 2:a - 1, nyears:(nyears - a + 2), , drop = FALSE] + Msum
+#    
+#    Msum <- apply(Msum, c(1, 4), function(x) sum(diag(x)))
+#    Zsum <- apply(Zsum, c(1, 4), function(x) sum(diag(x)))
+#    
+#    cumsurv_M[, a, 1, ] <- StockPars$initdist[, 1, ] * exp(-Msum)
+#    cumsurv_F[, a, 1, ] <- StockPars$initdist[, 1, ] * exp(-Zsum)
+#  }
+#  for(y in 2:proyears) {
+#    for(a in 2:n_age) {
+#      cumsurv_M[, a, y, ] <- cumsurv_M[, a-1, y-1, ] * exp(-M[, a-1, y-1, ])
+#      cumsurv_F[, a, y, ] <- cumsurv_F[, a-1, y-1, ] * exp(-Z[, a-1, y-1, ])
+#      if(a == n_age && StockPars$plusgroup) {
+#        cumsurv_M[, a, y, ] <- cumsurv_M[, a, y, ] + cumsurv_M[, a, y-1, ] * exp(-M[, a, y-1, ])
+#        cumsurv_F[, a, y, ] <- cumsurv_F[, a, y, ] + cumsurv_F[, a, y-1, ] * exp(-Z[, a, y-1, ])
+#      }
+#      stockmovM <- vapply(1:nsim, function(x) cumsurv_M[x, a, y, ] %*% StockPars$mov[x, a, , , nyears + y],
+#                          numeric(nareas))
+#      stockmovF <- vapply(1:nsim, function(x) cumsurv_F[x, a, y, ] %*% StockPars$mov[x, a, , , nyears + y],
+#                          numeric(nareas))
+#      cumsurv_M[, a, y, ] <- t(stockmovM)
+#      cumsurv_F[, a, y, ] <- t(stockmovF)
+#    }
+#  }
+#  SPRdyn <- apply(cumsurv_F * Wt_age * Mat_age, c(1, 3), sum)/apply(cumsurv_M * Wt_age * Mat_age, c(1, 3), sum)
+#  return(list(SPReq = SPReq, SPRdyn = SPRdyn))
+#}
+
+

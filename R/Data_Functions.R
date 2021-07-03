@@ -471,7 +471,13 @@ XL2Data <- function(name, dec=c(".", ","), sheet=1, silent=FALSE) {
     ind <- ind[!ind == ind2]
 
   CAL_Yrs <- sapply(strsplit(datasheet$Name[ind], " "), function(x) unlist(strsplit(x[2], " ")))
-  if(!all(CAL_Yrs %in% Data@Year)) stop("All CAL Years must be included in `Year`")
+
+  if(!all(CAL_Yrs %in% Data@Year)) {
+    CAL_Yrs <- sapply(strsplit(datasheet$Name[ind], "_"), function(x) unlist(strsplit(x[2], " ")))
+  }
+  if(!all(CAL_Yrs %in% Data@Year)) {
+    stop("All CAL Years must be included in `Year`. Entries must be formatted 'CAL YEAR' or 'CAL_YEAR'")
+  }
 
   NMids <- length(CAL_mids)
   Data@CAL <- array(NA, dim=c(1, Nyears, NMids))
@@ -964,7 +970,9 @@ DLMdiag <- function(Data, command = c("available", "not available", "needed"), r
         good[y] <- FALSE
       } else if (inherits(test[[y]], "Rec")) {
         # Rec_test <- vapply(slotNames("Rec"), function(x) NAor0(slot(test[[y]], x)), logical(1))
-        Rec_test <- vapply(slotNames("Rec"), function(x) all(is.na(slot(test[[y]], x))), logical(1))
+        slots <- slotNames("Rec")
+        slots <- slots[slots!="Misc"]
+        Rec_test <- vapply(slots, function(x) all(is.na(slot(test[[y]], x))), logical(1))
         if(all(Rec_test)) { # If all NAor0
           report[y] <- "Produced all NA scores. Check MP function and/or Data object."
           good[y] <- FALSE
@@ -1768,7 +1776,7 @@ Report <- function(Data=NULL, md=NULL, name="Data-Report",
 
   }
 
-  cat("```{r, echo=FALSE, out.width='90%'} \n", file = rmdfile, sep = " ", append = TRUE)
+  cat("```{r, echo=FALSE, out.width='90%', tidy=FALSE, fig.align='center', fig.show='asis'} \n", file = rmdfile, sep = " ", append = TRUE)
   cat("fignum <- select_plots(Data, fignum=fignum+1)\n", file = rmdfile, sep = " ", append = TRUE)
   cat("```\n\n", file = rmdfile, sep = " ", append = TRUE)
 
@@ -1890,7 +1898,7 @@ Report <- function(Data=NULL, md=NULL, name="Data-Report",
     output_file <- file.path(dir, paste0(name, '.pdf'))
   rmarkdown::render(rmdfile, output_format =output_format,
                     output_file=output_file,
-                    output_dir = dir, params=Data, quiet = quiet)
+                    output_dir = dir, params=Data, quiet = quiet, clean=FALSE)
 
   if (open) browseURL(output_file)
 
@@ -1981,6 +1989,7 @@ biology_plots <- function(Data, i=1, n=20000) {
   lab2 <- sprintf("CV ==%G", df$cv)
 
   plist <- dplyr::distinct(plist)
+  if (all(is.na(plist$mean))) return(0)
 
   addText <- FALSE
   textdf <- plist %>% filter(is.na(val))
@@ -2117,7 +2126,7 @@ select_plots <- function(Data, i=1, n=20000, fignum=1) {
 
 
   if (all(!is.na(df$mean)) && all(df$mean >0) ) {
-    if(!is.na(Data@MaxAge)) {
+    if(!is.na(Data@MaxAge) & !is.na(Data@vbLinf[i])) {
       # selectivity-at-age
 
       Lens <- 0:Data@vbLinf[i]

@@ -34,13 +34,13 @@ getStockPars <- function(Object, nsim, nyears, proyears, seed) {
     nsim <- Object@OM@nsim
     Pars <- Object@SampPars
     CurrentYr <- Object@OM@CurrentYr
-    nyears <- nrow(Object@SampPars$Fleet$Find)
+    nyears <- ncol(Object@SampPars$Fleet$Find)
     proyears <- ncol(Object@SampPars$Stock$Linfarray) - nyears
   } else if (class(Object) =='list') {
     Pars <- Object
     nsim <- length(Pars$Stock$D)
     if (!is.null(Pars$Fleet)) {
-      nyears <- nrow(Pars$Fleet$Find)
+      nyears <- ncol(Pars$Fleet$Find)
       proyears <- ncol(Pars$Stock$Linfarray) - nyears
     }
 
@@ -52,6 +52,51 @@ getStockPars <- function(Object, nsim, nyears, proyears, seed) {
   list(Pars=Pars, nsim=nsim, nyears=nyears, proyears=proyears,
        seed=seed, CurrentYr=CurrentYr)
 }
+
+
+getFleetPars <- function(Object, Stock=NULL, nsim, nyears, proyears, seed) {
+  Pars <- list()
+  SampCpars <- list()
+  if (class(Object) == 'OM') {
+    nsim <- Object@nsim
+    nyears <- Object@nyears
+    proyears <- Object@proyears
+    CurrentYr <- Object@CurrentYr
+    SampCpars <- if(length(Object@cpars)>0) SampCpars <- SampleCpars(Object@cpars, nsim, silent=TRUE)
+    seed <- Object@seed
+    Pars$Stock <- SampleStockPars(Object, nsim, nyears, proyears, SampCpars, FALSE)
+    Pars$Fleet <- SampleFleetPars(Object, Pars$Stock, nsim, nyears, proyears, SampCpars,
+                                  msg=FALSE)
+  } else if (class(Object) =='Fleet') {
+    if (!is.null(Stock))
+      Pars$Stock <- SampleStockPars(Stock, nsim, nyears, proyears, SampCpars, FALSE)
+    Pars$Fleet <- SampleFleetPars(Object, Pars$Stock, nsim, nyears, proyears, SampCpars,
+                                  msg=FALSE)
+    Pars$Name <- gsub(" ", "_", Object@Name)
+    CurrentYr <- nyears
+  } else if (class(Object) =='Hist') {
+    nsim <- Object@OM@nsim
+    Pars <- Object@SampPars
+    CurrentYr <- Object@OM@CurrentYr
+    nyears <- ncol(Object@SampPars$Fleet$Find)
+    proyears <- ncol(Object@SampPars$Stock$Linfarray) - nyears
+  } else if (class(Object) =='list') {
+    Pars <- Object
+    nsim <- length(Pars$Stock$D)
+    if (!is.null(Pars$Fleet)) {
+      nyears <- ncol(Pars$Fleet$Find)
+      proyears <- ncol(Pars$Stock$Linfarray) - nyears
+    }
+
+    CurrentYr <- nyears
+  } else {
+    stop('Object must be class `OM`, `Fleet`, `Hist` or list from `Hist@SampPars`',
+         call.=FALSE)
+  }
+  list(Pars=Pars, nsim=nsim, nyears=nyears, proyears=proyears,
+       seed=seed, CurrentYr=CurrentYr)
+}
+
 
 plot_sample_hist <- function(Vars, Pars, element="Stock", plotPars, its, nsamp) {
   ncol <- ceiling(sqrt(nrow(Vars)))
@@ -72,20 +117,31 @@ plot_sample_ts <- function(Vars, Pars, element="Stock", plotPars, its, nsamp,
   ncol <- ceiling(sqrt(nrow(Vars)))
   nrow <- ceiling(nrow(Vars)/ncol)
 
-  years <- c(seq(-nyears+1, 0, by=1), seq(1, proyears,1))
+  if(!is.null(nyears)) {
+    if (!is.null(proyears)) {
+      years <- c(seq(-nyears+1, 0, by=1), seq(1, proyears,1))
+    } else {
+      years <- 1:nyears
+    }
+
+  } else {
+    years <- seq(1, proyears,1)
+  }
+
   if (CurrentYr > 1900) {
     years <- years + CurrentYr
   } else {
-    CurrentYr <- 0
+    if (!is.null(proyears)) CurrentYr <- 0
   }
-  par(mfrow=c(nrow,ncol), oma=c(2,3,1,1), mar=c(3,2,2,2))
-  for (i in 1:nrow(Vars)) {
+  par(mfrow=c(nrow,ncol), oma=c(3,3,1,1), mar=c(1,1,1,1))
+  for (i in 1:nrow(Vars))
     matplot(years, t(Pars[[element]][[Vars$Slot[i]]][its,]), type="l", bty="l",
-            main=Vars$Name[i], lwd=plotPars$lwd, lty=1, ylab=Vars$Name[i], xlab="Year",
+            main=Vars$Title[i], lwd=plotPars$lwd, lty=1, ylab=Vars$Name[i], xlab="Year",
             las=1, xpd=NA)
+  if (!is.null(proyears))
     abline(v=CurrentYr, col="darkgray", lty=2)
-  }
 }
+
 
 
 update_plot_num <- function(maxplot, plot.num) {
@@ -97,7 +153,8 @@ update_plot_num <- function(maxplot, plot.num) {
   plot.num
 }
 
-plot.Depletion <- function(Object, nsamp=3, nsim=200,
+# ---- Stock Object Plots ----
+plot.Depletion <- function(Object, nsamp=3, nsim=100,
                            nyears=50, proyears=28, plot.num=NA,
                            plotPars=NULL, seed=101) {
 
@@ -116,7 +173,7 @@ plot.Depletion <- function(Object, nsamp=3, nsim=200,
   plot_sample_hist(Vars, Pars, element='Stock', plotPars, its, nsamp)
 }
 
-plot.Growth <- function(Object, nsamp=3, nsim=200,
+plot.Growth <- function(Object, nsamp=3, nsim=100,
                         nyears=50, proyears=28, plot.num=NA,
                         plotPars=NULL, seed=101) {
 
@@ -157,8 +214,8 @@ plot.Growth <- function(Object, nsamp=3, nsim=200,
   if (3 %in% plot.num) {
     par(mfrow=c(1,3), oma=c(2,3,1,1), mar=c(3,2,1,1))
     fstYr <- Pars$Stock$Len_age[its,,1]
-    curYr <- Pars$Stock$Len_age[its,,nyears]
-    lstYr <- Pars$Stock$Len_age[its,,proyears+nyears]
+    curYr <- Pars$Stock$Len_age[its,,List$nyears]
+    lstYr <- Pars$Stock$Len_age[its,,List$proyears+List$nyears]
     MaxL <- max(Pars$Stock$Len_age)
     maxage <- Pars$Stock$maxage
     matplot(0:maxage, t(fstYr), type="l", bty="l", main="First historical year", ylim=c(0, MaxL),
@@ -174,7 +231,7 @@ plot.Growth <- function(Object, nsamp=3, nsim=200,
   }
 }
 
-plot.Maturity <- function(Object, nsamp=3, nsim=200,
+plot.Maturity <- function(Object, nsamp=3, nsim=100,
                           nyears=50, proyears=28, plot.num=NA,
                           plotPars=NULL, seed=101) {
 
@@ -222,7 +279,7 @@ plot.Maturity <- function(Object, nsamp=3, nsim=200,
             lwd=plotPars$lwd, lty=1,
             ylab="Probability", xlab="", ylim=c(0,1), xpd=NA, cex.lab=plotPars$cex.lab, las=1)
 
-    matplot(0:maxage, t(Pars$Stock$Mat_age[its,,nyears]), type="l", bty="l",
+    matplot(0:maxage, t(Pars$Stock$Mat_age[its,,List$nyears]), type="l", bty="l",
             main="First Year", lwd=plotPars$lwd,
             lty=1, axes=FALSE, xlim=c(0, max(Pars$Stock$maxage)), ylab="",
             xlab="", ylim=c(0,1), xpd=NA, cex.lab=plotPars$cex.lab, las=1)
@@ -230,7 +287,7 @@ plot.Maturity <- function(Object, nsamp=3, nsim=200,
     axis(side=2, labels=FALSE)
 
     # last historical year
-    yr <- nyears
+    yr <- List$nyears
     slope <- log(19)/(Pars$Stock$L95array[,yr]-Pars$Stock$L50array[,yr])
     Ls <- seq(0, to=max(Pars$Stock$Linfarray[its,]), length.out=200)
     maxage <- Pars$Stock$maxage
@@ -241,7 +298,7 @@ plot.Maturity <- function(Object, nsamp=3, nsim=200,
             ylab="Probability", xlab="", ylim=c(0,1), xpd=NA,
             cex.lab=plotPars$cex.lab, las=1)
 
-    matplot(0:maxage, t(Pars$Stock$Mat_age[its,,nyears]), type="l", bty="l",
+    matplot(0:maxage, t(Pars$Stock$Mat_age[its,,List$nyears]), type="l", bty="l",
             main="Last Historical Year", lwd=plotPars$lwd,
             lty=1, axes=FALSE, xlim=c(0, max(Pars$Stock$maxage)), ylab="",
             xlab="", ylim=c(0,1), xpd=NA, cex.lab=plotPars$cex.lab, las=1)
@@ -249,7 +306,7 @@ plot.Maturity <- function(Object, nsamp=3, nsim=200,
     axis(side=2, labels=FALSE)
 
     # last projection year
-    yr <- nyears + proyears
+    yr <- List$nyears + List$proyears
     slope <- log(19)/(Pars$Stock$L95array[,yr]-Pars$Stock$L50array[,yr])
     Ls <- seq(0, to=max(Pars$Stock$Linfarray[its,]), length.out=200)
     maxage <- Pars$Stock$maxage
@@ -269,7 +326,7 @@ plot.Maturity <- function(Object, nsamp=3, nsim=200,
   }
 }
 
-plot.NaturalMortality <- function(Object, nsamp=3, nsim=200,
+plot.NaturalMortality <- function(Object, nsamp=3, nsim=100,
                    nyears=50, proyears=28, plot.num=NA,
                    plotPars=NULL, seed=101) {
 
@@ -308,13 +365,13 @@ plot.NaturalMortality <- function(Object, nsamp=3, nsim=200,
     mtext(side=3, "First historical year", cex=0.8, line=-1)
     mtext(side=1, "Age", line=2, cex=plotPars$cex.lab)
 
-    matplot(0:maxage, t(Pars$Stock$M_ageArray[its,,nyears]), type="l", lty=1, bty="l",
+    matplot(0:maxage, t(Pars$Stock$M_ageArray[its,,List$nyears]), type="l", lty=1, bty="l",
             main="M-at-age", lwd=plotPars$lwd, ylim=lims, axes=FALSE,
             ylab="", xlab='', cex.lab=plotPars$cex.lab)
     mtext(side=3, "Last historical year", cex=0.8, line=-1)
     axis(side=1)
     mtext(side=1, "Age", line=2, cex=plotPars$cex.lab)
-    matplot(0:maxage, t(Pars$Stock$M_ageArray[its,,nyears+proyears]), type="l", lty=1,
+    matplot(0:maxage, t(Pars$Stock$M_ageArray[its,,List$nyears+List$proyears]), type="l", lty=1,
             bty="l", lwd=plotPars$lwd, ylim=lims, axes=FALSE,
             ylab="", xlab='', cex.lab=plotPars$cex.lab)
     mtext(side=3, "Last projected year", cex=0.8, line=-1)
@@ -333,15 +390,15 @@ plot.NaturalMortality <- function(Object, nsamp=3, nsim=200,
     mtext(side=3, "First historical year", cex=0.8, line=-1)
     mtext(side=1, "Length", line=2, cex=plotPars$cex.lab)
 
-    matplot(t(Pars$Stock$Len_age[its,,nyears]), t(Pars$Stock$M_ageArray[its,,nyears]),
+    matplot(t(Pars$Stock$Len_age[its,,List$nyears]), t(Pars$Stock$M_ageArray[its,,List$nyears]),
             type="l", lty=1, bty="l", main="M-at-length", lwd=plotPars$lwd, ylim=lims,
             xlim=xlims, axes=FALSE, ylab="", xlab="", cex.lab=plotPars$cex.lab)
     axis(side=1)
     mtext(side=1, "Length", line=2, cex=plotPars$cex.lab)
     mtext(side=3, "Last historical year", cex=0.8, line=-1)
 
-    matplot(t(Pars$Stock$Len_age[its,,nyears+proyears]),
-            t(Pars$Stock$M_ageArray[its,,nyears+proyears]),
+    matplot(t(Pars$Stock$Len_age[its,,List$nyears+List$proyears]),
+            t(Pars$Stock$M_ageArray[its,,List$nyears+List$proyears]),
             type="l", lty=1, bty="l", lwd=plotPars$lwd, ylim=lims,
             axes=FALSE, xlim=xlims, ylab="", xlab="", cex.lab=plotPars$cex.lab)
 
@@ -352,7 +409,7 @@ plot.NaturalMortality <- function(Object, nsamp=3, nsim=200,
 }
 
 
-plot.Recruitment <- function(Object, nsamp=3, nsim=200,
+plot.Recruitment <- function(Object, nsamp=3, nsim=100,
                              nyears=50, proyears=28, plot.num=NA,
                              plotPars=NULL, seed=101) {
 
@@ -386,7 +443,7 @@ plot.Recruitment <- function(Object, nsamp=3, nsim=200,
 
 }
 
-plot.Spatial<- function(Object, nsamp=3, nsim=200,
+plot.Spatial<- function(Object, nsamp=3, nsim=100,
                         nyears=50, proyears=28, plot.num=NA,
                         plotPars=NULL, seed=101) {
 
@@ -408,5 +465,280 @@ plot.Spatial<- function(Object, nsamp=3, nsim=200,
     plot_sample_hist(Vars, List$Pars, element='Stock', plotPars, its, nsamp)
   }
 }
+
+# ---- Fleet Object Plots ----
+plot.Catchability <- function(Object, Stock=NULL, nsamp=3, nsim=100,
+                           nyears=50, proyears=28, plot.num=NA,
+                           plotPars=NULL, seed=101) {
+
+  plotPars <- defaultplotPars(plotPars)
+
+  List <- getFleetPars(Object,Stock, nsim, nyears, proyears, seed)
+
+  Pars <- List$Pars
+  nsim <- List$nsim
+  set.seed(List$seed)
+  its <- sample(1:nsim, nsamp)
+
+  plot.num <- update_plot_num(2, plot.num)
+
+  # Sampled Parameters
+  if (1 %in% plot.num) {
+    Vars <- data.frame(Slot=c('qcv',
+                              'qinc'
+                              ),
+                       Name=c('Variability (qcv))',
+                              'Directional trend (qinc))'
+                              ))
+    plot_sample_hist(Vars, List$Pars, element='Fleet', plotPars, its, nsamp)
+  }
+
+  if (2 %in% plot.num) {
+    ind <- as.matrix(expand.grid(its, 1:List$proyears, 1:nsim))
+    Qfuture <- matrix(NA, nrow=List$proyears, ncol=nsim)
+    X <- 0
+    for (sim in 1:nsim) {
+      X <- X + 1
+      Qfuture[,X] <- Pars$Fleet$qvar[sim,] * (1 + Pars$Fleet$qinc[sim]/100)^(1:List$proyears)
+      Qfuture[,X] <- Qfuture[,X]/Qfuture[1,X]
+    }
+    List$Pars$Fleet$Qfuture <- t(Qfuture)
+    Vars <- data.frame(Slot=c('Qfuture'),
+                       Title=c('Future Catchability'),
+                       Name='Change in Efficiency (%)')
+    plot_sample_ts(Vars, List$Pars, element="Fleet", plotPars, its, nsamp,
+                   NULL,  List$proyears, List$CurrentYr)
+  }
+
+}
+
+plot.Effort <- function(Object, Stock=NULL, nsamp=3, nsim=100,
+                         nyears=50, proyears=28, plot.num=NA,
+                         plotPars=NULL, seed=101) {
+  plotPars <- defaultplotPars(plotPars)
+
+  List <- getFleetPars(Object,Stock, nsim, nyears, proyears, seed)
+  Pars <- List$Pars
+  nsim <- List$nsim
+  set.seed(List$seed)
+  its <- sample(1:nsim, nsamp)
+
+  plot.num <- update_plot_num(2, plot.num)
+
+  # Sampled Parameters
+  if (1 %in% plot.num) {
+    Vars <- data.frame(Slot='Esd',
+                       Name='Variability (Esd))'
+    )
+
+    plot_sample_hist(Vars, List$Pars, element='Fleet', plotPars, its, nsamp)
+  }
+
+  if (2 %in% plot.num) {
+    Vars <- data.frame(Slot=c('Find'),
+                       Title=c('Historical Fishing Mortality'),
+                       Name='Relative F')
+    plot_sample_ts(Vars, List$Pars, element="Fleet", plotPars, its, nsamp,
+                   List$nyears, NULL, List$CurrentYr)
+  }
+
+}
+
+plot.MPA <- function(Object, Stock=NULL, nsamp=3, nsim=100,
+                         nyears=50, proyears=28, plot.num=NA,
+                         plotPars=NULL, seed=101) {
+  plotPars <- defaultplotPars(plotPars)
+
+  List <- getFleetPars(Object,Stock, nsim, nyears, proyears, seed)
+  Pars <- List$Pars
+  nsim <- List$nsim
+  set.seed(List$seed)
+  its <- sample(1:nsim, nsamp)
+
+  plot.num <- update_plot_num(1, plot.num)
+
+  # Sampled Parameters
+  if (1 %in% plot.num) {
+    Vars <- data.frame(Slot='Spat_targ',
+                       Name='Spatial Targeting (Spat_targ))'
+    )
+
+    plot_sample_hist(Vars, List$Pars, element='Fleet', plotPars, its, nsamp)
+  }
+}
+
+plot.Selectivity <- function(Object, Stock=NULL, nsamp=3, nsim=100,
+                             nyears=50, proyears=28, plot.num=NA,
+                             plotPars=NULL, seed=101) {
+  plotPars <- defaultplotPars(plotPars)
+
+  List <- getFleetPars(Object,Stock, nsim, nyears, proyears, seed)
+  Pars <- List$Pars
+  nsim <- List$nsim
+  set.seed(List$seed)
+  its <- sample(1:nsim, nsamp)
+
+  plot.num <- update_plot_num(4, plot.num)
+
+  # Sampled Parameters - selectivity
+  if (1 %in% plot.num) {
+    List$Pars$Fleet$L5_1 <- List$Pars$Fleet$L5_y[,1]
+    List$Pars$Fleet$LFS_1 <- List$Pars$Fleet$LFS_y[,1]
+    List$Pars$Fleet$Vmaxlen_1 <- List$Pars$Fleet$Vmaxlen_y[,1]
+
+    List$Pars$Fleet$L5_2 <- List$Pars$Fleet$L5_y[,List$nyears]
+    List$Pars$Fleet$LFS_2 <- List$Pars$Fleet$LFS_y[,List$nyears]
+    List$Pars$Fleet$Vmaxlen_2 <- List$Pars$Fleet$Vmaxlen_y[,List$nyears]
+
+    List$Pars$Fleet$L5_3 <- List$Pars$Fleet$L5_y[,List$nyears+List$proyears]
+    List$Pars$Fleet$LFS_3 <- List$Pars$Fleet$LFS_y[,List$nyears+List$proyears]
+    List$Pars$Fleet$Vmaxlen_3 <- List$Pars$Fleet$Vmaxlen_y[,List$nyears+List$proyears]
+
+    Vars <- data.frame(Slot=c('L5_1', 'LFS_1', 'Vmaxlen_1',
+                              'L5_2', 'LFS_2', 'Vmaxlen_2',
+                              'L5_3', 'LFS_3', 'Vmaxlen_3'),
+                       Name=c('L5 (first)', 'LFS (first)', 'Vmaxlen (first)',
+                              'L5 (last hist.)', 'LFS (last hist.)', 'Vmaxlen (last hist.)',
+                              'L5 (last proj.)', 'LFS (last proj.)', 'Vmaxlen (last proj.)')
+    )
+
+    plot_sample_hist(Vars, List$Pars, element='Fleet', plotPars, its, nsamp)
+  }
+
+
+  # Sampled Parameters - retention
+  if (2 %in% plot.num) {
+    List$Pars$Fleet$LR5_1 <- List$Pars$Fleet$LR5_y[,1]
+    List$Pars$Fleet$LFR_1 <- List$Pars$Fleet$LFR_y[,1]
+    List$Pars$Fleet$Rmaxlen_1 <- List$Pars$Fleet$Rmaxlen_y[,1]
+
+    List$Pars$Fleet$LR5_2 <- List$Pars$Fleet$LR5_y[,List$nyears]
+    List$Pars$Fleet$LFR_2 <- List$Pars$Fleet$LFR_y[,List$nyears]
+    List$Pars$Fleet$Rmaxlen_2 <- List$Pars$Fleet$Rmaxlen_y[,List$nyears]
+
+    List$Pars$Fleet$LR5_3 <- List$Pars$Fleet$LR5_y[,List$nyears+List$proyears]
+    List$Pars$Fleet$LFR_3 <- List$Pars$Fleet$LFR_y[,List$nyears+List$proyears]
+    List$Pars$Fleet$Rmaxlen_3 <- List$Pars$Fleet$Rmaxlen_y[,List$nyears+List$proyears]
+
+    Vars <- data.frame(Slot=c('LR5_1', 'LFR_1', 'Rmaxlen_1',
+                              'LR5_2', 'LFR_2', 'Rmaxlen_2',
+                              'LR5_3', 'LFR_3', 'Rmaxlen_3'),
+                       Name=c('LR5 (first)', 'LFR (first)', 'Rmaxlen (first)',
+                              'LR5 (last hist.)', 'LFR (last hist.)', 'Rmaxlen (last hist.)',
+                              'LR5 (last proj.)', 'LFR (last proj.)', 'Rmaxlen (last proj.)')
+    )
+
+    plot_sample_hist(Vars, List$Pars, element='Fleet', plotPars, its, nsamp)
+  }
+
+  if (3 %in% plot.num) {
+    Pars <- List$Pars
+    par(mfrow=c(3,3), oma=c(3,3,1,1), mar=c(1,1,1,1))
+
+    yr.vert <- c(1, List$nyears, List$nyears+List$proyears)
+    YrText <- list()
+    YrText[yr.vert[1]] <- "First Historical Year"
+    YrText[yr.vert[2]] <- "Last Historical Year"
+    YrText[yr.vert[3]] <- "Last Projection Year"
+    cnt <- 0
+    for (sim in its) {
+      cnt <- cnt + 1
+      for (yr in yr.vert) {
+
+        # plot vulnerability & selection at length
+        plot(Pars$Stock$CAL_binsmid, Pars$Fleet$SLarray2[sim,, yr], type='l', ylim=c(0,1), lwd=plotPars$lwd,
+             axes=FALSE, ylab="", xlab="")
+        if (sim == its[1]) {
+          mtext(side=3, YrText[[yr]])
+        }
+        if (sim == its[length(its)]) {
+          axis(side=1)
+        } else {
+          axis(side=1, labels = FALSE)
+        }
+        if (sim == its[nsamp]) mtext(side=1, "Length", line=2.5)
+        if (yr == yr.vert[1] & sim ==its[1]) {
+          mtext(side=2, "Vulnerability/Retention", las=3, outer=TRUE, line=2)
+        }
+        if (yr == yr.vert[1]) {
+          text(Pars$Stock$CAL_binsmid[1], 1, "Simulation", xpd=NA, col=cnt, pos=4)
+          axis(side=2)
+        }
+        if (yr != yr.vert[1]) axis(side=2, labels=FALSE)
+
+        polygon(x=c(Pars$Stock$CAL_binsmid, rev(Pars$Stock$CAL_binsmid)),
+                y=c(Pars$Fleet$SLarray[sim,, yr], rev(Pars$Fleet$retL[sim,, yr])), col="gray", border=FALSE)
+        lines(Pars$Stock$CAL_binsmid, Pars$Fleet$SLarray[sim,, yr], col=2, lwd=plotPars$lwd, lty=2, type='l')
+        lines(Pars$Stock$CAL_binsmid, Pars$Fleet$retL[sim,, yr], col=4, lwd=plotPars$lwd, lty=3, type='l')
+
+        if (yr == max(yr.vert) & sim == its[1]) {
+          minval <- min(c(Pars$Fleet$V[sim,Pars$Stock$maxage+1, yr],  Pars$Fleet$retA[sim,Pars$Stock$maxage+1, yr]))
+          if (minval >= 0.5) loc <- "bottomright"
+          if (minval < 0.5) loc <- "topright"
+          legend(loc, legend = c("Vulnerability", "Realized Selection", "Retention"),
+                 lwd=2, col=c(1, 2, 4), bty="n", lty=c(1,2,3))
+        }
+      }
+    }
+  }
+
+  if (4 %in% plot.num) {
+    Pars <- List$Pars
+    par(mfrow=c(3,3), oma=c(3,3,1,1), mar=c(1,1,1,1))
+
+    yr.vert <- c(1, List$nyears, List$nyears+List$proyears)
+    YrText <- list()
+    YrText[yr.vert[1]] <- "First Historical Year"
+    YrText[yr.vert[2]] <- "Last Historical Year"
+    YrText[yr.vert[3]] <- "Last Projection Year"
+    cnt <- 0
+    for (sim in its) {
+      cnt <- cnt + 1
+      for (yr in yr.vert) {
+
+        # plot vulnerability & selection at length
+        plot(0:Pars$Stock$maxage, Pars$Fleet$V2[sim,, yr], type='l', ylim=c(0,1), lwd=plotPars$lwd,
+             axes=FALSE, ylab="", xlab="")
+        if (sim == its[1]) {
+          mtext(side=3, YrText[[yr]])
+        }
+        if (sim == its[length(its)]) {
+          axis(side=1)
+        } else {
+          axis(side=1, labels = FALSE)
+        }
+        if (sim == its[nsamp]) mtext(side=1, "Age", line=2.5)
+        if (yr == yr.vert[1] & sim ==its[1]) {
+          mtext(side=2, "Vulnerability/Retention", las=3, outer=TRUE, line=2)
+        }
+        if (yr == yr.vert[1]) {
+          text(1, 1, "Simulation", xpd=NA, col=cnt, pos=4)
+          axis(side=2)
+        }
+        if (yr != yr.vert[1]) axis(side=2, labels=FALSE)
+
+        polygon(x=c(0:Pars$Stock$maxage, rev(0:Pars$Stock$maxage)),
+                y=c(Pars$Fleet$V[sim,, yr], rev(Pars$Fleet$retA[sim,, yr])), col="gray", border=FALSE)
+        lines(0:Pars$Stock$maxage, Pars$Fleet$V[sim,, yr], col=2, lwd=plotPars$lwd, lty=2, type='l')
+        lines(0:Pars$Stock$maxage, Pars$Fleet$retA[sim,, yr], col=4, lwd=plotPars$lwd, lty=3, type='l')
+
+        if (yr == max(yr.vert) & sim == its[1]) {
+          minval <- min(c(Pars$Fleet$V[sim,Pars$Stock$maxage+1, yr],  Pars$Fleet$retA[sim,Pars$Stock$maxage+1, yr]))
+          if (minval >= 0.5) loc <- "bottomright"
+          if (minval < 0.5) loc <- "topright"
+          legend(loc, legend = c("Vulnerability", "Realized Selection", "Retention"),
+                 lwd=2, col=c(1, 2, 4), bty="n", lty=c(1,2,3))
+        }
+      }
+    }
+  }
+}
+
+
+
+# ---- Obs Object Plots ----
+
+# ---- Imp Object Plots ----
+
 
 

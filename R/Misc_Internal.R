@@ -122,7 +122,7 @@ getEffhist <- function(Esd, nyears, EffYears, EffLower, EffUpper) {
 
     if (!all(effort == mean(effort))) effort <- range01(effort)
 
-    effort[effort == 0] <- 0.01
+    effort[effort == 0] <- tiny
 
     Emu <- -0.5 * Esd^2
     Eerr <- array(exp(rnorm(nyears * nsim, rep(Emu, nyears), rep(Esd, nyears))), c(nsim, nyears))  # calc error
@@ -183,27 +183,45 @@ dnormal<-function(lens,lfs,sl,sr){
   sel
 }
 
+# calcV <- function(x, Len_age, LatASD, SLarray, n_age, nyears, proyears, CAL_binsmid) {
+#   len_at_age <- Len_age[x,,]
+#   len_aa_sd <- LatASD[x,,]
+#
+#   sel_at_length <- SLarray[x,,]
+#   v <- matrix(tiny, n_age, nyears+proyears)
+#
+#   for (yr in 1:(nyears+proyears)) {
+#     ALK <- mapply(dnorm, mean=len_at_age[,yr], sd=len_aa_sd[,yr], MoreArgs=list(x=CAL_binsmid))
+#     ALK[ALK<=0] <- tiny
+#
+#     if (all(ALK[,1]==tiny)) {
+#       ALK[,1] <- 0
+#       ALK[1,1] <- 1
+#     }
+#     ALK_t <- matrix(colSums(ALK), nrow=nrow(ALK), ncol=ncol(ALK), byrow = TRUE)
+#     ALK <- t(ALK/ALK_t)
+#     sela <- ALK %*% sel_at_length[,yr]
+#     v[,yr] <- sela[,1]
+#   }
+#   v
+# }
+
 calcV <- function(x, Len_age, LatASD, SLarray, n_age, nyears, proyears, CAL_binsmid) {
   len_at_age <- Len_age[x,,]
   len_aa_sd <- LatASD[x,,]
-
   sel_at_length <- SLarray[x,,]
-  v <- matrix(tiny, n_age, nyears+proyears)
-  for (yr in 1:(nyears+proyears)) {
-    ALK <- mapply(dnorm, mean=len_at_age[,yr], sd=len_aa_sd[,yr], MoreArgs=list(x=CAL_binsmid))
-    ALK[ALK<=0] <- tiny
-
-    if (all(ALK[,1]==tiny)) {
-      ALK[,1] <- 0
-      ALK[1,1] <- 1
-    }
-    ALK_t <- matrix(colSums(ALK), nrow=nrow(ALK), ncol=ncol(ALK), byrow = TRUE)
-    ALK <- t(ALK/ALK_t)
-    sela <- ALK %*% sel_at_length[,yr]
-    v[,yr] <- sela[,1]
+  
+  if (!'matrix' %in% class(len_aa_sd)) {
+    nrow <- length(len_at_age)
+    len_at_age <- matrix(len_at_age, nrow, 1)
+    len_aa_sd <- matrix(len_aa_sd, nrow, 1)
+    sel_at_length <- matrix(sel_at_length, length(sel_at_length), 1)
   }
-  v
+  
+  
+  calcVatAge(len_at_age, len_aa_sd, sel_at_length, n_age, nyears, proyears, CAL_binsmid)
 }
+
 
 # calculate average unfished ref points over first A50 years
 CalcUnfishedRefs <- function(x, ageM, N0_a, SSN0_a, SSB0_a, B0_a, VB0_a, SSBpRa, SSB0a_a) {
@@ -278,6 +296,7 @@ LinInterp<-function(x,y,xlev,ascending=F,zeroint=F){
 
 
 
+
 calcRecruitment <- function(x, SRrel, SSBcurr, recdev, hs, aR, bR, R0a, SSBpR, SSB0) {
 
   # calculate global recruitment and distribute according to R0a
@@ -328,6 +347,9 @@ getclass <- function(x, classy) {
 }
 
 indfit <- function(sim.index,obs.ind, Year, plot=FALSE, lcex=0.8){
+  if (any(obs.ind<0, na.rm=TRUE)) {
+    obs.ind <- obs.ind+1-min(obs.ind, na.rm=TRUE)
+  }
 
   if (plot) Year <- Year[!is.na(obs.ind)]
   sim.index <- lcs(sim.index[!is.na(obs.ind)]) # log space conversion of standardized simulated index
@@ -362,9 +384,10 @@ indfit <- function(sim.index,obs.ind, Year, plot=FALSE, lcex=0.8){
     legend('topright',legend=c("Model estimate","Index"),text.col=c("black","red"),bty='n',cex=lcex)
   }
 
-  data.frame(beta=opt$minimum,AC=ac,sd=sd(exp(obs.ind)/(exp(sim.index)^opt$minimum)),
+  df <- data.frame(beta=opt$minimum,AC=ac,sd=sd(exp(obs.ind)/(exp(sim.index)^opt$minimum)),
              cor=stats::cor(sim.index,obs.ind),AC2=ac2,sd2=sd(obs.ind-sim.index))
 
+  df
   # list(stats=data.frame(beta=opt$minimum,AC=ac,sd=sd(exp(obs.ind)/(exp(sim.index)^opt$minimum)),
   #                       cor=cor(sim.index,obs.ind),AC2=ac2,sd2=sd(obs.ind-sim.index)),
   #      mult=exp(obs.ind)/(exp(sim.index)^opt$minimum))
@@ -387,7 +410,7 @@ generateRes <- function(df, nsim, proyears, lst.err) {
 applyAC <- function(x, res, ac, max.years, lst.err) {
   for (y in 1:max.years) {
     if (y == 1) {
-      res[y,x] <- ac[x] * lst.err[x] + lst.err[x] * (1-ac[x] * ac[x])^0.5
+      res[y,x] <- ac[x] * lst.err[x] + res[y,x] * (1-ac[x] * ac[x])^0.5
     } else {
       res[y,x] <- ac[x] * res[y-1,x] + res[y,x] * (1-ac[x] * ac[x])^0.5
     }
@@ -554,8 +577,8 @@ CalcDistribution <- function(StockPars, FleetPars, SampCpars, nyears, maxF, plus
   }
 
   # Not used but make the arrays anyway
-  retAp <- array(FleetPars$retA[,,1], dim=c(dim(FleetPars$retA)[1:2], Nyrs))
-  Vp <- array(FleetPars$V[,,1], dim=c(dim(FleetPars$V)[1:2], Nyrs))
+  retAp <- array(FleetPars$retA_real[,,1], dim=c(dim(FleetPars$retA_real)[1:2], Nyrs))
+  Vp <- array(FleetPars$V_real[,,1], dim=c(dim(FleetPars$V_real)[1:2], Nyrs))
   noMPA <- matrix(1, nrow=Nyrs, ncol=nareas)
 
   runProj <- lapply(1:nsim, projectEq, StockPars$Asize, nareas=nareas,

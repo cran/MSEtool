@@ -1,5 +1,14 @@
 The current version of the `MSEtool` package is available for download from [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+## MSEtool 3.1.1 
+
+### Fixes
+- patch bug in generation of size composition data (introduced in v3.1.0)
+- fix minor issue with `SSMOM2OM` where it was generating redundant rec devs
+
+### New additions
+- added `plot_SS2MOM` to compare MOM dynamics with SS3 predictions
+
 ## MSEtool 3.1.0
 
 ### New additions

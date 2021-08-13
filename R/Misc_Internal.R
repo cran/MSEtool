@@ -210,15 +210,15 @@ calcV <- function(x, Len_age, LatASD, SLarray, n_age, nyears, proyears, CAL_bins
   len_at_age <- Len_age[x,,]
   len_aa_sd <- LatASD[x,,]
   sel_at_length <- SLarray[x,,]
-  
+
   if (!'matrix' %in% class(len_aa_sd)) {
     nrow <- length(len_at_age)
     len_at_age <- matrix(len_at_age, nrow, 1)
     len_aa_sd <- matrix(len_aa_sd, nrow, 1)
     sel_at_length <- matrix(sel_at_length, length(sel_at_length), 1)
   }
-  
-  
+
+
   calcVatAge(len_at_age, len_aa_sd, sel_at_length, n_age, nyears, proyears, CAL_binsmid)
 }
 
@@ -266,33 +266,33 @@ CalcMSYRefs <- function(x, MSY_y, FMSY_y, SSBMSY_y, BMSY_y, VBMSY_y, ageM, nyear
 #'
 #' @param x A vector of x values
 #' @param y A vector of y values (identical length to x)
-#' @param xlev A the target level of x from which to guess y
+#' @param xlev A the target level of x from which to guess y. Can be either a numeric or vector.
 #' @param ascending Are the the x values supposed to be ordered before interpolation
 #' @param zeroint is there a zero-zero x-y intercept?
+#' @details As of version 3.2, this function uses `stats::approx`
 #' @author T. Carruthers
 #' @keywords internal
-LinInterp<-function(x,y,xlev,ascending=F,zeroint=F){
+LinInterp<-function(x, y, xlev, ascending = FALSE, zeroint = FALSE) {
 
-  if(zeroint){
-    x<-c(0,x)
-    y<-c(0,y)
+  if (zeroint) {
+    x <- c(0, x)
+    y <- c(0, y)
   }
 
-  if(ascending){
-    cond<-(1:length(x))<which.max(x)
-  }else{
-    cond<-rep(TRUE,length(x))
+  if (ascending) {
+    x_out <- x[1:which.max(x)]
+    y_out <- y[1:which.max(x)]
+  } else {
+    x_out <- x
+    y_out <- y
   }
 
-  close<-which.min((x[cond]-xlev)^2)
-  ind<-c(close,close+(x[close]<xlev)*2-1)
-  ind <- ind[ind <= length(x)]
-  if (length(ind)==1) ind <- c(ind, ind-1)
-  ind<-ind[order(ind)]
-  pos<-(xlev-x[ind[1]])/(x[ind[2]]-x[ind[1]])
-  y[ind[1]]+pos*(y[ind[2]]-y[ind[1]])
+  if (any(xlev < min(x_out))) warning("There are xlev values less than min(x).")
+  if (any(xlev > max(x_out))) warning("There are xlev values greater than max(x).")
+  approx(x_out, y_out, xlev, rule = 2, ties = "ordered")$y
 
 }
+
 
 
 
@@ -367,16 +367,16 @@ indfit <- function(sim.index,obs.ind, Year, plot=FALSE, lcex=0.8){
   if (length(res)<2) {
     ac <- 0
   } else {
-    ac<-acf(res,plot=F)$acf[2,1,1] # lag-1 autocorrelation  
+    ac<-acf(res,plot=F)$acf[2,1,1] # lag-1 autocorrelation
   }
-  
+
   res2<-obs.ind-sim.index                  # linear, without hyperdepletion / hyperstability
   if (length(res2)<2) {
     ac2 <- 0
   } else {
-    ac2<-acf(res2,plot=F)$acf[2,1,1] # linear AC 
+    ac2<-acf(res2,plot=F)$acf[2,1,1] # linear AC
   }
-  
+
 
   if(plot){
     SSBseq<-seq(min(exp(sim.index)),max(exp(sim.index)),length.out=1000)

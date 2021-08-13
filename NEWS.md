@@ -1,5 +1,17 @@
 The current version of the `MSEtool` package is available for download from [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+## MSEtool 3.2.0
+
+### Fixes 
+- fix issue in `SSMOM2OM` where selectivity was NA when fishing mortality was 0
+- remove debugging message that was stupidly left in last release
+
+### Minor changes
+- add `silent` option to `SS2Data`
+
+### New additions
+- add option to include fecundity-at-age used to calculate spawning biomass (`cpars$Fec_age`)
+
 ## MSEtool 3.1.1 
 
 ### Fixes

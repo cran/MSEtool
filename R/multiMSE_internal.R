@@ -113,10 +113,10 @@ HistMICE<-function(x,StockPars, FleetPars, np,nf, nareas, maxage, nyears, N, VF,
   #NIL(StockPars,"K")
 
   Karrayx <- getLHpars(x, 'Karray', StockPars, nyears)
-  Linfarrayx <- getLHpars(x, 'Linfarray', StockPars, nyears) 
-  t0arrayx <- getLHpars(x, 't0array', StockPars, nyears) 
-  Marrayx <- getLHpars(x, 'Marray', StockPars, nyears) 
-  
+  Linfarrayx <- getLHpars(x, 'Linfarray', StockPars, nyears)
+  t0arrayx <- getLHpars(x, 't0array', StockPars, nyears)
+  Marrayx <- getLHpars(x, 'Marray', StockPars, nyears)
+
   # Kx<-matrix(unlist(lapply(StockPars,function(dat)dat['K'])),ncol=np)[x,]
   # Linfx<-matrix(unlist(lapply(StockPars,function(dat)dat['Linf'])),ncol=np)[x,]
   # t0x<-matrix(unlist(lapply(StockPars,function(dat)dat['t0'])),ncol=np)[x,]
@@ -143,12 +143,13 @@ HistMICE<-function(x,StockPars, FleetPars, np,nf, nareas, maxage, nyears, N, VF,
     bRx[p,]<-StockPars[[p]]$bR[x,]
   }
 
-  M_ageArrayx<-Mat_agex<-WatAgex<-Len_agex <- array(NA,c(np,n_age,nyears))
+  M_ageArrayx<-Mat_agex<-WatAgex<-Len_agex <- Fec_agex <- array(NA,c(np,n_age,nyears))
   Effind<-array(NA,c(np,nf,nyears))
   Spat_targ<-array(NA,c(np,nf))
 
   for(p in 1:np){
     Mat_agex[p,,]<-StockPars[[p]]$Mat_age[x,,1:nyears]
+    Fec_agex[p,,]<-StockPars[[p]]$Fec_Age[x,,1:nyears]
     WatAgex[p,,]<-StockPars[[p]]$Wt_age[x,,1:nyears]
     Len_agex[p,,]<-StockPars[[p]]$Len_age[x,,1:nyears]
     M_ageArrayx[p,,]<-StockPars[[p]]$M_ageArray[x,,1:nyears]
@@ -160,7 +161,8 @@ HistMICE<-function(x,StockPars, FleetPars, np,nf, nareas, maxage, nyears, N, VF,
   qfracx<-matrix(qfrac[x,,],c(np,nf))
 
   popdynMICE(qsx=qsx,qfracx=qfracx,np,nf,nyears,nareas,maxage,Nx,VFx,FretAx,Effind,
-             movx,Spat_targ,M_ageArrayx,Mat_agex,Asizex, 
+             movx,Spat_targ,M_ageArrayx,Mat_agex,Fec_agex,
+             Asizex,
              WatAgex, Len_agex, Karrayx,
              Linfarrayx,t0arrayx,Marrayx,
              R0x,R0ax,
@@ -205,7 +207,8 @@ ldim<-function(x){
 
 #' Combine data among stocks
 #'
-#' Catches, CAA, CAL are summed. LFC and LFS are weighted averages. ML, Lc and Lbar are recalculated from summed CAL. All other observations are for fleet 1 (indicative)
+#' Catches, CAA, CAL are summed. Indices, LFC and LFS are weighted averages. ML, Lc and Lbar are recalculated from summed CAL.
+#' All other observations are for fleet 1 and weighted average across stocks
 #'
 #' @param MSElist A hierarchical list of data objects stock then fleet then MP
 #' @param StockPars A list of stock parameters
@@ -214,6 +217,7 @@ ldim<-function(x){
 #' @param nf The number of fleets
 #' @param realVB A matrix of real vulnerable biomass `[nsim,np, year]`
 #' @author T. Carruthers
+#' @export
 multiDataS<-function(MSElist,StockPars,np,mm,nf,realVB){
 
   nsim<-dim(MSElist[[1]][[1]][[mm]]@Cat)[1]
@@ -238,7 +242,7 @@ multiDataS<-function(MSElist,StockPars,np,mm,nf,realVB){
   }
 
   Dataout<-DBF[[1]]
-  
+
   Cat<-array(SIL(DBF,"Cat"),c(nsim,nyears,ni))
   CAA<-array(SIL(DBF,"CAA"),c(nsim,nyears,na,ni))
   CAL<-array(SIL(DBF,"CAL"),c(nsim,nyears,nl,ni))
@@ -311,13 +315,23 @@ multiDataS<-function(MSElist,StockPars,np,mm,nf,realVB){
   Bref<-array(SIL(DBF,'Bref'),c(nsim,ni))
   Dataout@Bref<-apply(Bref,1,sum)
 
-  # last historical F 
+  # last historical F
   FinF <- rep(0,nsim)
   for (fl in 1:nf) {
     FinF <- FinF + DBF[[fl]]@OM$FinF
   }
   Dataout@OM$FinF <- FinF
-  
+
+  # add Misc for each stock and fleet
+  # this makes the object way too big
+  Dataout@Misc <- list()
+  # for(p in 1:np){
+  #   Dataout@Misc[[p]] <- list()
+  #   for(f in 1:nf){
+  #     Dataout@Misc[[p]][[f]] <- MSElist[[p]][[f]][[mm]]@Misc
+  #   }
+  # }
+
   Dataout
 }
 

@@ -198,7 +198,7 @@ SRopt <- function(nsim, SSB, rec, SSBpR, plot = FALSE, type = c("BH", "Ricker"))
 SS_stock <- function(i, replist, mainyrs, nyears, proyears, nsim, single_sex = TRUE, partition = 2,
                      age_M = NULL, mean_h = TRUE, seed = 1) {
 
-  Morph <- Morph2 <- Seas <- BirthSeas <- Settlement <- NULL # checks
+  Morph <- Morph2 <- Seas <- BirthSeas <- Settlement <- Age_Beg <- Mat_F_wtatage <- NULL # checks
 
   allyears <- nyears + proyears
 
@@ -341,6 +341,20 @@ SS_stock <- function(i, replist, mainyrs, nyears, proyears, nsim, single_sex = T
     adjust <- as.numeric(n_init/n_virg)# *  cpars_bio$Perr_y[1,n_age:1])
     cpars_bio$Perr_y[, n_age:1] <- matrix(adjust, nrow = nsim, ncol = n_age, byrow = TRUE)
   }
+  
+  # Fecundity-at-age (weight used to calculate SB0 (females))
+  fec_age <- replist$endgrowth %>% dplyr::filter(Sex==i) %>%
+    dplyr::select(Age_Beg, Mat_F_wtatage)
+  Fec_age = replicate(nsim, fec_age$Mat_F_wtatage)
+  Fec_age = replicate(nyears+proyears,Fec_age)
+  Fec_age <- aperm(Fec_age, c(2,1,3))
+  if (i==1) {
+    # only for females
+    cpars_bio$Fec_age <- Fec_age
+  } else {
+    cpars_bio$Fec_age <- NULL
+  }
+  
 
   # Depletion
   if(i == 1) { # In 3.24, SSB = NA in seasons 1-3 out of 4, so I chose to take the mean
@@ -368,7 +382,7 @@ SS_stock <- function(i, replist, mainyrs, nyears, proyears, nsim, single_sex = T
   fleet_output <- lapply(seq_len(replist$nfleets)[replist$IsFishFleet], SS_fleet, i = i, replist = replist,
                          Stock = Stock, mainyrs = mainyrs, nyears = nyears, proyears = proyears, nsim = nsim,
                          single_sex = single_sex, partition = partition, cpars_bio = cpars_bio, age_M = age_M)
-
+  
   Fleet <- lapply(fleet_output, getElement, "Fleet") %>% structure(names = replist$FleetNames[replist$IsFishFleet])
   cpars <- lapply(fleet_output, function(x) c(cpars_bio, x$cpars_fleet)) %>% structure(names = replist$FleetNames[replist$IsFishFleet])
 
@@ -519,6 +533,16 @@ SS_fleet <- function(ff, i, replist, Stock, mainyrs, nyears, proyears, nsim, sin
   upper_boundary_last_bin <- max(replist$lbinspop) +
     2 * (suppressWarnings(max(as.numeric(colnames(replist$sizeselex)), na.rm = TRUE)) - max(replist$lbinspop))
   cpars_fleet$CAL_bins <- c(replist$lbinspop, upper_boundary_last_bin)
+  if(!all(is.finite(cpars_fleet$CAL_bins))) {
+    # alternative method to get length bins
+    cpars_fleet$CAL_binsmid <- colnames(replist$sizeselex[,6:ncol(replist$sizeselex)]) %>% as.numeric()
+    by <- cpars_fleet$CAL_binsmid[2] - cpars_fleet$CAL_binsmid[1]
+    cpars_fleet$CAL_bins <- seq(cpars_fleet$CAL_binsmid[1]-0.5*by, by=by, length.out=length(cpars_fleet$CAL_binsmid)+1)
+  } else {
+    by <- cpars_fleet$CAL_bins[2] - cpars_fleet$CAL_bins[1]
+    cpars_fleet$CAL_binsmid <- seq(cpars_fleet$CAL_bins[1]+0.5*by, by=by, length.out=length(cpars_fleet$CAL_bins)-1)
+  }
+  
   Fdisc <- rep(mean(disc_mort), nsim)
   if (!all(is.finite(Fdisc))) Fdisc <- rep(0, nsim)
   cpars_fleet$Fdisc <- Fdisc
@@ -558,12 +582,26 @@ SS_fleet <- function(ff, i, replist, Stock, mainyrs, nyears, proyears, nsim, sin
   cpars_fleet$Data@steep <- unique(Stock@h)
   cpars_fleet$Data@sigmaR <- unique(Stock@Perr)
 
-  cpars_fleet$Data@L50 <- LinInterp(cpars_bio$Mat_age[1,,nyears], cpars_bio$Len_age[1,,nyears], 0.5 + 1e-4)
-  cpars_fleet$Data@L95 <- LinInterp(cpars_bio$Mat_age[1,,nyears], cpars_bio$Len_age[1,,nyears], 0.95)
+  if (max(cpars_bio$Mat_age[1,,nyears])>0.5) {
+    cpars_fleet$Data@L50 <- LinInterp(cpars_bio$Mat_age[1,,nyears], cpars_bio$Len_age[1,,nyears], 0.5 + 1e-4)
+    if (max(cpars_bio$Mat_age[1,,nyears])>=0.95) {
+      cpars_fleet$Data@L95 <- LinInterp(cpars_bio$Mat_age[1,,nyears], cpars_bio$Len_age[1,,nyears], 0.95)  
+    } else {
+      cpars_fleet$Data@L95 <- max(cpars_bio$Mat_age[1,,nyears])
+    }  
+  }
+  
   cpars_fleet$Data@LenCV <- GP$CVmax
 
-  cpars_fleet$Data@LFC <- LinInterp(V[, nyears], cpars_bio$Len_age[1,,nyears], 0.05)
-  cpars_fleet$Data@LFS <- LinInterp(V[, nyears], cpars_bio$Len_age[1,,nyears], 0.95)
+  vrel <- V[,nyears]/max(V[,nyears], na.rm=T)
+  
+  if (min(vrel[1:which.max(vrel)])<0.05) {
+    cpars_fleet$Data@LFC <- LinInterp(vrel, cpars_bio$Len_age[1,,nyears], 0.05, ascending=TRUE)  
+  } 
+  if (max(vrel)>0.999) {
+    cpars_fleet$Data@LFS <- LinInterp(vrel, cpars_bio$Len_age[1,,nyears], 0.999, ascending=TRUE)
+  } 
+  
   cpars_fleet$Data@Vmaxlen <- V[n_age, nyears]
 
   cpars_fleet$Data@Dep <- unique(Stock@D)
@@ -713,10 +751,12 @@ get_V_from_Asel2 <- function(ff, i, replist, mainyrs, maxage, rescale = FALSE) {
     }
   }, numeric(length(mainyrs))) %>% t()
 
-  # Assume Asel is time-invariant
-  Asel <- dplyr::filter(replist$ageselex, Fleet == ff, Sex %in% i, Factor == "Asel")
-  V <- vapply(0:maxage, function(x) Asel[1, parse(text = paste0("\"", x, "\"")) %>% eval()], numeric(1))
-  Vout <- V2 * V
+  # # Assume Asel is time-invariant
+  # don't think this is necessary
+  # Asel <- dplyr::filter(replist$ageselex, Fleet == ff, Sex %in% i, Factor == "Asel")
+  # V <- vapply(0:maxage, function(x) Asel[1, parse(text = paste0("\"", x, "\"")) %>% eval()], numeric(1))
+  # Vout <- V2 * V
+  Vout <- V2
 
   if(rescale) {
     Vapical <- apply(Vout, 2, max) %>% matrix(nrow(Vout), ncol(Vout), byrow = TRUE)

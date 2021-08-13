@@ -64,6 +64,10 @@ mean_array <- function(tt, cpars, gender) {
   Reduce("+", xx) / length(xx)
 }
 
+mean_array2 <- function(list) {
+  Reduce("+", list) / length(list)
+}
+
 #' @rdname SS2MOM
 #' @param MOM MOM object
 #' @export
@@ -112,12 +116,14 @@ SSMOM2OM <- function(MOM, SSdir, gender = 1:2, import_mov = TRUE, seed = 1, sile
   cpars_out$Wt_age <- mean_array("Wt_age", cpars, gender)
   cpars_out$Len_age <- mean_array("Len_age", cpars, gender)
   cpars_out$LatASD <- mean_array("LatASD", cpars, gender)
+  cpars_out$Fec_age <- mean_array("Fec_age", cpars, gender=1)
 
   cpars_out$Linf <- mean_vector("Linf", cpars, gender)
   cpars_out$K <- mean_vector("K", cpars, gender)
   cpars_out$t0 <- mean_vector("t0", cpars, gender)
 
   cpars_out$Wt_age_C <- mean_array('Wt_age_C', cpars, gender) # empirical weight-at-age for catch
+  if(length(cpars_out$Wt_age_C)==0) cpars_out$Wt_age_C <- NULL
 
   # Stock placeholders (overriden by cpars mean_arrays or mean_vectors above)
   Stock@M <- vapply(Stocks[gender], slot, numeric(2), "M") %>% apply(1, mean)
@@ -136,7 +142,7 @@ SSMOM2OM <- function(MOM, SSdir, gender = 1:2, import_mov = TRUE, seed = 1, sile
   cpars_out$hs <- .cpars$hs
   #cpars_out$binWidth <- .cpars$binWidth
   cpars_out$CAL_bins <- .cpars$CAL_bins
-  #cpars_out$CAL_binsmid <- .cpars$CAL_binsmid
+  cpars_out$CAL_binsmid <- .cpars$CAL_binsmid
   cpars_out$Mat_age <- .cpars$Mat_age
 
   cpars_out$Perr_y <- .cpars$Perr_y
@@ -178,13 +184,19 @@ SSMOM2OM <- function(MOM, SSdir, gender = 1:2, import_mov = TRUE, seed = 1, sile
   if(model_discards) { # Grab sel and retention (averaged over all fleets) and take the mean between sexes
     sel_par <- lapply(cpars[gender], calculate_single_fleet_dynamics)
     
-    cpars_out$Find <- lapply(sel_par, getElement, "Find") %>% simplify2array() %>% apply(1:2, mean, na.rm=TRUE)
-    cpars_out$Fdisc <- lapply(sel_par, getElement, "Fdisc") %>% simplify2array() %>% apply(1, mean, na.rm=TRUE)
-    cpars_out$retA <- lapply(sel_par, getElement, "retA") %>% simplify2array() %>% apply(1:3, mean, na.rm=TRUE)
-    cpars_out$V <- lapply(sel_par, getElement, "V") %>% simplify2array() %>% apply(1:3, mean, na.rm=TRUE)
-    #
-    cpars_out$retL <- lapply(sel_par, getElement, "retL") %>% simplify2array() %>% apply(1:3, mean, na.rm=TRUE)
-    cpars_out$SLarray <- lapply(sel_par, getElement, "SLarray") %>% simplify2array() %>% apply(1:3, mean, na.rm=TRUE)
+    cpars_out$Find <- lapply(sel_par, getElement, "Find") %>% mean_array2()
+    cpars_out$Fdisc <- lapply(sel_par, getElement, "Fdisc") %>% mean_array2()
+  
+    # cpars_out$retA <- lapply(sel_par, getElement, "retA") %>% simplify2array() %>% apply(1:3, mean, na.rm=TRUE)
+    # cpars_out$V <- lapply(sel_par, getElement, "V") %>% simplify2array() %>% apply(1:3, mean, na.rm=TRUE)
+    # cpars_out$retL <- lapply(sel_par, getElement, "retL") %>% simplify2array() %>% apply(1:3, mean, na.rm=TRUE)
+    # cpars_out$SLarray <- lapply(sel_par, getElement, "SLarray") %>% simplify2array() %>% apply(1:3, mean, na.rm=TRUE)
+    
+    cpars_out$retA <- lapply(sel_par, getElement, "retA") %>% mean_array2()
+    cpars_out$V <- lapply(sel_par, getElement, "V") %>% mean_array2()
+    cpars_out$retL <- lapply(sel_par, getElement, "retL") %>% mean_array2()
+    cpars_out$SLarray <- lapply(sel_par, getElement, "SLarray") %>% mean_array2()
+    
     #
   } else { # Calc V from the F-at-age matrix (no discards modeled in the OM object)
 
@@ -315,30 +327,36 @@ calculate_single_fleet_dynamics <- function(x) {
         F_at_length <- colSums(t(SLarray[i, , j, ]) * Find[i, j, ])
         Find_out[i, j] <- max(F_at_length)
         ret_at_length <- colSums(t(retL[i, , j, ]) * Find[i, j, ])
+        if (Find_out[i, j] == 0) {
+          SL_avg[i, , j] <- 0
+          retL_avg[i, , j] <- 0
+        } else {
+          SL_avg[i, , j] <- F_at_length/Find_out[i, j]
+          retL_avg[i, , j] <- ret_at_length/Find_out[i, j]  
+        }
 
-        SL_avg[i, , j] <- F_at_length/Find_out[i, j]
-        retL_avg[i, , j] <- ret_at_length/Find_out[i, j]
       }
     }
 
     SL_avg[, , nyears + 1:proyears] <- SL_avg[, , nyears]
     retL_avg[, , nyears + 1:proyears] <- retL_avg[, , nyears]
-
-    #
-    # out <- list(Find = Find_out, SLarray = SL_avg, retL = retL_avg, Fdisc = Fdisc_avg)
-
+    
     for(i in 1:nsim) {
       for(j in 1:nyears) {
         F_at_age<- colSums(t(V[i, , j, ]) * Find[i, j, ])
         Find_out[i, j] <- max(F_at_age)
         ret_at_age <- colSums(t(retA[i, , j, ]) * Find[i, j, ])
-
-        V_avg[i, , j] <- F_at_age/Find_out[i, j]
-        retA_avg[i, , j] <- ret_at_age/Find_out[i, j]
+        
+        if (Find_out[i, j] == 0) {
+          V_avg[i, , j] <- 0
+          retA_avg[i, , j] <- 0
+        } else {
+          V_avg[i, , j] <- F_at_age/Find_out[i, j]
+          retA_avg[i, , j] <- ret_at_age/Find_out[i, j]
+        }
         retA_avg[i, , j] <- retA_avg[i, , j]/max(retA_avg[i, , j])
       }
     }
-
     V_avg[, , nyears + 1:proyears] <- V_avg[, , nyears]
     retA_avg[, , nyears + 1:proyears] <- retA_avg[, , nyears]
     out <- list(Find = Find_out, V = V_avg, retA = retA_avg, Fdisc = Fdisc_avg, SLarray = SL_avg, retL = retL_avg)

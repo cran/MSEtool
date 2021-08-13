@@ -168,7 +168,7 @@ makeData <- function(Biomass, CBret, Cret, N, SSB, VBiomass, StockPars,
 
   Data@LFC <- FleetPars$L5_y[,nyears] * ObsPars$LFCbias # length at first capture
   Data@LFS <- FleetPars$LFS_y[,nyears] * ObsPars$LFSbias # length at full selection
-
+  Data@Vmaxlen <- FleetPars$Vmaxlen_y[,nyears]
   # --- Previous Management Recommendations ----
   Data@MPrec <- apply(CBret, c(1, 3), sum)[,nyears] # catch in last year
   Data@MPeff <- rep(1, nsim) # effort in last year = 1
@@ -377,71 +377,76 @@ updateData <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_Pret
       Ind_V <- matrix(Ind_V, nrow=Data@MaxAge+1, ncol= nyears+proyears)
       Ind_V <- replicate(nsim, Ind_V) %>% aperm(c(3,1,2))
 
-      yr.ind <- max(which(!is.na(ObsPars$AddIerr[1,i, 1:nyears])))
-
-      if (AddIunits[i]) { # Biomass-based index
-        if (AddIndType[i]==1) {
-          # total biomass
-          b1 <- apply(Biomass[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum)
-          b2 <- apply(Biomass_P, c(1, 2, 3), sum)
+      nas <- which(!is.na(ObsPars$AddIerr[1,i, 1:nyears]))
+      if (length(nas)>0) {
+        
+      
+        yr.ind <- max(nas)
+        
+        if (AddIunits[i]) { # Biomass-based index
+          if (AddIndType[i]==1) {
+            # total biomass
+            b1 <- apply(Biomass[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum)
+            b2 <- apply(Biomass_P, c(1, 2, 3), sum)
+          }
+          
+          if (AddIndType[i]==2) {
+            # spawning biomass
+            b1 <- apply(SSB[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum)
+            b2 <- apply(SSB_P, c(1, 2, 3), sum)
+          }
+          if (AddIndType[i]==3) {
+            # vulnerable biomass
+            b1 <- apply(VBiomass[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum)
+            b2 <- apply(VBiomass_P, c(1, 2, 3), sum)
+          }
+        } else {
+          if (AddIndType[i]==1) {
+            # total stock
+            b1 <- apply(N[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum) # Abundance-based index
+            b2 <- apply(N_P, c(1, 2, 3), sum)
+          }
+          if (AddIndType[i]==2) {
+            # spawning stock
+            b1 <- apply(N[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum) * StockPars$Mat_age[,,yr.ind:nyears,  drop=FALSE]
+            b2 <- apply(N_P, c(1, 2, 3), sum)  * StockPars$Mat_age[,,(nyears+1):(nyears+proyears),  drop=FALSE]
+          }
+          if (AddIndType[i]==3) {
+            # vuln stock
+            b1 <- apply(N[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum) * V_P[,,yr.ind:nyears,  drop=FALSE]
+            b2 <- apply(N_P, c(1, 2, 3), sum) * V_P[,,(nyears+1):(nyears+proyears),  drop=FALSE]
+          }
         }
-
-        if (AddIndType[i]==2) {
-          # spawning biomass
-          b1 <- apply(SSB[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum)
-          b2 <- apply(SSB_P, c(1, 2, 3), sum)
+        
+        b1 <- apply(b1 * Ind_V[,,yr.ind:nyears, drop=FALSE], c(1,3), sum)
+        b2 <- apply(b2 * Ind_V[,,(nyears+1):(nyears+proyears), drop=FALSE], c(1,3), sum)
+        tempI <- cbind(b1, b2[, 1:(y - 1)])
+        
+        # standardize, apply  beta & obs error
+        tempI <- exp(lcs(tempI))^ObsPars$AddIbeta[,i] * ObsPars$AddIerr[,i,yr.ind:(nyears + (y - 1))]
+        year.ind <- max(which(!is.na(RealData@AddInd[1,i,])))
+        
+        scaler <- RealData@AddInd[1,i,year.ind]/tempI[,1]
+        scaler <- matrix(scaler, nrow=nsim, ncol=ncol(tempI))
+        tempI <- tempI * scaler # convert back to historical index scale
+        
+        AddInd[,i,] <- cbind(Data@AddInd[1:nsim,i,1:yr.ind], tempI[,2:ncol(tempI)])
+        
+        yr.index <- max(which(!is.na(Data@CV_AddInd[1,i,1:nyears])))
+        newCV_Ind <- matrix(Data@CV_AddInd[,i,yr.index], nrow=nsim, ncol=length(yind))
+        CV_AddInd[,i,] <- cbind(Data@CV_AddInd[,i,], newCV_Ind)
+        
+        if (!is.null(RealData) && length(RealData@AddInd[1,i,])>nyears &&
+            !all(is.na(RealData@AddInd[1,i,(nyears+1):length(RealData@AddInd[1,i,])]))) {
+          # update projection index with observed index if it exists
+          addYr <- min(y-1,length(RealData@AddInd[1,i,]) - nyears)
+          
+          AddInd[,i,(nyears+1):(nyears+addYr)] <- matrix(RealData@AddInd[1,i,(nyears+1):(nyears+addYr)],
+                                                         nrow=nsim, ncol=addYr, byrow=TRUE)
+          
+          CV_AddInd[,i,(nyears+1):(nyears+addYr)] <- matrix(RealData@CV_AddInd[1,i,(nyears+1):(nyears+addYr)],
+                                                            nrow=nsim, ncol=addYr, byrow=TRUE)
         }
-        if (AddIndType[i]==3) {
-          # vulnerable biomass
-          b1 <- apply(VBiomass[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum)
-          b2 <- apply(VBiomass_P, c(1, 2, 3), sum)
-        }
-      } else {
-        if (AddIndType[i]==1) {
-          # total stock
-          b1 <- apply(N[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum) # Abundance-based index
-          b2 <- apply(N_P, c(1, 2, 3), sum)
-        }
-        if (AddIndType[i]==2) {
-          # spawning stock
-          b1 <- apply(N[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum) * StockPars$Mat_age[,,yr.ind:nyears,  drop=FALSE]
-          b2 <- apply(N_P, c(1, 2, 3), sum)  * StockPars$Mat_age[,,(nyears+1):(nyears+proyears),  drop=FALSE]
-        }
-        if (AddIndType[i]==3) {
-          # vuln stock
-          b1 <- apply(N[,,yr.ind:nyears,, drop=FALSE], c(1, 2, 3), sum) * V_P[,,yr.ind:nyears,  drop=FALSE]
-          b2 <- apply(N_P, c(1, 2, 3), sum) * V_P[,,(nyears+1):(nyears+proyears),  drop=FALSE]
-        }
-      }
-
-      b1 <- apply(b1 * Ind_V[,,yr.ind:nyears, drop=FALSE], c(1,3), sum)
-      b2 <- apply(b2 * Ind_V[,,(nyears+1):(nyears+proyears), drop=FALSE], c(1,3), sum)
-      tempI <- cbind(b1, b2[, 1:(y - 1)])
-
-      # standardize, apply  beta & obs error
-      tempI <- exp(lcs(tempI))^ObsPars$AddIbeta[,i] * ObsPars$AddIerr[,i,yr.ind:(nyears + (y - 1))]
-      year.ind <- max(which(!is.na(RealData@AddInd[1,i,])))
-
-      scaler <- RealData@AddInd[1,i,year.ind]/tempI[,1]
-      scaler <- matrix(scaler, nrow=nsim, ncol=ncol(tempI))
-      tempI <- tempI * scaler # convert back to historical index scale
-
-      AddInd[,i,] <- cbind(Data@AddInd[1:nsim,i,1:yr.ind], tempI[,2:ncol(tempI)])
-
-      yr.index <- max(which(!is.na(Data@CV_AddInd[1,i,1:nyears])))
-      newCV_Ind <- matrix(Data@CV_AddInd[,i,yr.index], nrow=nsim, ncol=length(yind))
-      CV_AddInd[,i,] <- cbind(Data@CV_AddInd[,i,], newCV_Ind)
-
-      if (!is.null(RealData) && length(RealData@AddInd[1,i,])>nyears &&
-          !all(is.na(RealData@AddInd[1,i,(nyears+1):length(RealData@AddInd[1,i,])]))) {
-        # update projection index with observed index if it exists
-        addYr <- min(y-1,length(RealData@AddInd[1,i,]) - nyears)
-
-        AddInd[,i,(nyears+1):(nyears+addYr)] <- matrix(RealData@AddInd[1,i,(nyears+1):(nyears+addYr)],
-                                                       nrow=nsim, ncol=addYr, byrow=TRUE)
-
-        CV_AddInd[,i,(nyears+1):(nyears+addYr)] <- matrix(RealData@CV_AddInd[1,i,(nyears+1):(nyears+addYr)],
-                                                          nrow=nsim, ncol=addYr, byrow=TRUE)
       }
     }
 
@@ -526,7 +531,7 @@ updateData <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_Pret
 
   Data@LFC <- FleetPars$L5_y[,nyears+y] * ObsPars$LFCbias # length at first capture
   Data@LFS <- FleetPars$LFS_y[,nyears+y] * ObsPars$LFSbias # length at full selection
-
+  Data@Vmaxlen <- FleetPars$Vmaxlen_y[,nyears+y]
   # --- Previous Management Recommendations ----
   Data@MPrec <- MPCalcs$TACrec # last MP  TAC recommendation
   if (length(dim(Effort)) == 5) {
@@ -579,10 +584,10 @@ updateData <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_Pret
 #' @param CAA_ESS CAA effective sample size. If greater than 1, then this is the multinomial distribution sample size.
 #' If less than 1, this is the coefficient of variation for the logistic normal distribution (see details).
 #' @param CAA_nsamp CAA sample size
-#' @details The logistic normal generates the catch-at-age sample by first sampling once from a multivariate normal distribution 
+#' @details The logistic normal generates the catch-at-age sample by first sampling once from a multivariate normal distribution
 #' with the mean vector equal to the logarithm of the proportions-at-age and the diagonal of the covariance matrix is the square of the
-#' product of the CV and the log proportions (all off-diagonals are zero). The sampled vector is then converted to proportions 
-#' with the softmax function and expanded to numbers (CAA_nsamp). This method allows for simulating fractional values in the 
+#' product of the CV and the log proportions (all off-diagonals are zero). The sampled vector is then converted to proportions
+#' with the softmax function and expanded to numbers (CAA_nsamp). This method allows for simulating fractional values in the
 #' catch-at-age matrix.
 #' @return CAA array
 simCAA <- function(nsim, yrs, n_age, Cret, CAA_ESS, CAA_nsamp) {
@@ -600,7 +605,7 @@ simCAA <- function(nsim, yrs, n_age, Cret, CAA_ESS, CAA_nsamp) {
         if(CAA_ESS[i] < 1) {
           log_PAA <- log(Cret[i, , j]/sum(Cret[i, , j]))
           vcov_PAA <- (CAA_ESS[i] * log_PAA)^2 * diag(length(log_PAA))
-          
+
           samp_PAA <- mvtnorm::rmvnorm(1, log_PAA, vcov_PAA) %>% ilogitm()
           CAA[i, j, ] <- CAA_nsamp[i] * samp_PAA
         } else {
@@ -632,7 +637,7 @@ simCAA <- function(nsim, yrs, n_age, Cret, CAA_ESS, CAA_nsamp) {
 #' @param t0array Array of t0 values by simulation and year
 #' @param LenCV CV of length-at-age#'
 #' @return named list with CAL array and LFC, ML, & Lc vectors
-#' 
+#'
 #'     CALdat <- simCAL(nsim, nyears, StockPars$maxage, ObsPars$CAL_ESS,
 simCAL <- function(nsim, nyears, maxage,  CAL_ESS, CAL_nsamp, nCALbins, CAL_binsmid, CAL_bins,
                    vn, retL, Linfarray, Karray, t0array, LenCV) {
@@ -1154,31 +1159,35 @@ AddRealData <- function(SimData, RealData, ObsPars, StockPars, FleetPars, nsim,
       I_Err <- do.call('rbind', I_Err)
       ind2 <- matrix(ind, nrow=nsim, ncol=nyears, byrow=TRUE)
       Ierr <- matrix(NA, nrow=nsim, ncol=nyears)
-      Ierr[,!is.na(ind)] <- exp(lcs(ind2[,!is.na(ind)]))/(exp(lcs(SimIndex[,!is.na(ind)]))^I_Err$beta)
-      if (fitIerr) ObsPars$AddIerr[,i, 1:nyears] <- Ierr
-      if (fitbeta) ObsPars$AddIbeta[,i] <- I_Err$beta
-
-      # Sample for projection years
-      if (fitIerr) {
-        yr.ind <- max(which(!is.na(RealData@AddInd[1,i,1:nyrs])))
-        diff <- nyears-nyrs
-        ObsPars$AddIerr[,i, (nyrs+1):(nyears+proyears)] <- generateRes(df=I_Err, nsim, proyears+diff, 
-                                                                       lst.err=log(ObsPars$AddIerr[,i,yr.ind]))
+      if (all(is.na(ind))) {
+        # nothing
+      } else {
+        
+        Ierr[,!is.na(ind)] <- exp(lcs(ind2[,!is.na(ind)]))/(exp(lcs(SimIndex[,!is.na(ind)]))^I_Err$beta)
+        if (fitIerr) ObsPars$AddIerr[,i, 1:nyears] <- Ierr
+        if (fitbeta) ObsPars$AddIbeta[,i] <- I_Err$beta
+        
+        # Sample for projection years
+        if (fitIerr) {
+          yr.ind <- max(which(!is.na(RealData@AddInd[1,i,1:nyrs])))
+          diff <- nyears-nyrs
+          ObsPars$AddIerr[,i, (nyrs+1):(nyears+proyears)] <- generateRes(df=I_Err, nsim, proyears+diff,
+                                                                         lst.err=log(ObsPars$AddIerr[,i,yr.ind]))
+        }
+        
+        if (nyrs < nyears) {
+          # add simulated index for missing years
+          tempI <- SimIndex
+          
+          # standardize, apply  beta & obs error
+          tempI <- exp(lcs(tempI))^ObsPars$AddIbeta[,i] * ObsPars$AddIerr[,i,1:nyears]
+          year.ind <- 1 #  max(which(!is.na(Data_out@AddInd[1,i,1:nyears])))
+          scaler <- Data_out@AddInd[1,i,year.ind]/tempI[,1]
+          scaler <- matrix(scaler, nrow=nsim, ncol=ncol(tempI))
+          tempI <- tempI * scaler # convert back to historical index scale
+          Data_out@AddInd[,i,1:nyears] <- tempI
+        }
       }
-      
-      if (nyrs < nyears) {
-        # add simulated index for missing years
-        tempI <- SimIndex
-
-        # standardize, apply  beta & obs error
-        tempI <- exp(lcs(tempI))^ObsPars$AddIbeta[,i] * ObsPars$AddIerr[,i,1:nyears]
-        year.ind <- 1 #  max(which(!is.na(Data_out@AddInd[1,i,1:nyears])))
-        scaler <- Data_out@AddInd[1,i,year.ind]/tempI[,1]
-        scaler <- matrix(scaler, nrow=nsim, ncol=ncol(tempI))
-        tempI <- tempI * scaler # convert back to historical index scale
-        Data_out@AddInd[,i,1:nyears] <- tempI
-      }
-
       ObsPars$AddInd_Stat[[i]] <- I_Err # index fit statistics
     }
   }

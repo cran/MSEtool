@@ -135,6 +135,7 @@ split.along.dim <- function(a, n) {
 #' @param R0 Vector of R0s
 #' @param SRrel SRR type
 #' @param hs Vector of steepness
+#' @param SSBpR Vector of unfished spawners per recruit
 #' @param yr.ind Year index used in calculations
 #' @param plusgroup Integer. Default = 0 = no plus-group. Use 1 to include a plus-group
 #' @return Results from `MSYCalcs`
@@ -142,7 +143,7 @@ split.along.dim <- function(a, n) {
 #'
 #' @keywords internal
 optMSY_eq <- function(x, M_ageArray, Wt_age, Mat_age, Fec_age, V, maxage, R0, SRrel, hs,
-                      yr.ind=1, plusgroup=0) {
+                      SSBpR, yr.ind=1, plusgroup=0) {
   if (length(yr.ind)==1) {
     M_at_Age <- M_ageArray[x,,yr.ind]
     Wt_at_Age <- Wt_age[x,, yr.ind]
@@ -160,12 +161,14 @@ optMSY_eq <- function(x, M_ageArray, Wt_age, Mat_age, Fec_age, V, maxage, R0, SR
   boundsF <- c(1E-4, 3)
 
   doopt <- optimise(MSYCalcs, log(boundsF), M_at_Age, Wt_at_Age, Mat_at_Age,
-                    Fec_at_Age, V_at_Age, maxage, R0[x], SRrel[x], hs[x], opt=1,
-                     plusgroup=plusgroup)
+                    Fec_at_Age, V_at_Age, maxage, R0[x], SRrel[x], hs[x], SSBpR[x, 1], opt=1,
+                    plusgroup=plusgroup)
 
   MSYs <- MSYCalcs(doopt$minimum, M_at_Age, Wt_at_Age, Mat_at_Age, Fec_at_Age,
-                   V_at_Age, maxage, R0[x], SRrel[x], hs[x], opt=2,
+                   V_at_Age, maxage, R0[x], SRrel[x], hs[x], SSBpR[x, 1], opt=2,
                    plusgroup=plusgroup)
+  
+  if(!doopt$objective) MSYs[] <- 0 # Assume stock crashes regardless of F
 
   return(MSYs)
 }
@@ -173,7 +176,7 @@ optMSY_eq <- function(x, M_ageArray, Wt_age, Mat_age, Fec_age, V, maxage, R0, SR
 
 Ref_int <- function(logF, M_at_Age, Wt_at_Age, Mat_at_Age, V_at_Age, maxage, plusgroup) {
   out <- MSYCalcs(logF, M_at_Age = M_at_Age, Wt_at_Age = Wt_at_Age, Mat_at_Age = Mat_at_Age,
-                  V_at_Age = V_at_Age, maxage = maxage, R0x = 1, SRrelx = 3, hx = 1, opt = 2, plusgroup = plusgroup)
+                  V_at_Age = V_at_Age, maxage = maxage, opt = 2, plusgroup = plusgroup)
   out[c(1,4)]
 }
 
@@ -194,7 +197,7 @@ per_recruit_F_calc <- function(x, M_ageArray, Wt_age, Mat_age, Fec_age, V, maxag
     V_at_Age <- apply(V[x,, yr.ind], 1, mean)
   }
 
-  boundsF <- c(1E-3, 2)
+  boundsF <- c(1E-3, 3)
 
   F_search <- exp(seq(log(min(boundsF)), log(max(boundsF)), length.out = 50))
 
@@ -202,7 +205,6 @@ per_recruit_F_calc <- function(x, M_ageArray, Wt_age, Mat_age, Fec_age, V, maxag
                             Wt_at_Age = Wt_at_Age, Mat_at_Age = Mat_at_Age,
                             Fec_at_Age=Fec_at_Age,
                             V_at_Age = V_at_Age,
-                            StockPars$SRrel[x],
                             maxage = maxage,
                             plusgroup = plusgroup)
 
@@ -222,9 +224,22 @@ per_recruit_F_calc <- function(x, M_ageArray, Wt_age, Mat_age, Fec_age, V, maxag
   } else if(StockPars$SRrel[x] == 2) {
     CR <- (5 * StockPars$hs[x])^1.25
   }
-  SPRcrash <- CR^-1
-
-  Fcrash <- LinInterp_cpp(SPR_search, F_search, xlev = SPRcrash)
+  alpha <- CR/StockPars$SSBpR[x, 1]
+  if(min(RPS) >= alpha) { # Unfished RPS is steeper than alpha
+    SPRcrash <- min(1, RPS[1]/alpha) # Should be 1
+    Fcrash <- 0
+  } else if(max(RPS) <= alpha) { # Extrapolate
+    SPRcrash <- local({ 
+      slope <- (SPR_search[length(SPR_search)] - SPR_search[length(SPR_search) - 1])/
+        (RPS[length(SPR_search)] - RPS[length(SPR_search) - 1])
+      out <- SPR_search[length(SPR_search)] - slope * (RPS[length(SPR_search)] - alpha)
+      max(out, 0.01)
+    })
+    Fcrash <- max(F_search)
+  } else {  
+    SPRcrash <- LinInterp_cpp(RPS, SPR_search, xlev = alpha)
+    Fcrash <- LinInterp_cpp(RPS, F_search, xlev = alpha)
+  }
 
   SSB <- apply(StockPars$SSB[x,,,], 2, sum)
   R <- apply(StockPars$N[x, 1, , ], 1, sum)
@@ -829,12 +844,9 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   # Calculate total F (using Steve Martell's approach http://api.admb-project.org/baranov_8cpp_source.html)
   retainedCatch <- apply(CB_Pret[,,y,], 1, sum)
 
-  
   Ftot <- sapply(1:nsim, calcF, retainedCatch, V_P, retA_P, Biomass_P, fishdist,
                  Asize=StockPars$Asize, maxage=StockPars$maxage, StockPars$nareas,
                  M_ageArray=StockPars$M_ageArray,nyears, y, control) # update if effort has changed  
-  
-
 
   # Effort relative to last historical with this catch
   Effort_act <- Ftot/(FleetPars$FinF * FleetPars$qs*FleetPars$qvar[,y]*
@@ -877,8 +889,6 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
 }
 
 
-
-
 calcF <- function(x, TACusedE, V_P, retA_P, Biomass_P, fishdist, Asize, maxage, nareas,
                   M_ageArray, nyears, y, control) {
   ct <- TACusedE[x]
@@ -907,9 +917,12 @@ calcF <- function(x, TACusedE, V_P, retA_P, Biomass_P, fishdist, Asize, maxage, 
       }
     }
     pct <- sum(predC)
+    
     Omat <- (1-exp(-Zmat)) * Biomass_P[x,,y,]
     # derivative of catch wrt ft
     dct <- sum(Omat/Zmat - ((Fmat * Omat)/Zmat^2) + Fmat/Zmat * exp(-Zmat) * Biomass_P[x,,y,])
+    if (dct<0) break
+    
     ft <-  ft - (pct - ct)/(0.5*dct)
     if (abs(pct - ct)/ct<1E-4) break
   }
@@ -1018,14 +1031,14 @@ runInMP <- function(Data, MPs = NA, reps = 100) {
 }
 
 
-projectEq <- function(x, Asize, nareas, maxage, N, pyears, M_ageArray, Mat_age, Wt_age,
+projectEq <- function(x, Asize, nareas, maxage, N, pyears, M_ageArray, Mat_age, Wt_age, Fec_Age,
                       V, retA, Perr, mov, SRrel, Find, Spat_targ, hs, R0a, SSBpR, aR, bR,
                       SSB0, MPA, maxF, Nyrs, plusgroup, Pinitdist) {
 
   simpop <- popdynCPP(nareas, maxage, Ncurr=N[x,,1,],
                       pyears, M_age=M_ageArray[x,,], Asize_c=Asize[x,],
                       MatAge=Mat_age[x,,],
-                      WtAge=Wt_age[x,,], Vuln=V[x,,], Retc=retA[x,,], Prec=Perr[x,],
+                      WtAge=Wt_age[x,,], FecAge=Fec_Age[x,,], Vuln=V[x,,], Retc=retA[x,,], Prec=Perr[x,],
                       movc=split.along.dim(mov[x,,,,],4), SRrelc=SRrel[x],
                       Effind=Find[x,],  Spat_targc=Spat_targ[x], hc=hs[x], R0c=R0a[x,],
                       SSBpRc=SSBpR[x,], aRc=aR[x,], bRc=bR[x,], Qc=0, Fapic=0,
@@ -1064,7 +1077,7 @@ CalcSPReq <- function(FM, StockPars, n_age, nareas, nyears, proyears, nsim, Hist
     NPR_F[, n_age, , ] <- NPR_F[, n_age, , ]/(1 - exp(-Z[, n_age, , ]))
   }
   SPReq <- apply(NPR_F * Fec_age, c(1, 3), sum)/apply(NPR_M * Fec_age, c(1, 3), sum)
-  return(SPReq = SPReq)
+  return(SPReq)
 }
 
 CalcSPRdyn <- function(FM, StockPars, n_age, nareas, nyears, proyears, nsim, Hist = FALSE) {

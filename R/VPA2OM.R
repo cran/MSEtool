@@ -50,7 +50,7 @@ VPA2OM<-function(Name="A fishery made by VPA2OM",
                  recind=0, plusgroup=TRUE, altinit=0, fixq1=TRUE,
                  report=FALSE, silent=FALSE, ...) {
 
-  simup<-function(param,OM){   # Generic function for converting VPA outputs to an OM
+  simup<-function(param, OM, do_slot = TRUE){   # Generic function for converting VPA outputs to an OM
     paramnam<-deparse(substitute(param))
     if(length(param)==1){
       OM@cpars[[paramnam]]<-rep(param,nsim)
@@ -59,7 +59,7 @@ VPA2OM<-function(Name="A fishery made by VPA2OM",
     }else{
       OM@cpars[[paramnam]]<-param
     }
-    slot(OM,paramnam)<-rep(param[1],2)
+    if(do_slot) slot(OM,paramnam)<-rep(param[1],2)
     OM
   }
   
@@ -147,7 +147,9 @@ VPA2OM<-function(Name="A fishery made by VPA2OM",
   OM@interval<-interval
   
   OM <- simup(D, OM)
-  OM <- simup(h, OM)
+  hs <- h
+  OM <- simup(hs, OM, do_slot = FALSE)
+  OM@h <- rep(hs[1], 2)
   OM <- simup(R0, OM)
   OM@Size_area_1 <- OM@Frac_area_1 <- OM@Prob_staying <- rep(0.5, 2)
   
@@ -155,7 +157,7 @@ VPA2OM<-function(Name="A fishery made by VPA2OM",
   LenCV=0.1
   OM<-simup(LenCV,OM)
   OM@SRrel <- 1 # 1 = BevHolt, 2 = Ricker
-  OM@isRel<-F  # absolute selectivity relative to maturity - no used here
+  OM@isRel<-FALSE  # absolute selectivity relative to maturity - no used here
   OM@CurrentYr<-CurrentYr
 
   # Time varying terms
@@ -236,32 +238,21 @@ VPA2OM<-function(Name="A fishery made by VPA2OM",
   } else {
     AC <- apply(recdevs, 1, function(x) stats::acf(x, plot = FALSE)$acf[2,1,1])
   }
-  procmu <- 0.5 * procsd^2 * (1 - AC/sqrt(1 - AC^2)) #http://dx.doi.org/10.1139/cjfas-2016-0167
-  
-  delta <- rnorm(nsim*(LowerTri+proyears), rep(procmu, proyears+LowerTri), rep(procsd, proyears+LowerTri)) %>%
-    matrix(nrow = nsim) # fill grid with uncorrelated devs
-  
-  Perr <- array(NA_real_, c(nsim,nyears+proyears+maxage))
 
   # Initial naa initialization options (VPAs apparently do this differently...)
+  Perr <- array(NA_real_, c(nsim, maxage + nyears - LowerTri))
   if(altinit < 2) {       # normal assumption with or without plusgroup
-    
     Perr[, n_age:1] <- log(naa[, , 1]/(R0 * surv[, , 1]))
-    
   } else if(altinit==2) { # temporary fix for DLMtool initialization of plusgroup
     Perr[, n_age:2] <- log(naa[, 1:(n_age-1), 1]/(R0 * surv[, 1:(n_age-1), 1]))
     survDLMtool<-aperm(exp(-apply(Maa[,,1],1,cumsum)),c(2,1))
     fac<-surv[, n_age, 1]/survDLMtool[, n_age]
     Perr[, 1] <- log(naa[, n_age, 1]/(R0 * surv[, n_age, 1] * fac))
   }
-  
   Perr[, maxage + 2:(nyears - LowerTri)] <- recdevs[, 2:(nyears - LowerTri)]
-  for (y in 1:(LowerTri + proyears)) {
-    Perr[, maxage + nyears - LowerTri + y] <- 
-      AC * Perr[, maxage + nyears - LowerTri + y - 1] + delta[, y] * sqrt(1 - AC^2)  # apply process error
-  }
+  Perr_pro <- sample_recruitment(Perr_hist = Perr, proyears = proyears + LowerTri, procsd = procsd, AC = AC)
   
-  OM@cpars$Perr_y <- exp(Perr)
+  OM@cpars$Perr_y <- exp(cbind(Perr, Perr_pro))
   OM@Perr <- rep(mean(procsd),2)
   OM@AC <- rep(mean(AC), 2)
 

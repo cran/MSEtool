@@ -189,6 +189,13 @@ sample_unif <- function(par, cpars, Obj, nsim, altpar=NULL) {
     tt <- myrunif(nsim, 0,1) # call to runif to increment RNG
     return(cpars[[par]])
   }
+  if ((!is.null(altpar))) {
+    if (!is.null(cpars[[altpar]])) {
+      tt <- myrunif(nsim, 0,1) # call to runif to increment RNG
+      return(cpars[[altpar]])
+    }  
+  }
+  
   if (!is.null(altpar)) par <- altpar
   vals <- slot(Obj, par)
   if (length(vals)<1) stop('slot ', par, ' in object class ', class(Obj), ' is missing values')
@@ -664,12 +671,13 @@ SampleStockPars <- function(Stock, nsim=48, nyears=80, proyears=50, cpars=NULL, 
   # ---- Mean Natural mortality by simulation and year ----
   if (is.null(cpars$Marray) & !is.null(cpars$M_ageArray)) {
     # Mean M-at-age needs to be calculated
-    Marray <- matrix(NA, nsim, nyears+proyears)
-    for (yr in 1:(nyears+proyears)) {
-      for (sim in 1:nsim) {
-        Marray[sim, yr] <- mean(M_ageArray[sim, (ageMarray[sim,yr]+1):n_age,yr])
-      }
-    }
+    Marray <- apply(M_ageArray * Mat_age, c(1,3), sum)/apply(Mat_age,c(1,3),sum)
+  
+    # for (yr in 1:(nyears+proyears)) {
+    #   for (sim in 1:nsim) {
+    #     Marray[sim, yr] <- mean(M_ageArray[sim, (ageMarray[sim,yr]+1):n_age,yr])
+    #   }
+    # }
   } else {
     Marray <- cpars$Marray
   }
@@ -677,6 +685,7 @@ SampleStockPars <- function(Stock, nsim=48, nyears=80, proyears=50, cpars=NULL, 
     # M by sim and year according to gradient and inter annual variability
     Marray <- GenerateRandomWalk(M, Msd, nyears + proyears, nsim, Mrand)
   }
+ 
 
   # ---- Natural mortality by simulation, age and year ----
   if (!exists("M_ageArray", inherits=FALSE)) { # only calculate M_ageArray if it hasn't been specified in cpars
@@ -1343,6 +1352,13 @@ sample_lnorm <- function(par, cpars, Obj, nsim, altpar=NULL) {
 
 }
 
+sample_norm <- function(par, cpars, Obj, nsim, altpar=NULL) {
+  if (!is.null(cpars[[par]])) return(cpars[[par]])
+  if (!is.null(altpar)) par <- altpar
+  val <- slot(Obj, par)[1]
+  rnorm(nsim, 0, val)
+}
+
 #' Sample Observation Parameters
 #'
 #' @param Obs An object of class 'Obs' or class 'OM'
@@ -1543,7 +1559,8 @@ SampleObsPars <- function(Obs, nsim=NULL, cpars=NULL, Stock=NULL,
   Kbias <- sample_lnorm('Kbias', cpars, Obs, nsim, 'Kbiascv')
   ObsOut$Kbias <- Kbias
 
-  t0bias <- sample_lnorm('t0bias', cpars, Obs, nsim, 't0biascv')
+  t0bias <- sample_norm('t0bias', cpars, Obs, nsim, 't0biascv')
+
   ObsOut$t0bias <- t0bias
 
   Linfbias <- sample_lnorm('Linfbias', cpars, Obs, nsim, 'Linfbiascv')

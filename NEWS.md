@@ -1,5 +1,21 @@
 The current version of the `MSEtool` package is available for download from [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+## MSEtool 3.3.0 
+
+### New additions
+- added `Awatea2OM` to import MCMC output from an Awatea assessment model to openMSE
+- reference points are now calculated assuming constant stock-recruit alpha and beta parameters. Previously, constant R0 and steepness was assumed. See (https://openmse.com/tutorial-reference-points/) for more details.
+
+### Fixes
+- fix minor bug in calculating SSB in first year when using OMs imported from SS3
+- fix minor bug when passing movement matrix in with cpars
+- fix minor bug so that the mean of sampled recruitment deviations in `SS2MOM` and `SS2OM` is one. The issue was noticeable when the autocorrelation is high.
+- add check for missing OM slots such as interval, pstar, nyears, etc
+
+### Minor changes
+- update `plot_mov` for plotting movement matrices.
+- `ProjectMOM` and `multiMSE` now drop the `multiHist` object from the `MMSE` object unless argument `dropHist=FALSE`
+
 ## MSEtool 3.2.0
 
 ### Fixes 

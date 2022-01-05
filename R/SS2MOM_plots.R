@@ -284,7 +284,6 @@ compareRecmulti <- function(replist, multiHist) {
 }
 
 compareAmulti <- function(replist, multiHist) {
-  Seas <- NULL
   year_lab <- "Year"
   mainyrs <- replist$startyr:replist$endyr
   maxage <- multiHist[[1]][[1]]@SampPars$Stock$maxage

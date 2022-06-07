@@ -7,7 +7,7 @@
 #' @param sloty A character vector representing the slot name
 #' @author T. Carruthers
 SIL <- function(listy, sloty) {
-  if (class(listy[[1]]) == "list") {
+  if (methods::is(listy[[1]], "list")) {
     out <- list()
     for(i in 1:length(listy)) out[[i]] <- sapply(listy[[i]], slot, sloty)
     out <- do.call(c, out)
@@ -26,7 +26,7 @@ SIL <- function(listy, sloty) {
 #' @param lev1 Logical, should NIL default to the first level of the list?
 #' @author T. Carruthers
 NIL<-function(listy,namey,lev1=T){
-  if(class(listy[[1]]) == "list" && !lev1) {
+  if(!methods::is(listy[[1]], "list") && !lev1) {
     out <- list()
     for(i in 1:length(listy)) out[[i]] <- sapply(listy[[i]], getElement, namey)
     out <- do.call(c, out)
@@ -171,7 +171,7 @@ HistMICE <- function(x, StockPars, FleetPars, np,nf, nareas, maxage, nyears, N, 
              Linfarrayx = Linfarrayx, t0arrayx = t0arrayx, Marrayx = Marrayx,
              R0x = R0x, R0ax = R0ax, SSBpRx = SSBpRx, hsx = hsx, aRx = aRx, bRx = bRx,
              ax = ax, bx = bx, Perrx = Perrx, SRrelx = SRrelx, Rel = Rel, SexPars = SexPars, x = x,
-             plusgroup = plusgroup, maxF = maxF, SSB0x = SSB0x, B0x = B0x)
+             plusgroup = plusgroup, maxF = maxF, SSB0x = SSB0x, B0x = B0x, MPA)
 
 }
 
@@ -193,7 +193,7 @@ nlz<-function(arr,dims=NULL,func="max"){
 #' @param x A list
 #' @author T. Carruthers
 ldim<-function(x){
-  if(class(x)!='list'){
+  if(!methods::is(x,'list')){
     #message(paste(deparse(substitute(x))," is not a list - ldim operates on hieracical list objects"))
     return(0)
   }else{
@@ -201,7 +201,7 @@ ldim<-function(x){
     cond=TRUE
     while(cond){
       dim=c(dim,length(x))
-      cond=(class(x[[1]])=='list')
+      cond=methods::is(x[[1]], 'list')
       if(cond)x=x[[1]]
     }
     return(dim)
@@ -223,6 +223,20 @@ ldim<-function(x){
 #' @author T. Carruthers
 #' @export
 multiDataS<-function(MSElist,StockPars,np,mm,nf,realVB){
+  
+  # check dimensions of CAL - need to be the same for all stocks/fleets
+  nL <- matrix(NA, np,nf)
+  # nA <- matrix(NA, np,nf)
+  for (p in 1:np) {
+    for(f in 1:nf) {
+      nL[p,f]<-dim(MSElist[[p]][[f]][[mm]]@CAL)[3]
+      # nA[p,f]<-dim(MSElist[[p]][[f]][[mm]]@CAA)[3]
+    }
+  }
+  
+  if (length(unique(as.numeric(nL)))>1) {
+    stop('All stocks/fleets must have the same length bins if using Complex mode. Use `cpars$CAL_bins` or `cpars$CAL_binsmid`')
+  }
 
   nsim<-dim(MSElist[[1]][[1]][[mm]]@Cat)[1]
   nyears<-dim(MSElist[[1]][[1]][[mm]]@Cat)[2]
@@ -404,3 +418,4 @@ multiData<-function(MSElist,StockPars,p,mm,nf){
 
   Dataout
 }
+

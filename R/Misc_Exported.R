@@ -39,7 +39,7 @@ get_funcs <- function(package, classy , msg) {
 #' @export
 avail <- function(classy, package=NULL, msg=TRUE) {
   temp <- try(class(classy), silent=TRUE)
-  if (class(temp) == "try-error") classy <- deparse(substitute(classy))
+  if (methods::is(temp, "try-error")) classy <- deparse(substitute(classy))
   if (temp == "function") classy <- deparse(substitute(classy))
 
   if (classy %in% c('Output', 'Input', "Mixed", "Reference")) {
@@ -151,6 +151,166 @@ MSEextra <- function(silent=FALSE, force=FALSE) {
 }
 
 
+
+#' @rdname SubCpars
+#' @export
+setGeneric("SubCpars", function(x, ...) standardGeneric("SubCpars"))
+
+#' @name SubCpars
+#' @aliases SubCpars,OM-method
+#' @title Subset the cpars slot in an operating model
+#'
+#' @description Subset the custom parameters of an operating model by simulation and projection years 
+#'
+#' @param x An object of class \linkS4class{OM} or \linkS4class{MOM}
+#' @param sims A logical vector of length \code{x@@nsim} to either retain (TRUE) or remove (FALSE).
+#' Alternatively, a numeric vector indicating which simulations (from 1 to nsim) to keep.
+#' @param proyears If provided, a numeric to reduce the number of projection years (must be less than \code{x@@proyears}).
+#' @param ... Arguments for method.
+#' @details Useful function for running \link{multiMSE} in batches if running into memory constraints.
+#' @return An object of class \linkS4class{OM} or \linkS4class{MOM} (same class as \code{x}).
+#' @seealso \link{Sub} for MSE objects, \link{SubOM} for OM components.
+#' @author T. Carruthers, Q. Huynh
+#' @export
+setMethod("SubCpars", signature(x = "OM"),
+          function(x, sims = 1:x@nsim, proyears = x@proyears) {
+            OM <- x
+            # Reduce the number of simulations
+            nsim_full <- OM@nsim
+            if(is.numeric(sims)) {
+              sims2 <- logical(nsim_full)
+              sims2[sims] <- TRUE
+            } else if(is.logical(sims) && length(sims) == nsim_full) {
+              sims2 <- sims
+            } else stop("Logical vector sims need to be of length ", nsim_full)
+            
+            if(any(!sims2) && sum(sims2) < nsim_full) {
+              message("Removing simulations: ", paste0(which(!sims2), collapse = " "))
+              OM@nsim <- sum(sims2)      
+              message("Set OM@nsim = ", OM@nsim)
+              
+              if(length(OM@cpars)) {
+                cpars <- OM@cpars
+                OM@cpars <- lapply(names(cpars), SubCpars_sim, sims = sims2, cpars = cpars) %>% 
+                  structure(names = names(cpars))
+              }
+            }
+            
+            # Reduce the number of projection years
+            proyears_full <- OM@proyears
+            if(proyears < proyears_full) {
+              message("Reducing the number of projection years from ", proyears_full, " to ", proyears)
+              OM@proyears <- proyears
+              
+              if(length(OM@cpars)) {
+                cpars_p <- OM@cpars
+                yr_diff <- proyears_full - proyears
+                OM@cpars <- lapply(names(cpars_p), SubCpars_proyears, yr_diff = yr_diff, cpars = cpars_p) %>% 
+                  structure(names = names(cpars_p))
+              }
+            } else if(proyears > proyears_full) {
+              message("Number of specified projection years is greater than OM@proyears. Nothing done.")
+            }
+            
+            return(OM)
+          })
+
+#' @name SubCpars
+#' @aliases SubCpars,MOM-method
+#' @export
+setMethod("SubCpars", signature(x = "MOM"),
+          function(x, sims = 1:x@nsim, proyears = x@proyears) {
+            MOM <- x
+            # Reduce the number of simulations
+            nsim_full <- MOM@nsim
+            if(is.numeric(sims)) {
+              sims2 <- logical(nsim_full)
+              sims2[sims] <- TRUE
+            } else if(is.logical(sims) && length(sims) == nsim_full) {
+              sims2 <- sims
+            } else stop("Logical vector sims need to be of length ", nsim_full)
+            
+            if(any(!sims2) && sum(sims2) < nsim_full) {
+              message("Removing simulations: ", paste0(which(!sims2), collapse = " "))
+              MOM@nsim <- sum(sims2)      
+              message("Set MOM@nsim = ", MOM@nsim)
+              
+              if(length(MOM@cpars)) {
+                for(p in 1:length(MOM@cpars)) {
+                  for(f in 1:length(MOM@cpars[[p]])) {
+                    cpars <- MOM@cpars[[p]][[f]]
+                    MOM@cpars[[p]][[f]] <- lapply(names(cpars), SubCpars_sim, sims = sims2, cpars = cpars) %>% 
+                      structure(names = names(cpars))
+                  }
+                }
+              }
+            }
+            
+            # Reduce the number of projection years
+            proyears_full <- MOM@proyears
+            if(proyears < proyears_full) {
+              message("Reducing the number of projection years from ", proyears_full, " to ", proyears)
+              MOM@proyears <- proyears
+              
+              if(length(MOM@cpars)) {
+                yr_diff <- proyears_full - proyears
+                for(p in 1:length(MOM@cpars)) {
+                  for(f in 1:length(MOM@cpars[[p]])) {
+                    cpars_p <- MOM@cpars[[p]][[f]]
+                    MOM@cpars[[p]][[f]] <- lapply(names(cpars_p), SubCpars_proyears, yr_diff = yr_diff, cpars = cpars_p) %>% 
+                      structure(names = names(cpars_p))
+                  }
+                }
+              }
+            } else if(proyears > proyears_full) {
+              message("Number of specified projection years is greater than MOM@proyears. Nothing done.")
+            }
+            
+            return(MOM)
+          })
+
+SubCpars_sim <- function(xx, sims, cpars) {
+  x <- cpars[[xx]]
+  if(any(xx == c("CAL_bins", "MPA", "plusgroup", "CAL_binsmid", "binWidth", "AddIunits", "Wa", "Wb", "Data"))) {
+    return(x)
+  } else if(is.matrix(x)) {
+    return(x[sims, , drop = FALSE])
+  } else if(is.array(x)) {
+    if(length(dim(x)) == 3) return(x[sims, , , drop = FALSE])
+    if(length(dim(x)) == 4) return(x[sims, , , , drop = FALSE])
+    if(length(dim(x)) == 5) return(x[sims, , , , , drop = FALSE])
+  } else if(length(x) == length(sims)) {
+    return(x[sims])
+  } else return(x)
+}
+
+
+SubCpars_proyears <- function(xx, yr_diff, cpars) {
+  x <- cpars[[xx]]
+  if(xx %in% c("Asize", "Find", "AddIbeta", "Data")) { # Matrices or arrays without projection year dimensions
+    return(x)
+  } else if(xx == "MPA") {
+    yr_remove <- (nrow(x) - yr_diff + 1):nrow(x)
+    return(x[-yr_remove, ])
+  } else if(is.matrix(x)) {
+    yr_remove <- (ncol(x) - yr_diff + 1):ncol(x)
+    return(x[, -yr_remove])
+  } else if(is.array(x)) {
+    
+    ldim <- length(dim(x))
+    yr_remove <- (dim(x)[ldim] - yr_diff + 1):dim(x)[ldim]
+    
+    if(ldim == 3) return(x[, , -yr_remove, drop = FALSE])
+    if(ldim == 4) return(x[, , , -yr_remove, drop = FALSE])
+    if(ldim == 5) return(x[, , , , -yr_remove, drop = FALSE])
+  } else {
+    return(x)
+  }
+}
+          
+
+
+
 #' @rdname tinyErr
 #' @export
 setGeneric("tinyErr", function(x, ...) standardGeneric("tinyErr"))
@@ -242,10 +402,10 @@ setMethod("tinyErr", signature(x = "OM"),
 #' MPtype(c("AvC", "curE", "matlenlim", "MRreal", "FMSYref"))
 #'
 MPtype <- function(MPs=NA) {
-  if(class(MPs) == "MP") stop("MPs must be characters")
+  if(methods::is(MPs, "MP")) stop("MPs must be characters")
   availMPs <- avail("MP", msg=FALSE)
   if (any(is.na(MPs))) MPs <- availMPs
-  if (class(MPs) != 'character') stop("MPs must be characters")
+  if (!methods::is(MPs, 'character')) stop("MPs must be characters")
 
   existMPs <- MPs %in% availMPs
 
@@ -403,13 +563,13 @@ plotFun <- function(class = c("MSE", "Data"), msg = TRUE) {
 #' @export
 Required <- function(funcs = NA, noCV=FALSE) {
 
-  if (class(funcs) != 'logical' & class(funcs) != "character")
+  if (!methods::is(funcs, 'logical') & !methods::is(funcs, "character"))
     stop("first argument must be character with MP name")
 
   if (all(is.na(funcs))) funcs <- avail("MP", msg=FALSE)
   for (x in 1:length(funcs)) {
     tt <- try(get(funcs[x]))
-    if (class(tt) != "MP") stop(funcs[x], " is not class 'MP'")
+    if (!methods::is(tt,"MP")) stop(funcs[x], " is not class 'MP'")
   }
 
   ReqData <- MSEtool::ReqData
@@ -615,7 +775,7 @@ updateMSE <- function(MSEobj, save.name=NULL) {
 
   slots <- slotNames(MSEobj)
 
-  if (length(slots)<1 & class(MSEobj)=='MSE') {
+  if (length(slots)<1 & methods::is(MSEobj,'MSE')) {
     # incompatible version
     message('Updating MSE object from earlier version of DLMtool')
     nMSE <- new("MSE",
@@ -759,7 +919,84 @@ trlnorm <- function(reps, mu, cv) {
 tdlnorm <- function(x, mu, cv) dlnorm(x, mconv(mu, mu * cv), sdconv(mu, mu * cv))
 
 
+#' Stock recruit parameterization
+#' 
+#' Convert stock recruit parameters from steepness parameterization to alpha/beta (and vice versa)
+#' 
+#' @param alpha Alpha parameter
+#' @param beta Beta parameter
+#' @param h Steepness parameter
+#' @param R0 Unfished recruitment parameter
+#' @param phi0 Unfished spawners per recruit
+#' @param SR Stock-recruit function: (1) Beverton-Holt, or (2) Ricker
+#' @param type The parameterization of the Beverton-Holt function with respect to \code{alpha} 
+#' and \code{beta}. See details.
+#' @details
+#' The Type 1 Beverton-Holt equation is
+#' \deqn{R = \alpha S/(1 + \beta S)}
+#' 
+#' The Type 2 Beverton-Holt equation is
+#' \deqn{R = S/(\alpha + \beta S)}
+#'  
+#' The Ricker equation is
+#' \deqn{R = \alpha S \exp(-\beta S)}
+#' @return A numeric.
+#' @author Q. Huynh
+#' @describeIn hconv Returns steepness (h) from \code{alpha} and \code{phi0}
+#' @export
+hconv <- function(alpha, phi0, SR = 1, type = 1) {
+  if(SR == 1) {
+    type <- match.arg(as.character(type), choices = as.character(1:2))
+    h <- switch(type,
+                "1" = alpha*phi0/(4 + alpha*phi0),
+                "2" = phi0/(4*alpha + phi0))
+  } else {
+    h <- 0.2 * (alpha*phi0)^0.8
+  }
+  return(h)
+}
 
+#' @describeIn hconv Returns unfished recruitment (R0) from \code{alpha}, \code{beta}, and \code{phi0}
+#' @export
+R0conv <- function(alpha, beta, phi0, SR = 1, type = 1) {
+  if(SR == 1) {
+    type <- match.arg(as.character(type), choices = as.character(1:2))
+    R0 <- switch(type,
+                "1" = (alpha*phi0 - 1)/beta/phi0,
+                "2" = (phi0 - alpha)/beta/phi0)
+  } else {
+    R0 <- log(alpha*phi0)/beta/phi0
+  }
+  return(R0)
+}
+
+#' @describeIn hconv Returns \code{alpha} from \code{h} and \code{phi0}
+#' @export
+SRalphaconv <- function(h, phi0, SR = 1, type = 1) {
+  if(SR == 1) {
+    type <- match.arg(as.character(type), choices = as.character(1:2))
+    alpha <- switch(type,
+                    "1" = 4*h/(1-h)/phi0,
+                    "2" = phi0*(1-h)/(4*h))
+  } else {
+    alpha <- (5*h)^1.25/phi0
+  }
+  return(alpha)
+}
+
+#' @describeIn hconv Returns \code{beta} from \code{h}, \code{R0}, and \code{phi0}
+#' @export
+SRbetaconv <- function(h, R0, phi0, SR = 1, type = 1) {
+  if(SR == 1) {
+    type <- match.arg(as.character(type), choices = as.character(1:2))
+    beta <- switch(type,
+                   "1" = (5*h-1)/(1-h)/phi0/R0,
+                   "2" = (5*h-1)/(4*h)/R0)
+  } else {
+    beta <- log((5*h)^1.25)/phi0/R0
+  }
+  return(beta)
+}
 
 #' Depletion and F estimation from mean length of catches
 #'

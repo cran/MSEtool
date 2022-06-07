@@ -1,5 +1,23 @@
 The current version of the `MSEtool` package is available for download from [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+# MSEtool 3.5.0
+
+## New additions
+- added check for `OM` completeness and default values for some parameters
+- historical MPAs now work in `multiMSE`
+- argument `parallel` in `runMSE` can takes a named list of MPs
+- two new functions `WHAM2OM` and `ASAP2OM` to import assessments into operating models
+- `Assess2MOM` to generate a multi-fleet operating model, either for a 2-sex population where recruitment is predicted from female spawning output, or a single-sex population.
+- `Assess2OM` supports Ricker stock-recruit relationship.
+
+## Minor changes
+- fix to fleet-specific vulnerable biomass provided to `MMPs`
+- updated code for conditioning observation parameters on observed indices
+- add message showing range of estimated von Bert. parameters when `OM@cpars$Len_age` is provided.
+- fix bug in SSBpR for 2-sex `MOM` (introduced in 3.4.0)
+- pass projected OM abundance and SSB arrays to `Data@Misc$StockPars` (slot `N_P`, `SSB_P`, etc.) during closed-loop
+- now use `usethis` for console messages
+
 # MSEtool 3.4.0 
 
 ## New additions

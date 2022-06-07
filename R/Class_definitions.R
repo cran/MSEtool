@@ -629,7 +629,7 @@ setMethod("initialize", "Obs", function(.Object, file = NA, dec=c(".", ",")) {
       .Object@CAL_ESS <- as.numeric(dat[match("CAL_ESS", dname), 1:2])
       .Object@Iobs <- as.numeric(dat[match("Iobs", dname), 1:2])
       .Object@Btobs <- as.numeric(dat[match("Btobs", dname), 1:2])
-      .Object@Btbiascv <- as.numeric(dat[match("Btbiascv", dname), 1:2])
+      .Object@Btbiascv <- as.numeric(dat[match("Btbiascv", dname), 1])
       .Object@beta <- as.numeric(dat[match("beta", dname), 1:2])
       .Object@LenMbiascv <- as.numeric(dat[match("LenMbiascv", dname), 1])
       .Object@Mbiascv <- as.numeric(dat[match("Mbiascv", dname), 1])
@@ -790,19 +790,21 @@ setMethod("initialize", "OM", function(.Object, Stock=NULL, Fleet=MSEtool::Gener
                                        interval=4, pstar=0.5, maxF=0.8, reps=1, nsim=48, proyears=50) {
   if (is.null(Stock)) {
     # message("No Stock object found. Returning a blank OM object")
-    .Object@seed <- 1
+    
+    # Check and add defaults
+    .Object <- CheckOM(.Object, msg=FALSE, stop_if_missing=FALSE)
     return(.Object)
   }
 
-  if (class(Stock) != "Stock")
+  if (!methods::is(Stock, "Stock"))
     print(paste("Could not build operating model:", deparse(substitute(Stock)), "not of class Stock"))
-  if (class(Fleet) != "Fleet")
+  if (!methods::is(Fleet, "Fleet")) 
     print(paste("Could not build operating model:", deparse(substitute(Fleet)), "not of class Fleet"))
-  if (class(Obs) != "Obs")
+  if (!methods::is(Obs, "Obs"))
     print(paste("Could not build operating model:", deparse(substitute(Obs)), "not of class Obs"))
-  if (class(Imp) != "Imp")
+  if (!methods::is(Imp, "Imp"))
     print(paste("Could not build operating model:", deparse(substitute(Imp)), "not of class Imp"))
-  if (class(Stock) != "Stock" | class(Fleet) != "Fleet" | class(Obs) != "Obs"  | class(Imp) != "Imp") stop()
+
   .Object@Name <- paste("Stock:", Stock@Name, "  Fleet:", Fleet@Name, "  Obs model:",
                         Obs@Name, "  Imp model:", Imp@Name, sep = "")
 
@@ -843,30 +845,33 @@ setMethod("initialize", "OM", function(.Object, Stock=NULL, Fleet=MSEtool::Gener
   if (.hasSlot(.Object, "maxF")) .Object@maxF <- maxF
   if (.hasSlot(.Object, "reps")) .Object@reps <- reps
 
-  if(length(.Object@LenCV) < 2) .Object@LenCV <- c(0.08,0.15)
-  if(length(.Object@CurrentYr)==0).Object@CurrentYr=.Object@nyears
-
-  # if(length(.Object@FecB) < 2) .Object@FecB <- c(3,3)
-  # if(all(is.na(.Object@FecB))) .Object@FecB <- c(3,3)
-  if(all(is.na(.Object@LenCV))) .Object@LenCV <- c(0.08,0.15)
-  if(all(is.na(.Object@CurrentYr))) .Object@CurrentYr=.Object@nyears
-
-  if(length(.Object@LR5) < 2) .Object@LR5 <- c(0,0)
-  if(length(.Object@LFR) < 2) .Object@LFR <- c(0,0)
-  if(length(.Object@Rmaxlen) < 2) .Object@Rmaxlen <- c(1,1)
-  if(length(.Object@Fdisc) < 2) .Object@Fdisc <- c(0,0)
-
-  if(all(is.na(.Object@LR5))) .Object@LR5 <- c(0,0)
-  if(all(is.na(.Object@LFR))) .Object@LFR <- c(0,0)
-  if(all(is.na(.Object@Rmaxlen))) .Object@Rmaxlen <- c(1,1)
-  if(all(is.na(.Object@Fdisc))) .Object@Fdisc <- c(0,0)
-
-  if (.hasSlot(.Object, "Size_area_1")) {
-    if (length(.Object@Size_area_1)==0) .Object@Size_area_1 <- .Object@Frac_area_1
-    if (all(is.na(.Object@Size_area_1))) .Object@Size_area_1 <- .Object@Frac_area_1
-  }
-
-  .Object@seed=1
+  # Check and add defaults
+  .Object <- CheckOM(.Object, msg=FALSE, stop_if_missing=FALSE)
+  
+  # if(length(.Object@LenCV) < 2) .Object@LenCV <- c(0.08,0.15)
+  # if(length(.Object@CurrentYr)==0).Object@CurrentYr=.Object@nyears
+  # 
+  # # if(length(.Object@FecB) < 2) .Object@FecB <- c(3,3)
+  # # if(all(is.na(.Object@FecB))) .Object@FecB <- c(3,3)
+  # if(all(is.na(.Object@LenCV))) .Object@LenCV <- c(0.08,0.15)
+  # if(all(is.na(.Object@CurrentYr))) .Object@CurrentYr=.Object@nyears
+  # 
+  # if(length(.Object@LR5) < 2) .Object@LR5 <- c(0,0)
+  # if(length(.Object@LFR) < 2) .Object@LFR <- c(0,0)
+  # if(length(.Object@Rmaxlen) < 2) .Object@Rmaxlen <- c(1,1)
+  # if(length(.Object@Fdisc) < 2) .Object@Fdisc <- c(0,0)
+  # 
+  # if(all(is.na(.Object@LR5))) .Object@LR5 <- c(0,0)
+  # if(all(is.na(.Object@LFR))) .Object@LFR <- c(0,0)
+  # if(all(is.na(.Object@Rmaxlen))) .Object@Rmaxlen <- c(1,1)
+  # if(all(is.na(.Object@Fdisc))) .Object@Fdisc <- c(0,0)
+  # 
+  # if (.hasSlot(.Object, "Size_area_1")) {
+  #   if (length(.Object@Size_area_1)==0) .Object@Size_area_1 <- .Object@Frac_area_1
+  #   if (all(is.na(.Object@Size_area_1))) .Object@Size_area_1 <- .Object@Frac_area_1
+  # }
+  # 
+  # .Object@seed=1
   .Object
 })
 
@@ -1161,10 +1166,10 @@ setMethod('summary', signature="MSE", function(object, ..., silent=FALSE, Refs=N
   PMlist <- unlist(list(...))
 
   if(length(PMlist) == 0) PMlist <- c("PNOF", "P50", "AAVY", "LTY")
-  if (class(PMlist) != 'character') stop("Must provide names of PM methods")
+  if (!methods::is(PMlist,'character')) stop("Must provide names of PM methods")
   # check
   for (X in seq_along(PMlist))
-    if (class(get(PMlist[X])) != "PM") stop(PMlist[X], " is not a valid PM method")
+    if (!methods::is(get(PMlist[X]), "PM")) stop(PMlist[X], " is not a valid PM method")
 
   if (!silent) message("Calculating Performance Metrics")
   storeMean <- vector('list', length(PMlist))
@@ -1328,7 +1333,7 @@ setMethod("summary",
             if ('all' %in% plots) plots <- c('TS', 'CAA', 'CAL', 'PD')
 
             Freq <- n <- Var2 <- NULL # cran check
-            if (class(object) != "Data") stop("Object must be class `Data`", call.=FALSE)
+            if (!methods::is(object, "Data")) stop("Object must be class `Data`", call.=FALSE)
 
             # Time-Series
             Year <- object@Year

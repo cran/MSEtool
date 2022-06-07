@@ -36,7 +36,7 @@ XL2OM <- function(name=NULL, cpars=NULL, msg=TRUE) {
     name <- fls
   }
   
-  if (class(name) != 'character') stop("file name must be provided", call.=FALSE)
+  if (!methods::is(name, 'character')) stop("file name must be provided", call.=FALSE)
   
   if (nchar(tools::file_ext(name)) == 0) {
     xl.fname1 <- paste0(name, ".xlsx")
@@ -112,12 +112,15 @@ XL2OM <- function(name=NULL, cpars=NULL, msg=TRUE) {
   }
   
   if (!is.null(cpars)) {
-    if (class(cpars) == "list") {
+    if (methods::is(cpars,"list")) {
       OM@cpars <- cpars
     } else {
       stop("'cpars' must be a list", call.=FALSE)
     }
   }
+  
+  OM <- CheckOM(OM)
+  
   # tt <- ChkObj(OM, FALSE)
   if (msg) {
     message('OM successfully imported\n')

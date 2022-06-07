@@ -13,13 +13,18 @@ plotquant<-function(x,p=c(0.05,0.25,0.75,0.95),yrs,qcol,lcol,addline=T,ablines=N
   ny<-length(yrs)
   qs<-apply(x,2,quantile,p=p[c(1,4)],na.rm=T)
   qsi<-apply(x,2,quantile,p=p[2:3],na.rm=T)
-  polygon(c(yrs,yrs[ny:1]),c(qs[1,],qs[2,ny:1]),border=NA,col='#b3ecff')
+  if (all(qs[1,]==qs[2,])) {
+    lines(yrs, qs[1,], lwd=2, col=qcol)
+  } else {
+    polygon(c(yrs,yrs[ny:1]),c(qs[1,],qs[2,ny:1]),border=NA,col='#b3ecff')
+    polygon(c(yrs,yrs[ny:1]),c(qsi[1,],qsi[2,ny:1]),border=NA,col=qcol)
+    lines(yrs,apply(x,2,quantile,p=0.5,na.rm=T),lwd=2,col="white")
+  }
 
-  polygon(c(yrs,yrs[ny:1]),c(qsi[1,],qsi[2,ny:1]),border=NA,col=qcol)
   if(!is.na(ablines[1]))abline(h=ablines,col='#99999980')
 
   if(addline)for(i in 1:2)lines(yrs,x[i,],col=lcol,lty=i)
-  lines(yrs,apply(x,2,quantile,p=0.5,na.rm=T),lwd=2,col="white")
+  
 }
 
 
@@ -69,7 +74,7 @@ plotquant<-function(x,p=c(0.05,0.25,0.75,0.95),yrs,qcol,lcol,addline=T,ablines=N
 plot.MMSE <- function(x=NULL, maxcol = 6, qcol = rgb(0.4, 0.8, 0.95), lcol = "dodgerblue4",
                       quants = c(0.05, 0.25, 0.75, 0.95), curyr = 2018, addline = FALSE, ...) {
   MMSE <- x
-  if (class(MMSE)!='MMSE') stop('Object must be class `MMSE`')
+  if (!methods::is(MMSE, 'MMSE')) stop('Object must be class `MMSE`')
   if(is.na(maxcol))maxcol=ceiling(length(MMSE@MPs)/0.5) # defaults to portrait 1:2
   MPs<-MMSE@MPs
   MPrefs<-MMSE@MPrefs

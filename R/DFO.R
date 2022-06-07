@@ -59,7 +59,7 @@ runCOSEWIC<-function(OM, ...){
 #' @export DFO_hist
 
 DFO_hist <- function(OM, panel= T,nsim=48) {
-  if (class(OM) != "OM") stop("Object must be class `OM`", call.=FALSE)
+  if (!methods::is(OM,"OM")) stop("Object must be class `OM`", call.=FALSE)
   if(length(OM@cpars)>0){
     message("cpars slot is specified, OM@nsim used for historical simulations")
     nsim<-OM@nsim
@@ -95,7 +95,7 @@ DFO_hist <- function(OM, panel= T,nsim=48) {
 #' @author T. Carruthers
 #' @export DFO_proj
 DFO_proj <- function(MSEobj,maxplot=6) {
-  if (class(MSEobj) != "MSE") stop("Object must be class `MSE`", call.=FALSE)
+  if (!methods::is(MSEobj,"MSE")) stop("Object must be class `MSE`", call.=FALSE)
   maxplot<-min(maxplot,MSEobj@nMPs)
   nsim<-MSEobj@nsim
   nMPs<-MSEobj@nMPs
@@ -135,7 +135,7 @@ DFO_proj <- function(MSEobj,maxplot=6) {
 #' @author T. Carruthers
 #' @export DFO_plot
 DFO_plot<-function(MSEobj,zero_origin=T){
-  if (class(MSEobj) != "MSE") stop("Object must be class `MSE`", call.=FALSE)
+  if (!methods::is(MSEobj, "MSE")) stop("Object must be class `MSE`", call.=FALSE)
   op<-par(mai=c(1,1,0.02,0.02))
   yend <- max(MSEobj@proyears - 4, 1):MSEobj@proyears
   POF<-apply(MSEobj@F_FMSY[,,yend],2,mean,na.rm=T)
@@ -170,7 +170,7 @@ DFO_plot<-function(MSEobj,zero_origin=T){
 #' @author T. Carruthers
 #' @export DFO_bar
 DFO_bar<-function(MSEobj,yres=10){
-  if (class(MSEobj) != "MSE") stop("Object must be class `MSE`", call.=FALSE)
+  if (!methods::is(MSEobj, "MSE")) stop("Object must be class `MSE`", call.=FALSE)
   sections<-(0:floor(MSEobj@proyears/yres))*yres
   nsec<-length(sections)-1
   op<-par(mfrow=c(nsec,1),mai=c(0.05,0.7,0.02,0.02),omi=c(0.6,0.35,0.01,0.01))
@@ -735,7 +735,7 @@ DFO_cosplot<-function(SSBd,qcol,lcol,Blims,yrs,quants=c(0.05,0.25,0.5,0.75,0.95)
 #' @export COSEWIC_Pplot
 COSEWIC_Pplot<-function(MSEobj,syear=2017,qcol='#FFCB62', quants=c(0.05,0.25,0.5,0.75,0.95)){
   lcol<-makeTransparent(qcol,85)
-  if(class(MSEobj)!="COSEWIC")stop("The MSE object you have provided is not of class COSEWIC,
+  if(!methods::is(MSEobj,"COSEWIC"))stop("The MSE object you have provided is not of class COSEWIC,
                                       please create a COSEWIC class MSE object using the function runCOSEWIC()")
   if(sum(MSEobj@MPs%in%c("NFref","FMSYref","curE"))<3) stop("This function requires an MSE for three specific MPs:
                                                                NFref,FMSYref and curE. Please create a COSEWIC class MSE object using the function runCOSEWIC()")
@@ -782,7 +782,7 @@ COSEWIC_Pplot<-function(MSEobj,syear=2017,qcol='#FFCB62', quants=c(0.05,0.25,0.5
 COSEWIC_Dplot<-function(MSEobj,syear=2017,qcol='#79F48D', quants=c(0.05,0.25,0.5,0.75,0.95),nGT=3){
 
   lcol<-makeTransparent(qcol,85)
-  if(class(MSEobj)!="COSEWIC")stop("The MSE object you have provided is not of class COSEWIC,
+  if(!methods::is(MSEobj, "COSEWIC")) stop("The MSE object you have provided is not of class COSEWIC,
                                       please create a COSEWIC class MSE object using the function runCOSEWIC()")
   if(sum(MSEobj@MPs%in%c("NFref","FMSYref","curE"))<2) stop("This function requires an MSE for three specific MPs:
                                                             NFref, FMSYref and curE. Please create a COSEWIC class MSE object using the function runCOSEWIC()")
@@ -827,7 +827,7 @@ COSEWIC_Dplot<-function(MSEobj,syear=2017,qcol='#79F48D', quants=c(0.05,0.25,0.5
 COSEWIC_Blow<-function(MSEobj,syear=2017,qcol=rgb(0.4,0.8,0.95), quants=c(0.05,0.25,0.5,0.75,0.95),nGT=3){
 
   lcol<-makeTransparent(qcol,85)
-  if(class(MSEobj)!="COSEWIC")stop("The MSE object you have provided is not of class COSEWIC,
+  if(!methods::is(MSEobj, "COSEWIC")) stop("The MSE object you have provided is not of class COSEWIC,
                                    please create a COSEWIC class MSE object using the function runCOSEWIC()")
   if(sum(MSEobj@MPs%in%c("NFref","FMSYref","curE"))<2) stop("This function requires an MSE for three specific MPs:
                                                             NFref, FMSYref and curE. Please create a COSEWIC class MSE object using the function runCOSEWIC()")
@@ -918,97 +918,6 @@ COSEWIC_Hplot<-function(MSEobj,syear=2017,qcol=rgb(0.4,0.8,0.95), quants=c(0.05,
   on.exit(par(op))
 }
 
-#' Subset an OM cpars slot
-#'
-#' Subset the custom parameters of an operating model by simulation and projection years 
-#'
-#' @param OM An object of class OM
-#' @param sims A logical vector of length \code{OM@@nsim} to either retain (TRUE) or remove (FALSE).
-#' Alternatively, a numeric vector indicating which simulations (from 1 to nsim) to keep.
-#' @param proyears If provided, a numeric to reduce the number of projection years (must be less than \code{OM@@proyears}).
-#' @return An object of class OM
-#' @seealso \link{Sub} for MSE objects, \link{SubOM} for OM components.
-#' @author T. Carruthers, Q. Huynh
-#' @export SubCpars
-SubCpars<-function(OM, sims = 1:OM@nsim, proyears = OM@proyears) {
-  
-  # Reduce the number of simulations
-  nsim_full <- OM@nsim
-  if(is.numeric(sims)) {
-    sims2 <- logical(nsim_full)
-    sims2[sims] <- TRUE
-  } else if(is.logical(sims) && length(sims) == nsim_full) {
-    sims2 <- sims
-  } else stop("Logical vector sims need to be of length ", nsim_full)
-  
-  if(any(!sims2) && sum(sims2) < nsim_full) {
-    message("Removing simulations: ", paste0(which(!sims2), collapse = " "))
-    OM@nsim <- sum(sims2)      
-    message("Set OM@nsim = ", OM@nsim)
-    
-    if(length(OM@cpars)) {
-      cpars <- OM@cpars
-      
-      subset_function <- function(xx, sims, cpars) {
-        x <- cpars[[xx]]
-        if(any(xx == c("CAL_bins", "MPA", "plusgroup", "CAL_binsmid", "binWidth", "AddIunits", "Wa", "Wb", "Data"))) {
-          return(x)
-        } else if(is.matrix(x)) {
-          return(x[sims, , drop = FALSE])
-        } else if(is.array(x)) {
-          if(length(dim(x)) == 3) return(x[sims, , , drop = FALSE])
-          if(length(dim(x)) == 4) return(x[sims, , , , drop = FALSE])
-          if(length(dim(x)) == 5) return(x[sims, , , , , drop = FALSE])
-        } else if(length(x) == length(sims)) {
-          return(x[sims])
-        } else return(x)
-      }
-      
-      OM@cpars <- lapply(names(cpars), subset_function, sims = sims2, cpars = cpars) %>% structure(names = names(cpars))
-    }
-  }
-  
-  # Reduce the number of projection years
-  proyears_full <- OM@proyears
-  if(proyears < proyears_full) {
-    message("Reducing the number of projection years from ", proyears_full, " to ", proyears)
-    OM@proyears <- proyears
-    
-    if(length(OM@cpars)) {
-      cpars_p <- OM@cpars
-      yr_diff <- proyears_full - proyears
-      
-      subset_proyears_function <- function(xx, yr_diff, cpars) {
-        x <- cpars[[xx]]
-        if(xx %in% c("Asize", "Find", "AddIbeta", "Data")) { # Matrices or arrays without projection year dimensions
-          return(x)
-        } else if(xx == "MPA") {
-          yr_remove <- (nrow(x) - yr_diff + 1):nrow(x)
-          return(x[-yr_remove, ])
-        } else if(is.matrix(x)) {
-          yr_remove <- (ncol(x) - yr_diff + 1):ncol(x)
-          return(x[, -yr_remove])
-        } else if(is.array(x)) {
-          
-          ldim <- length(dim(x))
-          yr_remove <- (dim(x)[ldim] - yr_diff + 1):dim(x)[ldim]
-          
-          if(ldim == 3) return(x[, , -yr_remove, drop = FALSE])
-          if(ldim == 4) return(x[, , , -yr_remove, drop = FALSE])
-          if(ldim == 5) return(x[, , , , -yr_remove, drop = FALSE])
-        } else {
-          return(x)
-        }
-      }
-      
-      OM@cpars <- lapply(names(cpars_p), subset_proyears_function, yr_diff = yr_diff, cpars = cpars_p) %>% structure(names = names(cpars_p))
-    }
-  } else if(proyears > proyears_full) {
-    message("Number of specified projection years is greater than OM@proyears. Nothing done.")
-  }
-
-  return(OM)
-}
 
 
 # =================== Reports =========================================================
@@ -1389,7 +1298,7 @@ Thresh_tab<-function(Ptab1){
 #' @export
 COSEWIC_tab<-function(MSEobj,rnd=0,GTs=c(3,6),syear=2017,nGT=3){
 
-  if(class(MSEobj)!="COSEWIC")stop("The MSE object you have provided is not of class COSEWIC,
+  if(!methods::is(MSEobj,"COSEWIC"))stop("The MSE object you have provided is not of class COSEWIC,
                                       please create a COSEWIC class MSE object using the function runCOSEWIC()")
   if(sum(MSEobj@MPs%in%c("NFref","FMSYref","curE"))<2) stop("This function requires an MSE for three specific MPs:
                                                             NFref, FMSYref and curE. Please create a COSEWIC class MSE object using the function runCOSEWIC()")

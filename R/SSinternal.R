@@ -209,10 +209,19 @@ SS_stock <- function(i, replist, mainyrs, nyears, proyears, nsim, single_sex = T
 
   cpars_bio <- list()
 
-  ###### R0 - in multiple season models, the i-th morph recruits appear in the i-th season
-  ###### Males are indexed morphs 5-8 in a 4-season model. Morph2 re-maps to 1-4
-  N_at_age <- dplyr::filter(replist$natage, Sex == i, `Beg/Mid` == "B", Era == "VIRG") %>%
-    dplyr::mutate(Morph2 = Morph - (i - 1) * replist$nseasons) %>% dplyr::filter(Morph2 == Seas)
+  ###### R0
+  if(replist$nsexes > 1) {
+    # For the 2 sex model with multiple seasons used to develop this code: 
+    # the i-th morph recruits appear in the i-th season Males are indexed morphs 5-8 in a 4-season model. 
+    # Morph2 re-maps males to 1-4
+    N_at_age <- dplyr::filter(replist$natage, Sex == i, `Beg/Mid` == "B", Era == "VIRG") %>%
+      dplyr::mutate(Morph2 = Morph - (i - 1) * replist$nseasons) %>% dplyr::filter(Morph2 == Seas)
+  } else {
+    # For the single-sex model with multiple seasons used to develop this code: 
+    # the annual recruits entering the population is found by matching BirthSeas to Seas
+    N_at_age <- dplyr::filter(replist$natage, Sex == i, `Beg/Mid` == "B", Era == "VIRG") %>%
+      dplyr::filter(BirthSeas == Seas)
+  }
   Stock@R0 <- N_at_age$`0` %>% sum(na.rm = TRUE)
 
   ###### maxage
@@ -270,7 +279,6 @@ SS_stock <- function(i, replist, mainyrs, nyears, proyears, nsim, single_sex = T
   # Length at age
   Len_age_df <- dplyr::filter(replist$growthseries, Morph == i, Yr %in% mainyrs)
   if(nrow(Len_age_df)>0) { # Would do time-varying
-    Len_age_df <- dplyr::filter(replist$growthseries, Morph == i, Yr %in% mainyrs)
     Len_age <- do.call(rbind, lapply(0:Stock@maxage, function(x) parse(text = paste0("Len_age_df$`", x, "`")) %>% eval()))
     if(ncol(Len_age) == (nyears - 1)) Len_age <- cbind(Len_age, endgrowth$Len_Beg)
   } else {
@@ -317,6 +325,8 @@ SS_stock <- function(i, replist, mainyrs, nyears, proyears, nsim, single_sex = T
   # Maturity at age - technically fecundity = 0 for males in SS.
   # We will set male maturity equal to female maturity
   # but MOM@SexPars will also effectively set male maturity = 0.
+  if(any(endgrowth$Age_Mat < 0)) endgrowth$Age_Mat <- abs(endgrowth$Age_Mat) # Should all be 1's
+  if(any(endgrowth$Len_Mat < 0)) endgrowth$Len_Mat <- abs(endgrowth$Len_Mat)
   Mat_age <- endgrowth$Len_Mat * endgrowth$Age_Mat
   cpars_bio$Mat_age <- array(Mat_age, c(n_age, allyears, nsim)) %>% aperm(c(3, 1, 2))
 
@@ -329,14 +339,25 @@ SS_stock <- function(i, replist, mainyrs, nyears, proyears, nsim, single_sex = T
     # cpars_bio$initD <- rep(initD, nsim)
     # Modify rec devs so N-at-age 1 is correct
 
-    # numbers-at-age in initial year
-    n_init <- replist$natage %>% dplyr::filter(Sex==i, Yr==mainyrs[1], `Beg/Mid`=='B', Seas == 1)
+    # numbers-at-age in initial year and unfished conditions
+    n_init <- replist$natage %>% dplyr::filter(Sex == i, Yr == mainyrs[1], `Beg/Mid`=='B') 
+    # If multiple season model, age-0 recruits may enter over the course of each season
+    # Get the initial age-0 abundance by summing across seasons
+    if(nrow(n_init) > 1) {
+      n_age0 <- dplyr::filter(n_init, BirthSeas == Seas) %>% select("0") %>% sum()
+      n_init <- dplyr::filter(n_init, Seas == 1)
+      n_init$`0` <- n_age0
+    }
     cols <- which(colnames(n_init) %in% 0:Stock@maxage)
     n_init <- n_init %>% dplyr::select(dplyr::all_of(cols)) %>% colSums()
-
-    n_virg <- replist$natage %>%
-      dplyr::filter(Sex == i, Era == "VIRG", `Beg/Mid` == 'B', Seas == 1) %>%
-      dplyr::select(dplyr::all_of(cols)) %>% colSums()
+    
+    n_virg <- replist$natage %>% dplyr::filter(Sex == i, Era == "VIRG", `Beg/Mid` == 'B')
+    if(nrow(n_virg) > 1) {
+      n_age0 <- dplyr::filter(n_virg, BirthSeas == Seas) %>% select("0") %>% sum()
+      n_virg <- dplyr::filter(n_virg, Seas == 1)
+      n_virg$`0` <- n_age0
+    }
+    n_virg <- n_virg %>% dplyr::select(dplyr::all_of(cols)) %>% colSums()
 
     adjust <- as.numeric(n_init/n_virg)# *  cpars_bio$Perr_y[1,n_age:1])
     cpars_bio$Perr_y[, n_age:1] <- matrix(adjust, nrow = nsim, ncol = n_age, byrow = TRUE)
@@ -470,7 +491,7 @@ SS_fleet <- function(ff, i, replist, Stock, mainyrs, nyears, proyears, nsim, sin
   }
 
   wt <- dplyr::filter(replist$ageselex, Fleet == ff, Sex == i, Factor == "bodywt", Seas == 1)
-  wt_morphs <- wt$Morph %>% table()
+  wt_morphs <- wt$Morph %>% unique()
   if(length(wt_morphs) > 1) wt <- dplyr::filter(wt, Morph == wt_morphs[1])
   wt <- vapply(0:Stock@maxage, function(x) wt[match(mainyrs, wt$Yr), parse(text = paste0("\"", x, "\"")) %>% eval()], numeric(length(mainyrs)))
 
@@ -512,7 +533,7 @@ SS_fleet <- function(ff, i, replist, Stock, mainyrs, nyears, proyears, nsim, sin
   Fdisc <- mean(Fdisc2[, 1:nyears], na.rm = TRUE)
  
   # ---- empirical weight-at-age for catches ----
-  if (class(replist$wtatage) != 'logical') {
+  if (!methods::is(replist$wtatage, 'logical')) {
     wt_at_age_c_df <- replist$wtatage %>% dplyr::filter(abs(Yr) %in% mainyrs, Sex==i, Fleet==ff)
     
     if(nrow(wt_at_age_c_df)) {
@@ -539,6 +560,7 @@ SS_fleet <- function(ff, i, replist, Stock, mainyrs, nyears, proyears, nsim, sin
   Fleet <- new("Fleet")
   Fleet@Name <- replist$FleetNames[ff]
   Fleet@nyears <- length(mainyrs)
+  Fleet@DR <- rep(0, 2) # Should be zero since we have retention in cpars$retA and cpars$retL
   Fleet@Spat_targ <- rep(1, 2)
   Fleet@EffYears <- 1:nyears
   Fleet@EffLower <- Fleet@EffUpper <- Find
@@ -574,7 +596,6 @@ SS_fleet <- function(ff, i, replist, Stock, mainyrs, nyears, proyears, nsim, sin
   cpars_fleet$retA <- retAout
   cpars_fleet$retL <- replicate(nsim, retL) %>% aperm(c(3, 1, 2))
   cpars_fleet$SLarray <- replicate(nsim, SLarray) %>% aperm(c(3, 1, 2))
-  cpars_fleet$DR <- rep(0, nsim) # Should be zero since we have retention in cpars$retL
   cpars_fleet$Find <- Find %>% matrix(nsim, length(mainyrs), byrow = TRUE)
 
   cpars_fleet$Wt_age_C <- wt_at_age_c

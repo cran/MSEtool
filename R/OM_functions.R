@@ -14,7 +14,7 @@
 #' @seealso \link{Sub} for subsetting MSE output and \link{SubCpars} for subsetting by simulation and projection years.
 #' @export
 SubOM <- function(OM, Sub=c("Stock", "Fleet", "Obs", "Imp")) {
-  if (class(OM) !="OM") stop("OM must be of class OM ", call.=FALSE)
+  if (!methods::is(OM,"OM")) stop("OM must be of class OM ", call.=FALSE)
   Sub <- match.arg(Sub)
   temp <- new(Sub)
 
@@ -71,9 +71,9 @@ SubOM <- function(OM, Sub=c("Stock", "Fleet", "Obs", "Imp")) {
 #'
 #' @export
 Replace <- function(OM, from,Sub=c("Stock", "Fleet", "Obs", "Imp"),  Name=NULL, silent=FALSE) {
-  if (class(OM) =="character") OM <- get(OM)
-  if (class(OM) !="OM") stop("OM must be of class OM ", call.=FALSE)
-  if (class(from) =="character") from <- get(from)
+  if (methods::is(OM, "character")) OM <- get(OM)
+  if (!methods::is(OM, "OM")) stop("OM must be of class OM ", call.=FALSE)
+  if (methods::is(from,"character")) from <- get(from)
   if (!class(from) %in% c("OM", "Stock", "Fleet", "Obs", "Imp"))
     stop("from must be class `OM`, `Stock`, `Fleet`, `Obs`, `Imp`", call.=FALSE)
 
@@ -82,7 +82,7 @@ Replace <- function(OM, from,Sub=c("Stock", "Fleet", "Obs", "Imp"),  Name=NULL, 
   Obs <- SubOM(OM, "Obs")
   Imp <- SubOM(OM, "Imp")
 
-  if (class(from) == "OM") {
+  if (methods::is(from, "OM")) {
     Sub <- match.arg(Sub, several.ok=TRUE)
     if (length(Sub)==4) warning("Replacing all OM components. Probably not what you want to do ...")
 
@@ -235,7 +235,7 @@ Replace <- function(OM, from,Sub=c("Stock", "Fleet", "Obs", "Imp"),  Name=NULL, 
 #' @param OM An object of class 'OM'
 #' @param dist Character. Should parameters be sampled from a uniform (`unif`) or
 #' normal (`norm`) distribution?
-#' @param filterMK Logical. Should the predicted M and K parameters be filtered within the range specified in `inpars`or `OM`?
+#' @param filterMK Logical or numeric specifying percentiles. See Details. 
 #' e.g. `OM@M` and `OM@K`. Empty slots or slots with all values of 0 are considered unknown.
 #' @param plot Logical. Should the plot be produced?
 #' @param Class Optional higher order taxonomic information
@@ -252,11 +252,19 @@ Replace <- function(OM, from,Sub=c("Stock", "Fleet", "Obs", "Imp"),  Name=NULL, 
 #' @references Thorson, J. T., S. B. Munch, J. M. Cope, and J. Gao. 2017.
 #' Predicting life history parameters for all fishes worldwide. Ecological Applications. 27(8): 2262--2276
 #' @source \url{https://github.com/James-Thorson-NOAA/FishLife}
+#' 
+#' @details 
+#' ## filterMK
+#' If filterMK is logical: Should the predicted M and K parameters be filtered within the range specified in `inpars`or `OM`?
+#' 
+#' Otherwise, filterMK must be numeric vector of length(2) specifying lower and upper percentiles that will be applied 
+#' to the predicted M or K values
+#' 
 #' @export
 LH2OM <- function(OM, dist=c("unif", "norm"), filterMK=FALSE, plot=TRUE,
                   Class = "predictive", Order = "predictive",
                   Family = "predictive", msg=TRUE, db=MSEtool::LHdatabase) {
-  if (class(OM) != 'OM') stop("OM must be class 'OM'")
+  if (!methods::is(OM, 'OM')) stop("OM must be class 'OM'")
   dist <- match.arg(dist)
   set.seed(OM@seed)
   if (length(OM@nsim)<1) OM@nsim <- 48
@@ -409,23 +417,43 @@ predictLH <- function(inpars=list(), Genus="predictive", Species="predictive", n
     }
   }
   multi <- 100
-  filterM <- filterK <- FALSE
-  if (prod(c("K", "M") %in% names) & filterMK & !(all(is.na(inpars_1$K)) || all(is.na(inpars_1$M)))) {
+  if (is.logical(filterMK)) {
+    filter <- 'OM'
+    # filter M or K by bounds specified in OM
+    filterM <- filterK <- FALSE
+    if (prod(c("K", "M") %in% names) & filterMK & !(all(is.na(inpars_1$K)) || all(is.na(inpars_1$M)))) {
+      if (all(is.na(inpars$M))) {
+        filterM <- TRUE
+        if (msg) message_info("Filtering predicted M within bounds:", paste0(inpars_1$M, collapse = '-'))
+      }
+      if (all(is.na(inpars$K))) {
+        filterK <- TRUE
+        if (msg) message_info("Filtering predicted K within bounds:", paste0(inpars_1$K, collapse = '-'))
+      }
+      multi <- 500
+    }
+  }
+  if (is.numeric(filterMK)) {
+    # filter by percentile range
+    filter <- 'perc'
+    if (length(filterMK) !=2) 
+      stop('filterMK must be numeric values of length 2 (lower and upper percentiles) OR logical')
     if (all(is.na(inpars$M))) {
       filterM <- TRUE
-      if (msg) message("Filtering predicted M within bounds: ", paste0(inpars_1$M, " "))
+      if (msg) message_info("Filtering predicted M within percentiles:", paste0(filterMK, collapse = '-'))
     }
     if (all(is.na(inpars$K))) {
       filterK <- TRUE
-      if (msg) message("Filtering predicted K within bounds: ", paste0(inpars_1$K, " "))
+      if (msg) message_info("Filtering predicted K within percentiles:", paste0(filterMK, collapse = '-'))
     }
     multi <- 500
   }
 
+
   # get predictions from FishLife
   taxa <- gettaxa(Class, Order, Family, Genus, Species, msg=msg)
   if (is.null(taxa)) return(NULL)
-  if (class(db) != "list") stop("db must be database list from FishLife", call.=FALSE)
+  if (!methods::is(db, "list")) stop("db must be database list from FishLife", call.=FALSE)
   Which <- grep(taxa, db$ParentChild_gz[,'ChildName'])
   mu <- db$ParHat$beta_gj[Which,]
   covar <- db$Cov_gjj[Which,,]
@@ -485,25 +513,38 @@ predictLH <- function(inpars=list(), Genus="predictive", Species="predictive", n
   ind <- Out$L50 > 0.95*Out$Linf
   Out <- Out[!ind,]
 
-  if(filterK) {
-    ind <- Out$K > min(inpars_1$K) & Out$K < max(inpars_1$K)
-    if (sum(ind)<2) {
-      warning('No samples of K within bounds: ', paste(as.character(inpars_1$K), collapse=" "),
-              "\nIgnoring bounds on K")
-    } else {
+  if (filter=='OM') {
+    if(filterK) {
+      ind <- Out$K > min(inpars_1$K) & Out$K < max(inpars_1$K)
+      if (sum(ind)<2) {
+        warning('No samples of K within bounds: ', paste(as.character(inpars_1$K), collapse=" "),
+                "\nIgnoring bounds on K")
+      } else {
+        Out <- Out[ind,]
+      }
+      
+    }
+    if (filterM) {
+      ind <- Out$M > min(inpars_1$M) & Out$M < max(inpars_1$M)
+      if (sum(ind)<2) {
+        warning('No samples of M within bounds: ', paste(as.character(inpars_1$M), collapse=" "),
+                "\nIgnoring bounds on M")
+      } else {
+        Out <- Out[ind,]
+      }
+    }
+  }
+  if (filter=='perc') {
+    if(filterK) {
+      ind <- Out$K > quantile(Out$K, filterMK[1]) & Out$K < quantile(Out$K, filterMK[2])
       Out <- Out[ind,]
     }
+    if (filterM) {
+      ind <- Out$M > quantile(Out$M, filterMK[1]) & Out$M < quantile(Out$M, filterMK[2])
+      Out <- Out[ind,]
+    }
+  }
 
-  }
-  if (filterM) {
-    ind <- Out$M > min(inpars_1$M) & Out$M < max(inpars_1$M)
-    if (sum(ind)<2) {
-      warning('No samples of M within bounds: ', paste(as.character(inpars_1$M), collapse=" "),
-              "\nIgnoring bounds on M")
-    } else {
-      Out <- Out[ind,]
-    }
-  }
 
   if(nrow(Out) < nsamp) {
     warning("Could not generate ", nsamp, ' samples within specified bounds. Sampling with replacement')
@@ -601,7 +642,7 @@ gettaxa <- function(Class = "predictive", Order = "predictive",
   }
   
   if (msg)
-    message('Loading FishBase database')
+    message_info('Loading FishBase database')
   Taxa_Table <- suppressMessages(rfishbase::load_taxa())
   Species2 <- strsplit(Taxa_Table$Species, " ")
   
@@ -664,16 +705,20 @@ gettaxa <- function(Class = "predictive", Order = "predictive",
   fam_gen_sp <- tolower(paste(match_taxonomy[3:5], collapse = '_'))
   nm_ind <- which(grepl(fam_gen_sp, tolower(ParentChild_gz$ChildName)))
   fullname <- gsub("_", " ", ParentChild_gz$ChildName[nm_ind])
+  if (length(fullname)>1)
+    fullname <- fullname[length(fullname)]
   
   ind <- !grepl("predictive", strsplit(fullname, " ")[[1]])
   if (all(!ind)) {
-    if (msg) message("Predicting from all species in FishBase")
+    if (msg) message_info("Predicting from all species in FishBase")
   } else if (any(!ind)) {
-    if (msg) message("Closest match: ", fullname)
+    if (msg) message_info("Closest match: ", fullname)
   } else {
-    if (msg) message("Species match: ", fullname)
+    if (msg) message_info("Species match: ", fullname)
   }
   match_taxonomy = unique(as.character(Add_predictive(ParentChild_gz$ChildName[nm_ind])))
+  if (length(match_taxonomy)>1)
+    match_taxonomy <- match_taxonomy[length(match_taxonomy)]
   match_taxonomy
 }
 
@@ -686,6 +731,172 @@ Add_predictive = function(char_vec) {
     return_vec[i] = paste(c(vec, rep("predictive", 5 - length(vec))), collapse = "_")
   }
   return(return_vec)
+}
+
+
+
+
+#' Check OM object is complete
+#'
+#' @param OM An object of class `OM` 
+#' @param msg Logical. Display messages?
+#' @param stop_if_missing Logical. Stop with error is values are missing and there is no default?
+#'
+#' @return The OM object with default values (if needed)
+#' @export
+#'
+#' @examples
+#' testOM <- CheckOM(testOM)
+CheckOM <- function(OM, msg=TRUE, stop_if_missing=TRUE) {
+  if (msg)
+    message_info('Checking OM for completeness')
+  
+  nms <- slotNames('OM')
+  not_needed <-c("Name", "Agency", "Region", "Sponsor", "Latitude", 'Longitude', 'cpars',
+                 'Source', 'Common_Name', 'Species', 'Misc')
+  nms <- nms[!nms%in%not_needed]
+  
+  for (slot in nms) {
+    OM <- checkSlot(slot, OM, msg=msg, stop_if_missing=stop_if_missing) 
+  }
+  OM
+}
+
+
+checkSlot <- function(slot, OM, msg=TRUE, stop_if_missing=TRUE) {
+  
+  # additional
+  Var <- NULL # CRAN check hack
+  df2 <- data.frame(Var=c('nsim', 'interval', 'proyears', 'reps', 'pstar',
+                          'maxF', 'seed'),
+                    Dim=NA,
+                    Desc=NA,
+                    Type=NA,
+                    DimOM=c(1,1, 1,1, 1,1,1),
+                    Default=c('48', '1', '50', '1', '0.5','0.8', '101'),
+                    Comment=NA)
+  df <- dplyr::bind_rows(cpars_info, df2)
+  df <- dplyr::filter(df, Var==slot)
+  if (nrow(df)>1) df <- df[1,]
+  
+  val <- methods::slot(OM, slot)
+  if(length(val)==0) {
+    # slot is missing value - check cpars
+    cpars_val <- OM@cpars[[slot]]
+    if (!is.null(cpars_val)) {
+      # values in cpars
+      methods::slot(OM, slot) <- range(cpars_val)
+    } else {
+      # missing - check for default
+      OM <- checkDefault(OM, slot, df, msg, stop_if_missing)  
+    }
+    
+  }
+  # check length 
+  val <- methods::slot(OM, slot)
+  
+  if (length(val)==0) return(OM) # will have stopped with error unless stop_if_missing=FALSE
+  
+  if (!is.na(df$DimOM)) {
+    if (length(val) != df$DimOM) { # check for correct length
+      if (length(val)==1 & df$DimOM==2) {
+        if (msg) 
+          message_info(
+            'slot', slot, 'has only one value', paste0('(', val, '). Using this value for both lower and upper bounds.')
+          )
+        methods::slot(OM, slot) <- rep(val, 2)
+      }
+      if (length(val)==2 & df$DimOM==1) {
+        if (msg) 
+          message_info(
+            'slot', slot, 'has two values, but only one required. Using first value', paste0('(', val[1], ').')
+          )
+        methods::slot(OM, slot) <- val
+      }
+      if (length(val)>2 & df$DimOM<=2) {
+        n <- df$DimOM
+        if (msg) 
+          message_info(
+            'slot', slot, 'has more than', n, 'values. Using first ', n, 'value(s)', paste0('(', val[1:n], ').')
+          )
+        methods::slot(OM, slot) <- val[1:n]
+      }
+    }
+  }
+  
+  # check for NAs
+  if (all(is.na(val))) {
+    # slot is missing value - check cpars
+    cpars_val <- OM@cpars[[slot]]
+    if (!is.null(cpars_val)) {
+      # values in cpars
+      methods::slot(OM, slot) <- range(cpars_val)
+    } else {
+      # missing - check for default
+      OM <- checkDefault(OM, slot, df, msg, stop_if_missing)  
+    }
+  }
+  
+  if (any(is.na(val))) {
+    # is it a biascv slot?
+    if (grepl('biascv',slot)) {
+      # always length 1
+      methods::slot(OM, slot) <- val[1]
+    } else {
+      # otherwise - repeat the same value 
+      methods::slot(OM, slot) <- val[!is.na(val)]
+    }
+  }
+    
+  
+  OM
+}
+
+
+checkDefault <- function(OM,slot, df, msg=TRUE, stop_if_missing=TRUE) {
+  if (nrow(df)>1) df <- df[1,]
+  default <- df$Default
+  if (length(default)<1) default <- NA
+  
+  if (nrow(df)==0 | is.na(default)) {
+    
+    # parameter calculated internally
+    growth_pars <- c('Linf', 'K', 't0')
+    if (slot %in% growth_pars & !is.null(OM@cpars$Len_age)) {
+      if (msg) {
+        message_info(
+        'slot', slot, 'is missing value(s). Will be calculated from `OM@cpars$Len_age`'
+        )
+      }
+      
+    } else {
+      # no default
+      if (stop_if_missing)
+        stop('Slot ', slot, ' is missing required value(s)', call.=FALSE)
+      
+    }
+    
+  } else if (grepl('`', default)) {
+    # it's code
+    code <- gsub('`', '', default)
+    methods::slot(OM, slot) <- as.numeric(eval(parse(text=code)))
+    if (msg) 
+      message_info(
+        'slot', slot, 'is missing value(s). Using default value of:', methods::slot(OM, slot)
+      )
+  } else if (grepl('TRUE', default) | grepl('FALSE', default)) {
+    # it's a logical
+    methods::slot(OM, slot) <- as.logical(default)
+  } else {
+    # it's numeric
+    default <- as.numeric(default)
+    methods::slot(OM, slot) <- rep(default, df$DimOM)
+    if (msg) 
+      message_info(
+        'slot', slot, 'is missing value(s). Using default value of:', default
+      )
+  }
+  OM
 }
 
 

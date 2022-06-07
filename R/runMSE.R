@@ -3,10 +3,11 @@
 #
 Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   # ---- Initial Checks and Setup ----
-  if (class(OM) == 'OM') {
+  if (methods::is(OM,'OM')) {
     if (OM@nsim <=1) stop("OM@nsim must be > 1", call.=FALSE)
+    OM <- CheckOM(OM, msg=!silent)
 
-  } else if (class(OM) == 'Hist') {
+  } else if (methods::is(OM,'Hist')) {
     if (!silent) message("Using `Hist` object to reproduce historical dynamics")
 
     # --- Extract cpars from Hist object ----
@@ -23,8 +24,8 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   }
 
   # ---- Set up parallel processing ----
-  ncpus <- set_parallel(any(parallel))
-
+  ncpus <- set_parallel(any(unlist(parallel)))
+  
   set.seed(OM@seed) # set seed for reproducibility
   nsim <- OM@nsim # number of simulations
   nyears <- OM@nyears # number of historical years
@@ -399,6 +400,10 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   B0_y[] <- sapply(MSYrefsYr, function(x) x["B0", ]) %>% t()
   SSB0_y[] <- sapply(MSYrefsYr, function(x) x["SB0", ]) %>% t()
   VB0_y[] <- sapply(MSYrefsYr, function(x) x["VB", ]/x["VB_VB0", ]) %>% t()
+  
+  if (any(FMSY_y == 0)) {
+    message_warn("FMSY = 0 for some simulations and years.")
+  }
 
   # --- MSY reference points ----
   MSYRefPoints <- sapply(1:nsim, CalcMSYRefs, MSY_y=MSY_y, FMSY_y=FMSY_y,
@@ -479,7 +484,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   # find the q that gives current stock depletion - optVB = depletion for vulnerable biomass else SB
   if (!is.null(SampCpars$qs)) {
     if(!silent)
-      message("Skipping optimization for depletion - using catchability (q) from OM@cpars.")
+      message_info("Skipping optimization for depletion - using catchability (q) from OM@cpars.")
     qs <- SampCpars$qs
   } else {
     if(!silent)
@@ -511,8 +516,8 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   # If q has hit bound, re-sample depletion and try again. Tries 'ntrials' times and then alerts user
   if (length(probQ) > 0) {
     Err <- TRUE
-    if(!silent) message(Nprob,' simulations have final biomass that is not close to sampled depletion')
-    if(!silent) message('Re-sampling depletion, recruitment error, and fishing effort')
+    if(!silent) message_info(Nprob,' simulations have final biomass that is not close to sampled depletion')
+    if(!silent) message_info('Re-sampling depletion, recruitment error, and fishing effort')
 
     count <- 0
     OM2 <- OM
@@ -560,14 +565,14 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
       tooHigh <- length(which(qs < min(LimBound)))
       prErr <- length(probQ)/nsim
       if (prErr > fracD & length(probQ) > 1) {
-        if (length(tooLow) > 0) message(tooLow, " sims can't get down to the lower bound on depletion")
-        if (length(tooHigh) > 0) message(tooHigh, " sims can't get to the upper bound on depletion")
-        if(!silent) message("More than ", fracD*100, "% of simulations can't get to the specified level of depletion with these Operating Model parameters")
+        if (length(tooLow) > 0) message_info(tooLow, " sims can't get down to the lower bound on depletion")
+        if (length(tooHigh) > 0) message_info(tooHigh, " sims can't get to the upper bound on depletion")
+        if(!silent) message_info("More than ", fracD*100, "% of simulations can't get to the specified level of depletion with these Operating Model parameters")
         stop("Change OM@seed and try again for a complete new sample, modify the input parameters, or increase OM@cpars$control$ntrials (default 50)")
       } else {
-        if (length(tooLow) > 0) message(tooLow, " sims can't get down to the lower bound on depletion")
-        if (length(tooHigh) > 0) message(tooHigh, " sims can't get to the upper bound on depletion")
-        if(!silent) message("More than ", 100-fracD*100, "% simulations can get to the sampled depletion.\nContinuing")
+        if (length(tooLow) > 0) message_info(tooLow, " sims can't get down to the lower bound on depletion")
+        if (length(tooHigh) > 0) message_info(tooHigh, " sims can't get to the upper bound on depletion")
+        if(!silent) message_info("More than ", 100-fracD*100, "% simulations can get to the sampled depletion.\nContinuing")
       }
     }
   }
@@ -802,6 +807,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   }
 
   StockPars$Blow <- Blow
+  
   # --- Calculate Reference Yield ----
   if(!silent) message("Calculating reference yield - best fixed F strategy")
   if (!snowfall::sfIsRunning()) {
@@ -965,7 +971,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   StockPars$VBiomass <- VBiomass
   StockPars$N <- N
 
-  if (class(SampCpars$Data)=="Data") {
+  if (methods::is(SampCpars$Data, "Data")) {
     # real data has been passed in cpars
     updatedData <- AddRealData(SimData=Data,
                                RealData=SampCpars$Data,
@@ -1079,17 +1085,9 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
                      extended=FALSE, checkMPs=TRUE) {
 
   # ---- Setup ----
-  if (class(Hist) !='Hist')
+  if (!methods::is(Hist,'Hist'))
     stop('Must provide an object of class `Hist`')
   
-  if (length(parallel) < length(MPs)) {
-    if (length(parallel) > 1) {
-      stop("length(parallel) must be equal to length(MPs)")
-    } else {
-      parallel <- rep(parallel, length(MPs))
-    }
-  }
-
   OM <- Hist@OM
   set.seed(OM@seed) # set seed for reproducibility
   nsim <- OM@nsim # number of simulations
@@ -1106,17 +1104,44 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
   if (checkMPs)
     MPs <- CheckMPs(MPs=MPs, silent=silent)
 
+  # ---- Set up parallel processing of MPs ---
+  runparallel <- FALSE 
+  if (any(parallel==TRUE)) runparallel <- TRUE
+  if (methods::is(parallel, 'list')) runparallel <- TRUE
+
   nMP <- length(MPs)  # the total number of methods used
   if (nMP < 1) stop("No valid MPs found", call.=FALSE)
 
   isrunning <- snowfall::sfIsRunning()
-  if (all(!parallel) & isrunning) snowfall::sfStop()
+  if (!runparallel & isrunning) snowfall::sfStop()
 
-  if (any(parallel)) {
+  if (runparallel) {
     if (!isrunning) setup()
     Export_customMPs(MPs)
   }
-
+  
+  parallel_in <- parallel
+  if (runparallel) parallel <- rep(TRUE, nMP)
+  if (!runparallel) parallel <- rep(FALSE, nMP)
+  
+  # Don't run MSEtool MPs in parallel
+  mp_ns <- sapply(MPs, find)
+  msemmp <- grep('MSEtool', mp_ns)
+  parallel[msemmp] <- FALSE
+  
+  # Don't run DLMtool MPs in parallel except LBSPR
+  dlmmp <- grep('DLMtool', mp_ns)
+  parallel[dlmmp] <- FALSE
+  if (any(as.logical(parallel_in)) )
+    parallel[grep('LBSPR', MPs)] <- TRUE
+  
+  # Manually specified MPs
+  if (methods::is(parallel_in, 'list')) {
+    parallel_in <- data.frame(parallel_in)
+    par_mps <- names(parallel_in)
+    parallel[match(par_mps, MPs)] <- unlist(parallel_in[1,])
+  }  
+  
   # ---- Set Management Interval for each MP ----
   if (length(interval) != nMP) interval <- rep(interval, nMP)[1:nMP]
   if (!all(interval == interval[1])) {
@@ -1317,9 +1342,15 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
     VBiomass_P[SAYR] <- Biomass_P[SAYR] * V_P[SAYt]  # Calculate vulnerable biomass
     SSN_P[SAYR] <- N_P[SAYR] * StockPars$Mat_age[SAY1]  # Calculate spawning stock numbers
     SSB_P[SAYR] <- N_P[SAYR] * StockPars$Fec_Age[SAY1]
-
+    
     StockPars$N_P <- N_P
     # -- Apply MP in initial projection year ----
+    Data_MP@Misc$StockPars <- StockPars
+    Data_MP@Misc$StockPars$CB_Pret <- CB_Pret
+    Data_MP@Misc$StockPars$Biomass_P <- Biomass_P
+    Data_MP@Misc$StockPars$SSB_P <- SSB_P
+    Data_MP@Misc$StockPars$VBiomass_P <- VBiomass_P
+    Data_MP@Misc$StockPars$N_P <- N_P
     runMP <- applyMP(Data=Data_MP, MPs = MPs[mm], reps = reps, silent=TRUE, parallel = parallel[mm])  # Apply MP
 
     MPRecs <- runMP[[1]][[1]] # MP recommendations
@@ -1496,7 +1527,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
       VBiomass_P[SAYR] <- Biomass_P[SAYR] * V_P[SAYt]  # Calculate vulnerable biomass
       SSN_P[SAYR] <- N_P[SAYR] * StockPars$Mat_age[SAYt]  # Calculate spawning stock numbers
       SSB_P[SAYR] <- N_P[SAYR] * StockPars$Fec_Age[SAYt]  # Calculate spawning stock biomass
-
+      
       StockPars$N_P <- N_P
       # --- An update year - update data and run MP ----
       if (y %in% upyrs) {
@@ -1511,7 +1542,12 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
                               upyrs, interval, y, mm,
                               Misc=Data_p@Misc, RealData,
                               Sample_Area=ObsPars$Sample_Area)
-
+        
+        Data_MP@Misc$StockPars$CB_Pret <- CB_Pret
+        Data_MP@Misc$StockPars$Biomass_P <- Biomass_P
+        Data_MP@Misc$StockPars$SSB_P <- SSB_P
+        Data_MP@Misc$StockPars$VBiomass_P <- VBiomass_P
+        Data_MP@Misc$StockPars$N_P <- N_P
 
         # --- apply MP ----
         runMP <- applyMP(Data=Data_MP, MPs = MPs[mm], reps = reps, silent=TRUE, parallel = parallel[mm])  # Apply MP
@@ -1758,7 +1794,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
 #' @param Hist Should model stop after historical simulations? Returns an object of
 #' class 'Hist' containing all historical data
 #' @param silent Should messages be printed out to the console?
-#' @param parallel Logical. Should the MSE be run using parallel processing? Can be a vector of length(MPs)
+#' @param parallel Logical. Should the MSE be run using parallel processing? See Details for more information. 
 #' @param extended Logical. Return extended projection results?
 #' if TRUE, `MSE@Misc$extended` is a named list with extended data
 #' (including historical and projection by area), and extended version of `MSE@Hist`
@@ -1767,6 +1803,13 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
 #'
 #' @describeIn runMSE Run the Historical Simulations and Forward Projections
 #'  from an object of class `OM
+#' @details 
+#' ## Running in Parallel
+#' For simple MPs, running in parallel can actually lead to an increase in computation time, due to the overhead in sending the 
+#' information over to the cores. Consequently, the data-limied MPs in DLMtool and the reference MPs in MSEtool are not run using parallel processing. 
+#' All other MPs, including custom MPs, will be run in parallel if argument is TRUE.
+#' To individually control which MPs run in parallel, `parallel` can be a named list of logical values, e.g., `parallel=list(AvC=TRUE)`.
+#' 
 #'
 #' @return Functions return objects of class \linkS4class{Hist} or \linkS4class{MSE}
 #' \itemize{
@@ -1779,10 +1822,10 @@ runMSE <- function(OM=MSEtool::testOM, MPs = NA, Hist=FALSE, silent=FALSE,
                    parallel=FALSE, extended=FALSE, checkMPs=TRUE) {
 
   # ---- Initial Checks and Setup ----
-  if (class(OM) == 'OM') {
+  if (methods::is(OM,'OM')) {
     if (OM@nsim <=1) stop("OM@nsim must be > 1", call.=FALSE)
 
-  } else if (class(OM) == 'Hist') {
+  } else if (methods::is(OM,'Hist')) {
     if (!silent) message("Using `Hist` object to reproduce historical dynamics")
 
     # # --- Extract cpars from Hist object ----
@@ -1797,22 +1840,12 @@ runMSE <- function(OM=MSEtool::testOM, MPs = NA, Hist=FALSE, silent=FALSE,
   } else {
     stop("You must specify an operating model")
   }
-  
-  # check parallel
-  if (length(parallel) < length(MPs)) {
-    if (length(parallel) > 1) {
-      stop("length(parallel) must be equal to length(MPs)")
-    } else {
-      parallel <- rep(parallel, length(MPs))
-    }
-  }
-  
 
   # check MPs
   if (checkMPs & !Hist)
     MPs <- CheckMPs(MPs=MPs, silent=silent)
 
-  if (class(OM)=='OM') {
+  if (methods::is(OM,'OM')) {
     HistSims <- Simulate(OM, parallel, silent)  
   } else {
     HistSims <- OM
@@ -1826,7 +1859,7 @@ runMSE <- function(OM=MSEtool::testOM, MPs = NA, Hist=FALSE, silent=FALSE,
 
   if(!silent) message("Running forward projections")
   MSEout <- try(Project(Hist=HistSims, MPs, parallel, silent, extended = extended, checkMPs=FALSE), silent=TRUE)
-  if (class(MSEout) == 'try-error') {
+  if (methods::is(MSEout, 'try-error')) {
     message('The following error occured when running the forward projections: ',
             crayon::red(attributes(MSEout)$condition))
     message('Returning the historical simulations (class `Hist`). To avoid re-running spool up, ',

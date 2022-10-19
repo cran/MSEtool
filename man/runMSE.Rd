@@ -30,7 +30,9 @@ runMSE(
 \arguments{
 \item{OM}{An operating model object (class \code{OM} or class \code{Hist})}
 
-\item{parallel}{Logical. Should the MSE be run using parallel processing? See Details for more information.}
+\item{parallel}{Logical or a named list. Should MPs be run using parallel processing?
+For \code{runMSE}, can also be \code{"sac"} to run the entire MSE in parallel
+using the split-apply-combine technique. See Details for more information.}
 
 \item{silent}{Should messages be printed out to the console?}
 
@@ -51,7 +53,7 @@ Functions return objects of class \linkS4class{Hist} or \linkS4class{MSE}
 \itemize{
 \item Simulate - An object of class \linkS4class{Hist}
 \item Project - An object of class \linkS4class{MSE}
-\item runMSE - An object of class \linkS4class{MSE}
+\item runMSE - An object of class \linkS4class{MSE} if \code{Hist = TRUE} otherwise a class \linkS4class{Hist} object
 }
 }
 \description{
@@ -59,21 +61,42 @@ Functions to run the Management Strategy Evaluation (closed-loop
 simulation) for a specified operating model
 }
 \details{
-\subsection{Running in Parallel}{
+\subsection{Running MPs in parallel}{
 
-For simple MPs, running in parallel can actually lead to an increase in computation time, due to the overhead in sending the
-information over to the cores. Consequently, the data-limied MPs in DLMtool and the reference MPs in MSEtool are not run using parallel processing.
-All other MPs, including custom MPs, will be run in parallel if argument is TRUE.
-To individually control which MPs run in parallel, \code{parallel} can be a named list of logical values, e.g., \code{parallel=list(AvC=TRUE)}.
+For most MPs, running in parallel can actually lead to an increase in computation time, due to the overhead in sending the
+information over to the cores. Consequently, by default the MPs will not be run in parallel if \code{parallel=TRUE}
+(although other internal code will be run in parallel mode).
+
+To run MPs in parallel, specify a named list with the name of the MP(s) assigned as TRUE. For example,\verb{parallel=list(AvC=TRUE})
+will run the \code{AvC} MP in parallel mode.
+}
+
+\subsection{Split-apply-combine MSE in parallel}{
+
+Additional savings in computation time can be achieved by running the entire simulation in batches. Individual simulations of the operating model
+are divided into separate cores using \link{SubCpars}, \code{Simulate} and \code{Project} are applied independently for each core via \code{snowfall::sfClusterApplyLB}, and the
+output (a list of MSE objects) is stitched back together into a single MSE object using \link{joinMSE}.
+
+The ideal number of cores will be determined based on the number of simulations and available cores.
+
+There are several issues to look out for when using this split-apply-combine technique:
+
+\itemize{
+\item Numerical optimization for depletion may fail in individual cores when \code{OM@cpars$qs} is not specified.
+\item Length bins should be specified in the operating model in \code{OM@cpars$CAL_bins}. Otherwise, length bins can vary by core and
+create problems when combining into a single object.
+\item Compared to non-parallel runs, sampled parameters in the operating model will vary despite the same value in \code{OM@seed}.
+\item If there is an error in individual cores or while combining the parallel output into a single Hist or MSE object, the list of output (from the cores) will be returned.
+}
 }
 }
 \section{Functions}{
 \itemize{
-\item \code{Simulate}: Run the Historical Simulations from an object of class \code{OM}
+\item \code{Simulate()}: Run the Historical Simulations from an object of class \code{OM}
 
-\item \code{Project}: Run the Forward Projections
+\item \code{Project()}: Run the Forward Projections
 
-\item \code{runMSE}: Run the Historical Simulations and Forward Projections
+\item \code{runMSE()}: Run the Historical Simulations and Forward Projections
 from an object of class `OM
-}}
 
+}}

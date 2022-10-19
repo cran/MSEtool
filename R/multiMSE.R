@@ -194,10 +194,13 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
     surv <- matrix(1, nsim, n_age)
     surv[, 2:n_age] <- t(exp(-apply(StockPars[[p]]$M_ageArray[,,1], 1, cumsum)))[, 1:(n_age-1)]
 
+    lst.age <- max(which(StockPars[[p]]$M_ageArray[1,,1]>0))
     if (plusgroup[p]) {
-      surv[,n_age] <- surv[,n_age]/(1-exp(-StockPars[[p]]$M_ageArray[,n_age,1]))
+      surv[,lst.age] <- surv[,lst.age]/(1-exp(-StockPars[[p]]$M_ageArray[,lst.age,1]))
     }
-
+    if (lst.age<n_age) 
+      surv[, (lst.age+1):n_age] <-0  
+    
     # predicted Numbers of mature ages in first year
     Nfrac <- surv * StockPars[[p]]$Mat_age[,,1] * HermFrac[,p,]
 
@@ -233,9 +236,13 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
     surv <- array(1, dim=c(nsim, n_age, nyears+proyears))
     surv[, 2:n_age, ] <- aperm(exp(-apply(StockPars[[p]]$M_ageArray, c(1,3), cumsum))[1:(n_age-1), ,],
                                c(2,1,3))
+    
+    lst.age <- max(which(StockPars[[p]]$M_ageArray[1,,1]>0))
     if (plusgroup[p]) {
-      surv[,n_age, ] <- surv[,n_age,]/(1-apply(-StockPars[[p]]$M_ageArray[,n_age,], 2, exp))
+      surv[,lst.age, ] <- surv[,lst.age,]/(1-apply(-StockPars[[p]]$M_ageArray[,lst.age,], 2, exp))
     }
+    if (lst.age<n_age) 
+      surv[,(lst.age+1):n_age,] <- 0
     Nfrac <- surv * StockPars[[p]]$Mat_age  # predicted numbers of mature ages in all years
 
     # indices for all years
@@ -378,7 +385,7 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
           if (!silent) message_info('Historical MPA in Area 1 for all years')
         }
       }
-      FleetPars[[p]][[f]]$MPA <- MPA
+      FleetPars[[p]][[f]]$MPA <- MPA[p,f,,]
       
     } # end of loop over fleets
   } # end of loop over stocks
@@ -386,8 +393,8 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
   # ---- SexPars - Update SSB0 and Ricker SRR parameters for male stock ----
   # Other parameters have been updated (R0, h, rec devs) earlier
   if(length(SexPars)) {
-    if (!silent)  message("You have specified sex-specific dynamics, unfished spawning biomass",
-            " and specified stock depletion will be mirrored across sex types according ",
+    if (!silent)  message_info("You have specified sex-specific dynamics, unfished spawning biomass",
+            "and specified stock depletion will be mirrored across sex types according ",
             "to SexPars$SSBfrom")
 
     sexmatches <- sapply(1:nrow(SexPars$SSBfrom), function(x) paste(SexPars$SSBfrom[x, ], collapse = "_"))
@@ -406,7 +413,7 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
     }
     
     if(length(SexPars$Herm)){
-      if (!silent) message("You have specified sequential hermaphroditism (SexPars$Herm).",
+      if (!silent) message_info("You have specified sequential hermaphroditism (SexPars$Herm).",
               "Unfished stock numbers will be calculated from this vector of fractions ",
               "at age. Population dynamics will move individuals from one sex to another.")
     }
@@ -423,10 +430,12 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
       if (!is.null(SampCpars[[p]][[f]]$qs)) {
         optD <- FALSE
         qs[,p] <- SampCpars[[p]][[f]]$qs
+        if (all(SampCpars[[p]][[f]]$qs==0)) qfrac[, p, f] <- 0
         FleetPars[[p]][[f]]$qs <- qs[, p] * qfrac[, p, f]
       }
     }
   }
+  qs[qs==0] <- 1
 
   bounds <- c(0.0001, 15) # q bounds for optimizer
   if (optD) {
@@ -439,7 +448,7 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
 #               "(takes approximately [(nstocks x nfleets)/(9 x number of cores in cluster)]",
 #               " minutes per simulation): about", exp.time, 'minutes')
       if(!silent)
-        message_info("Optimizing for user-specified depletion ",
+        message("Optimizing for user-specified depletion ",
               'using parallel processing',
               'for ', nsim, 'simulations,', np, ' stocks, and ', nf, 'fleets',
               "(could take a while!)")
@@ -454,7 +463,7 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
       exp.time <- round(exp.time,2)
 
       if(!silent)
-        message_info("Optimizing for user-specified depletion ",
+        message("Optimizing for user-specified depletion ",
                 'using a single core',
                 'for ', nsim, 'simulations,', np, ' stocks, and ', nf, 'fleets',
                 "(could take a while!)")
@@ -487,9 +496,9 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
   # Tries 'ntrials' times and then alerts user
   fracD <- 0.05; ntrials <- 50
   if (!is.null(control$ntrials)) ntrials <- control$ntrials
-  if (!is.null(control$ntrials)) fracD <- control$fracD
+  if (!is.null(control$fracD)) fracD <- control$fracD
 
-  if (length(probQ) > 0) {
+  if (length(probQ) > 0 & optD) {
     Err <- TRUE
     if(!silent) message(Nprob,
                         ' simulations have final biomass that is not ',
@@ -620,25 +629,28 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
                       plusgroup=plusgroup)
 
   }
-
+  
   N <- aperm(array(as.numeric(unlist(histYrs[1,], use.names=FALSE)),
                    dim=c(np,n_age, nyears, nareas, nsim)), c(5,1,2,3,4))
-
+  
   Biomass <- aperm(array(as.numeric(unlist(histYrs[2,], use.names=FALSE)),
                          dim=c(np ,n_age, nyears, nareas, nsim)), c(5,1,2,3,4))
 
   SSN <- aperm(array(as.numeric(unlist(histYrs[3,], use.names=FALSE)),
                      dim=c(np,n_age, nyears, nareas, nsim)), c(5,1,2,3,4))
+  
   SSB <- aperm(array(as.numeric(unlist(histYrs[4,], use.names=FALSE)),
                      dim=c(np,n_age, nyears, nareas, nsim)), c(5,1,2,3,4))
 
   VBiomass <- aperm(array(as.numeric(unlist(histYrs[5,], use.names=FALSE)),
                           dim=c(np, n_age, nyears, nareas, nsim)), c(5,1,2,3,4))
+  
   FM <- aperm(array(as.numeric(unlist(histYrs[6,], use.names=FALSE)),
                     dim=c(np,nf,n_age, nyears, nareas, nsim)), c(6,1,2,3,4,5))
+  
   FMret <- aperm(array(as.numeric(unlist(histYrs[7,], use.names=FALSE)),
                        dim=c(np,nf,n_age, nyears, nareas, nsim)), c(6,1,2,3,4,5))
-
+  
   Linfarray <- aperm(array(as.numeric(unlist(histYrs[8,], use.names=FALSE)),
                            dim=c(np, nyears+1, nsim)), c(3,1,2))
 
@@ -966,7 +978,8 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
   Biomass_C[CNind] <- N[Nind] * Wt_age_C[CNind]
 
   CB[CNind] <- Biomass_C[CNind]*(1-exp(-Z[Nind]))*(FM[CNind]/Z[Nind])
-  
+  CB[!is.finite(CB)] <- 0 # fix for Z=0
+
   if(!is.null(control$checks)) {
     for(p in 1:np){
       Cp <- local({
@@ -985,9 +998,10 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
   
   # Calculate retained-at-age
   Cret[CNind] <- N[Nind] * (1-exp(-Z[Nind])) * (FMret[CNind]/Z[Nind]) #apply(Cret,1:5,sum)
-  Cret[is.na(Cret)] <- 0
+  Cret[!is.finite(Cret)] <- 0
 
   CBret[CNind] <- Biomass_C[CNind] * (1-exp(-Z[Nind])) * (FMret[CNind]/Z[Nind])
+  CBret[!is.finite(CBret)] <- 0
 
   # Add to FleetPars
   for (p in 1:np) {
@@ -1036,7 +1050,7 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
   DataList <- new('list')
   for (p in 1:np) {
     DataList[[p]] <- vector('list', nf)
-    if (!silent) message('Generating historical data for ', Snames[p])
+    if (!silent) message('Generating historical data for', Snames[p])
     for (f in 1:nf) {
       ObsPars[[p]][[f]]$Sample_Area <- Sample_Area # add to Obs Pars
       Data <- makeData(Biomass=Biomass[,p,,,],
@@ -1078,40 +1092,97 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
 
 
   # ---- Condition Simulated Data on input Data object (if it exists) & calculate error stats ----
+  
+  Real.Data.Map <- matrix(rep(1:np), nrow=nf, ncol=np, byrow=TRUE)
+  if (!is.null(SampCpars[[1]][[1]]$Real.Data.Map)) {
+    Real.Data.Map.t <- SampCpars[[1]][[1]]$Real.Data.Map
+    # check dimensions
+    if (any(dim(Real.Data.Map.t) != c(nf, np))) {
+      message_warn('cpars$Real.Data.Map does not have dimensions n.fleet x n.stock. Not being used')
+      Real.Data.Map.t <- Real.Data.Map
+    }
+    Real.Data.Map <- Real.Data.Map.t
+  }
+
   for (p in 1:np) {
     for (f in 1:nf) {
       if (methods::is(SampCpars[[p]][[f]]$Data,"Data")) {
         StockPars2 <- StockPars[[p]]
-        StockPars2$Biomass <- Biomass[,p,,,]
-        StockPars2$SSB <- SSB[,p,,,]
-        StockPars2$VBiomass <- VBF[,p,f,,,]
-        StockPars2$N <- N[,p,,,]
-        StockPars2$CBret <- CBret[,p,f,,,]
+        
+        # -- check real data mirroring across stocks ---
+        map.stocks <- which(Real.Data.Map[f,] ==p)
+        if (length(map.stocks)==0) {
+          # stock data have been mapped to another one
+          mapped.to <- Real.Data.Map[f,p]
+          om <- DataList[[p]][[f]]@OM
+          DataList[[p]][[f]] <- new('Data') 
+          DataList[[p]][[f]]@OM <- om
+          ObsPars[[p]][[f]] <- ObsPars[[mapped.to]][[f]]
+        } else {
+          if (length(map.stocks)>1) {
+            # assumes real data in cpars is identical for stocks that are mirrored
+            StockPars2$Biomass <- agg_data(Biomass,dim(Biomass[,1,,,]), map.stocks)
+            StockPars2$SSB <- agg_data(SSB, dim(SSB[,1,,,]), map.stocks)
+            StockPars2$VBiomass <- agg_data(VBF[,,f,,,], dim(VBF[,1,1,,,]), map.stocks)
+            StockPars2$N <- agg_data(N, dim(N[,1,,,]), map.stocks)
+            StockPars2$CBret <- agg_data(CBret[,,f,,,], dim(CBret[,1,1,,,]), map.stocks)
+            # doesn't include CAA and CAL comps
+            
+            # update MPrec (map last catch across mapped stock)
+            MPrec <- rep(0, nsim)
+            for (i in map.stocks) {
+              MPrec <- MPrec+ DataList[[i]][[f]]@MPrec
+            }
+            
+          } else {
+            MPrec <- NULL
+            StockPars2$Biomass <- Biomass[,p,,,]
+            StockPars2$SSB <- SSB[,p,,,]
+            StockPars2$VBiomass <- VBF[,p,f,,,]
+            StockPars2$N <- N[,p,,,]
+            StockPars2$CBret <- CBret[,p,f,,,]
+          }
 
-        # real data has been passed in cpars
-        updatedData <- AddRealData(SimData= DataList[[p]][[f]],
-                                   RealData=SampCpars[[p]][[f]]$Data,
-                                   ObsPars=ObsPars[[p]][[f]],
-                                   StockPars=StockPars2,
-                                   FleetPars=FleetPars[[p]][[f]],
-                                   nsim,
-                                   nyears,
-                                   proyears,
-                                   SampCpars=SampCpars[[p]][[f]],
-                                   msg=!silent,
-                                   control,
-                                   Sample_Area)
-        DataList[[p]][[f]] <- updatedData$Data
-        ObsPars[[p]][[f]] <- updatedData$ObsPars
-
+          # real data has been passed in cpars
+          updatedData <- AddRealData(SimData= DataList[[p]][[f]],
+                                     RealData=SampCpars[[p]][[f]]$Data,
+                                     ObsPars=ObsPars[[p]][[f]],
+                                     StockPars=StockPars2,
+                                     FleetPars=FleetPars[[p]][[f]],
+                                     nsim,
+                                     nyears,
+                                     proyears,
+                                     SampCpars=SampCpars[[p]][[f]],
+                                     msg=!silent,
+                                     control,
+                                     Sample_Area)
+          
+          if (!is.null(MPrec)) {
+            if (is.na(SampCpars[[p]][[f]]$Data@MPrec)) {
+              # don't update if MPrec provided in real data
+              updatedData$Data@MPrec <- MPrec
+            }
+          }
+            
+          DataList[[p]][[f]] <- updatedData$Data
+          ObsPars[[p]][[f]] <- updatedData$ObsPars
+        }
       }
     }
   }
-
+  
   multiHist <- vector('list', np)
+  
+  stock.names <- names(MOM@Stocks)
+  fleet.names <- names(MOM@Fleets[[1]])
+  
+  if (is.null(stock.names)) stock.names <- paste('Stock', rep(1:length(MOM@Stocks)))
+  if (is.null(fleet.names)) fleet.names <- paste('Fleet', rep(1:length(MOM@Fleets[[1]])))
 
   for (p in 1:np) {
     multiHist[[p]] <- vector('list', nf)
+    names(multiHist) <- stock.names
+    
     for (f in 1:nf) {
       Hist <- new("Hist")
       Data@Misc <- list()
@@ -1125,58 +1196,99 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
       OMPars <- DataList[[p]][[f]]@OM
       OMPars <- data.frame(OMPars, obs, imp)
       Hist@OMPars <- OMPars
-      Hist@AtAge <- list(Length=StockPars[[p]]$Len_age,
-                         Weight=StockPars[[p]]$Wt_age,
-                         Select=FleetPars[[p]][[f]]$V_real,
-                         Retention=FleetPars[[p]][[f]]$retA_real,
-                         Maturity=StockPars[[p]]$Mat_age,
-                         N.Mortality=StockPars[[p]]$M_ageArray,
-                         Z.Mortality=Z[,p,,,],
-                         F.Mortality=FM[,p,f,,,],
-                         Fret.Mortality=FMret[,p,f,,,],
-                         Number=N[,p,,,],
-                         Biomass=Biomass[,p,,,],
-                         VBiomass=VBF[,p,f,,,],
-                         SBiomass=SSB[,p,,,],
-                         Removals=CB[,p,f,,,],
-                         Landings=CBret[,p,f,,,],
-                         Discards=CB[,p,f,,,]-CBret[,p,f,,,]
-      )
-
-      Hist@TSdata <- list(
-        Number=apply(N[,p,,,],c(1,3,4), sum),
-        Biomass=apply(Biomass[,p,,,],c(1,3,4), sum),
-        VBiomass=apply(VBF[,p,f,,,],c(1,3,4), sum),
-        SBiomass=apply(SSB[,p,,,],c(1,3,4), sum),
-        Removals=apply(CB[,p,f,,,], c(1,3,4), sum),
-        Landings=apply(CBret[,p,f,,,],c(1,3,4), sum),
-        Discards=apply(CB[,p,f,,,]-CBret[,p,f,,,],c(1,3,4), sum),
-        Find=FleetPars[[p]][[f]]$Find,
-        RecDev=StockPars[[p]]$Perr_y,
-        SPR=SPR_hist[[p]],
-        Unfished_Equilibrium=Unfished_Equilibrium[[p]]
-      )
-
-      Hist@Ref <- StockPars[[p]]$ReferencePoints
-
-      Hist@SampPars <- list(
-        Stock=StockPars[[p]],
-        Fleet=FleetPars[[p]][[f]],
-        Obs=ObsPars[[p]][[f]],
-        Imp=ImpPars[[p]][[f]]
-      )
-
-      temp <- MOM@cpars$Data
-      MOM@cpars <- list()
-      MOM@cpars$control <- control
-      MOM@cpars$Data <- temp
+      if (f==1) {
+        Hist@AtAge <- list(Length=StockPars[[p]]$Len_age,
+                           Weight=StockPars[[p]]$Wt_age,
+                           Select=FleetPars[[p]][[f]]$V_real,
+                           Retention=FleetPars[[p]][[f]]$retA_real,
+                           Maturity=StockPars[[p]]$Mat_age,
+                           N.Mortality=StockPars[[p]]$M_ageArray,
+                           Z.Mortality=Z[,p,,,],
+                           F.Mortality=FM[,p,f,,,],
+                           Fret.Mortality=FMret[,p,f,,,],
+                           Number=N[,p,,,],
+                           Biomass=Biomass[,p,,,],
+                           VBiomass=VBF[,p,f,,,],
+                           SBiomass=SSB[,p,,,],
+                           Removals=CB[,p,f,,,],
+                           Landings=CBret[,p,f,,,],
+                           Discards=CB[,p,f,,,]-CBret[,p,f,,,]
+        )
+      } else {
+        Hist@AtAge <- list(Select=FleetPars[[p]][[f]]$V_real,
+                           Retention=FleetPars[[p]][[f]]$retA_real,
+                           Z.Mortality=Z[,p,,,],
+                           F.Mortality=FM[,p,f,,,],
+                           Fret.Mortality=FMret[,p,f,,,],
+                           VBiomass=VBF[,p,f,,,],
+                           Removals=CB[,p,f,,,],
+                           Landings=CBret[,p,f,,,],
+                           Discards=CB[,p,f,,,]-CBret[,p,f,,,]
+        )
+      }
+      if (f==1) {
+        Hist@TSdata <- list(
+          Number=apply(N[,p,,,],c(1,3,4), sum),
+          Biomass=apply(Biomass[,p,,,],c(1,3,4), sum),
+          VBiomass=apply(VBF[,p,f,,,],c(1,3,4), sum),
+          SBiomass=apply(SSB[,p,,,],c(1,3,4), sum),
+          Removals=apply(CB[,p,f,,,], c(1,3,4), sum),
+          Landings=apply(CBret[,p,f,,,],c(1,3,4), sum),
+          Discards=apply(CB[,p,f,,,]-CBret[,p,f,,,],c(1,3,4), sum),
+          Find=FleetPars[[p]][[f]]$Find,
+          RecDev=StockPars[[p]]$Perr_y,
+          SPR=SPR_hist[[p]],
+          Unfished_Equilibrium=Unfished_Equilibrium[[p]]
+        )
+      } else {
+        Hist@TSdata <- list(
+          VBiomass=apply(VBF[,p,f,,,],c(1,3,4), sum),
+          Removals=apply(CB[,p,f,,,], c(1,3,4), sum),
+          Landings=apply(CBret[,p,f,,,],c(1,3,4), sum),
+          Discards=apply(CB[,p,f,,,]-CBret[,p,f,,,],c(1,3,4), sum),
+          Find=FleetPars[[p]][[f]]$Find
+        )
+      }
+      
+      if (f==1) {
+        Hist@Ref <- StockPars[[p]]$ReferencePoints  
+      }
+      
+      if (f==1) {
+        Hist@SampPars <- list(
+          Stock=StockPars[[p]],
+          Fleet=FleetPars[[p]][[f]],
+          Obs=ObsPars[[p]][[f]],
+          Imp=ImpPars[[p]][[f]]
+        )
+      } else {
+        Hist@SampPars <- list(
+          Fleet=FleetPars[[p]][[f]],
+          Obs=ObsPars[[p]][[f]],
+          Imp=ImpPars[[p]][[f]]
+        )
+      }
+      
+      if (f==1) {
+        temp <- MOM@cpars$Data
+        MOM@cpars <- list()
+        MOM@cpars$control <- control
+        MOM@cpars$Data <- temp  
+      } else {
+        MOM@cpars <- list()
+      }
 
       Hist@Misc <- list(
-        MOM=MOM
+        MOM=MOM,
+        Stock=stock.names[p],
+        Fleet=fleet.names[f]
       )
 
       multiHist[[p]][[f]] <- Hist
+     
+
     }
+    names(multiHist[[p]]) <- fleet.names
   }
 
   class(multiHist) <- c('list', 'multiHist')
@@ -1184,7 +1296,10 @@ SimulateMOM <- function(MOM=MSEtool::Albacore_TwoFleet, parallel=TRUE, silent=FA
   attr(multiHist, "version") <- packageVersion("MSEtool")
   attr(multiHist, "date") <- date()
   attr(multiHist, "R.version") <- R.version
+  attr(multiHist, "Stocks") <- stock.names
+  attr(multiHist, "Fleets") <- fleet.names
 
+  multiHist[[1]][[1]]@Misc$Real.Data.Map <- Real.Data.Map
   multiHist
 
 }
@@ -1226,9 +1341,11 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
 
   np <- length(Stocks)
   nf <- length(Fleets[[1]])
-
-  ncpus <- set_parallel(parallel)
-
+  
+  Real.Data.Map <- multiHist[[1]][[1]]@Misc$Real.Data.Map
+  if (is.null(Real.Data.Map)) 
+    Real.Data.Map <- matrix(rep(1:np), nrow=nf, ncol=np, byrow=TRUE)
+  
   # ---- Detect MP Specification ----
   MPcond <- "unknown"
   if (!length(Rel) && np == 1 && nf == 1) {
@@ -1270,8 +1387,8 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
     MPcond <- rep(NA, length(MPs))
 
     if ('MMP' %in% MP_class) {
-      if (!silent) message("MMP mode: you have specified multi-fleet, multi-stock MPs of ",
-              "class MMP. This class of MP accepts all data objects (stocks x fleets) ",
+      if (!silent) message_info("MMP mode:\nYou have specified multi-fleet, multi-stock MPs of",
+              "class MMP. This class of MP accepts all data objects (stocks x fleets)",
               "to simultaneously make a recommendation specific to each stock and fleet")
 
       MPcond[which(MP_classes == 'MMP')] <- "MMP"
@@ -1280,12 +1397,12 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
       MPrefs[] <- MPs
     }
     if ('MP' %in% MP_class) {
-      if (!silent) message("Complex mode: you have specified a vector of MPs rather than a ",
-              "list of MPs, one list position for MP type. The same MP will ",
-              "be applied to the aggregate data for all stocks and fleets. ",
-              "The MP will, for example, be used to set a single TAC for all ",
-              "stocks and fleets combined. This will be allocated among fleets ",
-              "according to recent catches and among stocks according to ",
+      if (!silent) message_info("Complex mode:\nYou have specified a vector of MPs rather than a",
+              "list of MPs, one list position for MP type. The same MP will",
+              "be applied to the aggregate data for all stocks and fleets.",
+              "The MP will, for example, be used to set a single TAC for all",
+              "stocks and fleets combined. This will be allocated among fleets",
+              "according to recent catches and among stocks according to",
               "available, vulnerable biomass")
       MPcond[which(MP_classes == 'MP')] <- "complex"
       MPtemp <- MPs
@@ -1298,8 +1415,8 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
   if (methods::is(MPs,'list') && 'unknown' %in% MPcond) {
 
     if(identical(ldim(MPs), ldim(Fleets))){
-      if (!silent) message("Byfleet mode: you have specified an MP for each stock and fleet. ",
-              "Only fleet-specific data (e.g. catches and indices) will be used to set ",
+      if (!silent) message_info("Byfleet mode: you have specified an MP for each stock and fleet.",
+              "Only fleet-specific data (e.g. catches and indices) will be used to set",
               "advice for each fleet for each stock")
       MPcond <- "byfleet"
       nMP <- length(MPs[[1]][[1]])
@@ -1307,10 +1424,10 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
       MPrefs[]<-unlist(MPs)
 
     } else if (ldim(MPs)==ldim(Fleets)[1]) { # not a two-tier list
-      if (!silent) message("Bystock mode: you have specified a vector of MPs for each stock, ",
+      if (!silent) message_info("Bystock mode: you have specified a vector of MPs for each stock,",
               "but not a vector of MPs for each stock and fleet. The catch data for these",
-              " fleets will be combined, a single MP will be used to set a single TAC ",
-              "for all fleets combined that will be allocated between the fleets ",
+              " fleets will be combined, a single MP will be used to set a single TAC",
+              "for all fleets combined that will be allocated between the fleets",
               "according to recent catches")
       MPcond<-"bystock"
       checkN <- unlist(lapply(MPs, length))
@@ -1338,6 +1455,31 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
     allMPs<-MPs
   }
   if (nMP < 1) stop("No valid MPs found", call.=FALSE)
+
+  # ---- Set up parallel processing of MPs ---
+  runparallel <- FALSE 
+  if (any(parallel==TRUE)) runparallel <- TRUE
+  if (methods::is(parallel, 'list')) runparallel <- TRUE
+  
+  isrunning <- snowfall::sfIsRunning()
+  if (!runparallel & isrunning) snowfall::sfStop()
+  
+  # Don't run MPs in parallel unless specified
+  parallel_MPs <-  rep(FALSE, nMP) 
+  if (methods::is(parallel, 'list')) {
+    parallel <- parallel[parallel==TRUE]
+    ind <- match(names(parallel), allMPs)
+    ind <- ind[!is.na(ind)]
+    parallel_MPs[ind] <- TRUE
+    names(parallel_MPs) <- allMPs
+  }
+  
+  if (runparallel & any(parallel_MPs)) {
+    if (!isrunning) setup()
+    Export_customMPs(allMPs)
+  }
+  
+  ncpus <- set_parallel(runparallel, msg=!silent)
 
   # ---- Check MPs ----
   if (checkMPs && all(MP_classes=='MP')) {
@@ -1441,7 +1583,6 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
     }
   }
   
-
   # need to make a copy because R is doing weird things with elements with similar names
   HistFleetPars <- FleetPars
   Snames <- SIL(Stocks,"Name")
@@ -1654,8 +1795,7 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
     
     VBF_P[,,,,1,] <- aperm(array(as.numeric(unlist(NextYrN[20,], use.names=FALSE)),
                                  dim=c(np, nf, n_age, nareas, nsim)), c(5,1,2,3,4))
-    
-    
+  
     FML <- apply(array(FM[, ,,, nyears, ],c(nsim,np,nf,n_age,nareas)),
                  c(1, 3), max)
     
@@ -1699,35 +1839,39 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
       MPRecs_A <- Data_p_A <- MPrecs_A_blank
       # need this for aggregating data and distributing TACs over stocks
       realVB<-apply(VBiomass[,,,1:nyears,, drop=FALSE],c(1,2,4),sum,na.rm=T)
-
-      curdat<-multiDataS(MSElist,StockPars,np,mm,nf,realVB)
-      runMP <- applyMP(curdat, MPs = MPs[mm], reps = 1, silent=TRUE)  # Apply MP
+      curdat<-multiDataS(MSElist,Real.Data.Map,np,mm,nf,realVB)
+      runMP <- applyMP(curdat, MPs = MPs[mm], parallel=parallel_MPs[mm],
+                       reps = 1, silent=TRUE)  # Apply MP
       Stock_Alloc<-realVB[,,nyears, drop=FALSE]/apply(realVB[,,nyears, drop=FALSE],1,sum)
 
-      for(p in 1:np)  for(f in 1:nf){
-        MPRecs_A[[p]][[f]]<-runMP[[1]][[1]]
-        MPRecs_A[[p]][[f]]$TAC<-runMP[[1]][[1]]$TAC*MOM@Allocation[[p]][,f]*
-          Stock_Alloc[,p,1]
-        MPRecs_A[[p]][[f]]$Effort<-runMP[[1]][[1]]$Effort*MOM@Efactor[[p]][,f]
-
-        if(length(MPRecs_A[[p]][[f]]$Effort)>0)
-          if(is.na(MPRecs_A[[p]][[f]]$Effort[1,1]))
-            MPRecs_A[[p]][[f]]$Effort <- matrix(NA,
-                                                nrow=0,
-                                                ncol=ncol(MPRecs_A[[p]][[f]]$Effort))
-        if(length(MPRecs_A[[p]][[f]]$TAC)>0)
-          if(is.na(MPRecs_A[[p]][[f]]$TAC[1,1]))
-            MPRecs_A[[p]][[f]]$TAC <- matrix(NA,
-                                             nrow=0,
-                                             ncol=ncol(MPRecs_A[[p]][[f]]$TAC))
-        if(is.na(MPRecs_A[[p]][[f]]$Spatial[1,1]))
-          MPRecs_A[[p]][[f]]$Spatial <- matrix(NA,
+      for(p in 1:np)  {
+        for(f in 1:nf){
+          MPRecs_A[[p]][[f]]<-runMP[[1]][[1]]
+          MPRecs_A[[p]][[f]]$TAC<-runMP[[1]][[1]]$TAC*MOM@Allocation[[p]][,f]*
+            Stock_Alloc[,p,1]
+          MPRecs_A[[p]][[f]]$Effort<-runMP[[1]][[1]]$Effort*MOM@Efactor[[p]][,f]
+          
+          if(length(MPRecs_A[[p]][[f]]$Effort)>0)
+            if(is.na(MPRecs_A[[p]][[f]]$Effort[1,1]))
+              MPRecs_A[[p]][[f]]$Effort <- matrix(NA,
+                                                  nrow=0,
+                                                  ncol=ncol(MPRecs_A[[p]][[f]]$Effort))
+          if(length(MPRecs_A[[p]][[f]]$TAC)>0)
+            if(is.na(MPRecs_A[[p]][[f]]$TAC[1,1]))
+              MPRecs_A[[p]][[f]]$TAC <- matrix(NA,
                                                nrow=0,
                                                ncol=ncol(MPRecs_A[[p]][[f]]$TAC))
-
-        Data_p_A[[p]][[f]]<-runMP[[2]]
-        Data_p_A[[p]][[f]]@TAC<-MPRecs_A[[p]][[f]]$TAC
+          if(is.na(MPRecs_A[[p]][[f]]$Spatial[1,1]))
+            MPRecs_A[[p]][[f]]$Spatial <- matrix(NA,
+                                                 nrow=0,
+                                                 ncol=ncol(MPRecs_A[[p]][[f]]$TAC))
+          
+          Data_p_A[[p]][[f]]<-runMP[[2]]
+          Data_p_A[[p]][[f]]@TAC<-MPRecs_A[[p]][[f]]$TAC
+        }
       }
+      
+
     }else{
       # A temporary blank hierarchical list object stock by fleet
       MPRecs_A <- Data_p_A <- MPrecs_A_blank
@@ -1738,8 +1882,10 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
           }else{
             curdat<-MSElist[[p]][[f]][[mm]]
           }
+          
           runMP <- applyMP(curdat, MPs = MPs[[p]][mm], reps = 1,
-                                   silent=TRUE)  # Apply MP
+                           parallel = parallel_MPs[match(MPs[[p]][mm], names(parallel_MPs))],
+                           silent=TRUE)  # Apply MP
 
           # Do allocation calcs
           TAC_A[,p,] <- array(as.vector(unlist(runMP[[1]][[1]]$TAC))*
@@ -1772,7 +1918,9 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
         }else if(MPcond[mm]=="byfleet"){
           for(f in 1:nf){
             curdat<-MSElist[[p]][[f]][[mm]]
-            runMP <- MSEtool::applyMP(curdat, MPs = MPrefs[mm,f,p], reps = 1, silent=TRUE)  # Apply MP
+            runMP <- applyMP(curdat, MPs = MPrefs[mm,f,p], reps = 1, 
+                                      parallel = parallel_MPs[match(MPrefs[mm,f,p], names(parallel_MPs))],
+                                      silent=TRUE)  # Apply MP
             MPRecs_A[[p]][[f]]<-runMP[[1]][[1]]
             Data_p_A[[p]][[f]]<-runMP[[2]]
             Data_p_A[[p]][[f]]@TAC <- MPRecs_A[[p]][[f]]$TAC
@@ -1859,7 +2007,8 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
                                   Effort_pot=Effort_pot[,p,f],
                                   StockPars=StockPars_MPCalc[[p]],
                                   FleetPars=FleetPars[[p]][[f]],
-                                  ImpPars=ImpPars[[p]][[f]], control=control)
+                                  ImpPars=ImpPars[[p]][[f]], 
+                                  control=control)
 
         if(length(SexPars)>0) MPCalcs<- MPCalcsNAs(MPCalcs) # Zeros caused by SexPars
 
@@ -1893,7 +2042,6 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
 
       }
     }
-
 
     # the years in which there are updates
     upyrs <- 1 + (0:(floor(proyears/interval[mm]) - 1)) * interval[mm]
@@ -1963,7 +2111,7 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
       SA1YR <- as.matrix(expand.grid(1:nsim, 1:(n_age - 1), y -1, 1:nareas))
       
       # note that Fcur is apical F but, in popdynOneMICE it is DIVIDED in future
-      # years between the two areas depending on vulnerabile biomass. So to get
+      # years between the two areas depending on vulnerable biomass. So to get
       # Fcur you need to sum over areas (a bit weird)
       NextYrN <- local({ # Calculate SSB in year y from abundance and mortality in y-1
         # Matrix nsim x np
@@ -2092,14 +2240,20 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
         for(p in 1:np) StockPars_MPCalc[[p]]$M_ageArray[, , nyears + y] <- t(M_MICE[p, , ])
       }
 
+      # 
+      CBret_P <- array(0, dim=c(nsim, np, nf, n_age, proyears, nareas))
+      for (p in 1:np) {
+        for(f in 1:nf) {
+          CBret_P[,p,f,,,] <-FleetPars[[p]][[f]]$CB_Pret
+        }
+      }
+    
       # --- An update year ----
       if (y %in% upyrs) {
         # --- Update Data object ----
         for (p in 1:np) {
           for (f in 1:nf) {
-
-            # TODO - remove this
-            OM <- suppressMessages(new('OM')) # temporary while MSEtool::makeData requires this
+            OM <- suppressMessages(new('OM', docheck=FALSE)) # temporary while MSEtool::makeData requires this
             OM@nyears <- nyears
             OM@hbiascv <- MOM@Obs[[p]][[f]]@hbiascv
             OM@maxF <- MOM@maxF
@@ -2108,47 +2262,89 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
             OM@nsim <- nsim
             OM@BMSY_B0biascv <- MOM@Obs[[p]][[f]]@BMSY_B0biascv
             OM@proyears <- proyears
-
-            MSElist[[p]][[f]][[mm]] <- updateData(Data=MSElist[[p]][[f]][[mm]],
-                                                  OM,
-                                                  MPCalcs=MPCalcs_list[[p]][[f]],
-                                                  Effort=Effort[,p,f,, ,drop=FALSE],
-                                                  Biomass=Biomass[,p,,,],
-                                                  N=N[,p,,,],
-                                                  Biomass_P=Biomass_P[,p,,,],
-                                                  CB_Pret=FleetPars[[p]][[f]]$CB_Pret,
-                                                  N_P=N_P[,p,,,],
-                                                  SSB=SSB[,p,,,],
-                                                  SSB_P=SSB_P[,p,,,],
-                                                  VBiomass=VBF[,p,f,,,],
-                                                  VBiomass_P=VBF_P[,p,f,,,],
-                                                  RefPoints=StockPars[[p]]$ReferencePoints$ReferencePoints,
-
-                                                  retA_P=FleetPars[[p]][[f]]$retA_real,
-                                                  retL_P=FleetPars[[p]][[f]]$retL_P,
-                                                  StockPars=StockPars[[p]],
-                                                  FleetPars=FleetPars[[p]][[f]],
-                                                  ObsPars=ObsPars[[p]][[f]],
-                                                  ImpPars=ImpPars[[p]][[f]],
-                                                  V_P=FleetPars[[p]][[f]]$V_P,
-                                                  upyrs=upyrs,
-                                                  interval=interval,
-                                                  y=y,
-                                                  mm=mm,
-                                                  Misc=MSElist[[p]][[f]][[mm]]@Misc,
-                                                  RealData=multiHist[[p]][[f]]@Data,
-                                                  Sample_Area=ObsPars[[p]][[f]]$Sample_Area)
+            
+            # -- check real data mirroring across stocks ---
+            map.stocks <- which(Real.Data.Map[f,] ==p)
+            if (length(map.stocks)==0) {
+              # stock data have been mapped to another one
+              mapped.to <- Real.Data.Map[f,p]
+              om <- MSElist[[p]][[f]][[mm]]@OM
+              MSElist[[p]][[f]][[mm]] <- new('Data') 
+              MSElist[[p]][[f]][[mm]]@OM <- om
+            } else {
+              if (length(map.stocks)>1) {
+                # assumes real data in cpars is identical for stocks that are mirrored
+                out.dim <- dim(Biomass[,1,,,])
+                b <- agg_data(Biomass, out.dim, map.stocks)
+                b_p <- agg_data(Biomass_P, dim(Biomass_P[,1,,,]), map.stocks)
+                ssb <- agg_data(SSB, dim(SSB[,1,,,]), map.stocks)
+                ssb_p <- agg_data(SSB_P, dim(SSB_P[,1,,,]), map.stocks)
+                vb <- agg_data(VBF[,,f,,,], dim(VBF[,1,1,,,]), map.stocks)
+                vb_p <- agg_data(VBF_P[,,f,,,], dim(VBF_P[,1,1,,,]), map.stocks)
+                n <- agg_data(N, dim(N[,1,,,]), map.stocks)
+                n_p <- agg_data(N_P, dim(N_P[,1,,,]), map.stocks)
+                cbret_p <- agg_data(CBret_P[,,f,,,], dim(CBret_P[,1,1,,,]), map.stocks)
+                
+                # update MPrec (map last catch across mapped stock)
+                MPrec <- rep(0, nsim)
+                for (i in map.stocks) {
+                  MPrec <- MPrec+ MPCalcs_list[[i]][[f]]$TACrec
+                }
+                
+              } else {
+                MPrec <- NULL
+                b <- Biomass[,p,,,]
+                b_p <- Biomass_P[,p,,,]
+                ssb <- SSB[,p,,,]
+                ssb_p <- SSB_P[,p,,,]
+                vb <- VBF[,p,f,,,]
+                vb_p <- VBF_P[,p,f,,,] 
+                n <- N[,p,,,]
+                n_p <- N_P[,p,,,]
+                cbret_p <- CBret_P[,p,f, ,,]
+              }
+         
+              MSElist[[p]][[f]][[mm]] <- updateData(Data=MSElist[[p]][[f]][[mm]],
+                                                    OM,
+                                                    MPCalcs=MPCalcs_list[[p]][[f]],
+                                                    Effort=Effort[,p,f,, ,drop=FALSE],
+                                                    Biomass=b,
+                                                    N=n,
+                                                    Biomass_P=b_p,
+                                                    CB_Pret=cbret_p,
+                                                    N_P=n_p,
+                                                    SSB=ssb,
+                                                    SSB_P=ssb_p,
+                                                    VBiomass=vb,
+                                                    VBiomass_P=vb_p,
+                                                    RefPoints=StockPars[[p]]$ReferencePoints$ReferencePoints,
+                                                    retA_P=FleetPars[[p]][[f]]$retA_real,
+                                                    retL_P=FleetPars[[p]][[f]]$retL_P,
+                                                    StockPars=StockPars[[p]],
+                                                    FleetPars=FleetPars[[p]][[f]],
+                                                    ObsPars=ObsPars[[p]][[f]],
+                                                    ImpPars=ImpPars[[p]][[f]],
+                                                    V_P=FleetPars[[p]][[f]]$V_P,
+                                                    upyrs=upyrs,
+                                                    interval=interval,
+                                                    y=y,
+                                                    mm=mm,
+                                                    Misc=MSElist[[p]][[f]][[mm]]@Misc,
+                                                    RealData=multiHist[[p]][[f]]@Data,
+                                                    Sample_Area=ObsPars[[p]][[f]]$Sample_Area)
+            }
+            
             # ---- Update true abundance ----
             M_array <- array(0.5*StockPars[[p]]$M_ageArray[,,nyears+y],
                              dim=c(nsim, n_age, nareas))
             Atemp <- apply(StockPars[[p]]$VBiomass_P[, , y, ] *
                              exp(-M_array), 1, sum) # Abundance (mid-year before fishing)
             MSElist[[p]][[f]][[mm]]@OM$A <- Atemp
-
+            if (!is.null(MPrec)) MSElist[[p]][[f]][[mm]]@MPrec <- MPrec
+          
           } # end of fleet
         } # end of stock
-
-
+        
         if(MPcond[mm]=="MMP"){
           # returns a hierarchical list object stock then fleet of Data objects
           DataList <- getDataList(MSElist,mm)
@@ -2169,10 +2365,9 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
                                apply(VBiomass_P[,,,1:(y-1), , drop=FALSE],c(1,2,4),sum,na.rm=T),
                                along=3)
 
-          curdat<-multiDataS(MSElist,StockPars,np,mm,nf,realVB)
-
-          runMP <- applyMP(curdat, MPs = MPs[mm], reps = 1, silent=TRUE)  # Apply MP
-
+          curdat <- multiDataS(MSElist,Real.Data.Map,np,mm,nf,realVB)
+          runMP <- applyMP(curdat, MPs = MPs[mm], reps = 1, parallel=parallel_MPs[mm], silent=TRUE)  # Apply MP
+          
           Stock_Alloc <- realVB[,,nyears, drop=FALSE]/
             apply(realVB[,,nyears, drop=FALSE],1,sum)
 
@@ -2213,7 +2408,9 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
               }else{
                 curdat<-MSElist[[p]][[f]][[mm]]
               }
-              runMP <- applyMP(curdat, MPs = MPs[[p]][mm], reps = MOM@reps, silent=TRUE)  # Apply MP
+              runMP <- applyMP(curdat, MPs = MPs[[p]][mm], reps = MOM@reps, 
+                               parallel = parallel_MPs[match(MPs[[p]][mm], names(parallel_MPs))],
+                               silent=TRUE)  # Apply MP
               
               # Do allocation calcs
               TAC_A[,p,]<-array(as.vector(unlist(runMP[[1]][[1]]$TAC))*MOM@Allocation[[p]],c(nsim,nf))
@@ -2243,8 +2440,9 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
             } else if(MPcond[mm]=="byfleet"){
               for(f in 1:nf){
                 curdat<-MSElist[[p]][[f]][[mm]]
-                runMP <- MSEtool::applyMP(curdat, MPs = MPrefs[mm,f,p],
-                                         reps = MOM@reps, silent=TRUE)  # Apply MP
+                runMP <- applyMP(curdat, MPs = MPrefs[mm,f,p],
+                                 parallel = parallel_MPs[match(MPrefs[mm,f,p], names(parallel_MPs))],
+                                 reps = MOM@reps, silent=TRUE)  # Apply MP
                 MPRecs_A[[p]][[f]]<-runMP[[1]][[1]]
                 Data_p_A[[p]][[f]]<-runMP[[2]]
                 Data_p_A[[p]][[f]]@TAC <- MPRecs_A[[p]][[f]]$TAC
@@ -2324,6 +2522,9 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
             VF[,p,f,,]<- MPCalcs$V_P
             FleetPars[[p]][[f]]$SLarray_P <- MPCalcs$SLarray_P # vulnerable-at-length
             FMa[,p,f,mm,y] <- MPCalcs$Ftot # Total fishing mortality (by stock & fleet)
+            
+            MPCalcs_list[[p]][[f]] <- MPCalcs
+            
           } # end of fleets
         } # end of stocks
 
@@ -2403,7 +2604,7 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
         } # end of stocks
       } # end of not update year
     } # end of projection years
-
+    
     if(!silent) close(pb)
     
     if (max(upyrs) < proyears) { # One more call to complete Data object
@@ -2413,7 +2614,7 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
       interval[mm] <- proyears
       for (p in 1:np) {
         for (f in 1:nf) {
-          OM <- suppressMessages(new('OM')) 
+          OM <- suppressMessages(new('OM', docheck=FALSE)) 
           OM@nyears <- nyears
           OM@hbiascv <- MOM@Obs[[p]][[f]]@hbiascv
           OM@maxF <- MOM@maxF
@@ -2422,35 +2623,70 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
           OM@nsim <- nsim
           OM@BMSY_B0biascv <- MOM@Obs[[p]][[f]]@BMSY_B0biascv
           OM@proyears <- proyears
-          MSElist[[p]][[f]][[mm]] <- updateData(Data=MSElist[[p]][[f]][[mm]],
-                                                OM,
-                                                MPCalcs=MPCalcs_list[[p]][[f]],
-                                                Effort=Effort[,p,f,, ,drop=FALSE],
-                                                Biomass=Biomass[,p,,,],
-                                                N=N[,p,,,],
-                                                Biomass_P=Biomass_P[,p,,,],
-                                                CB_Pret=FleetPars[[p]][[f]]$CB_Pret,
-                                                N_P=N_P[,p,,,],
-                                                SSB=SSB[,p,,,],
-                                                SSB_P=SSB_P[,p,,,],
-                                                VBiomass=VBF[,p,f,,,],
-                                                VBiomass_P=VBF_P[,p,f,,,],
-                                                RefPoints=StockPars[[p]]$ReferencePoints$ReferencePoints,
-                                                
-                                                retA_P=FleetPars[[p]][[f]]$retA_real,
-                                                retL_P=FleetPars[[p]][[f]]$retL_P,
-                                                StockPars=StockPars[[p]],
-                                                FleetPars=FleetPars[[p]][[f]],
-                                                ObsPars=ObsPars[[p]][[f]],
-                                                ImpPars=ImpPars[[p]][[f]],
-                                                V_P=FleetPars[[p]][[f]]$V_P,
-                                                upyrs=upyrs2,
-                                                interval=interval,
-                                                y=y,
-                                                mm=mm,
-                                                Misc=MSElist[[p]][[f]][[mm]]@Misc,
-                                                RealData=multiHist[[p]][[f]]@Data,
-                                                Sample_Area=ObsPars[[p]][[f]]$Sample_Area)
+          
+          # -- check real data mirroring across stocks ---
+          map.stocks <- which(Real.Data.Map[f,] ==p)
+          if (length(map.stocks)==0) {
+            # stock data have been mapped to another one
+            mapped.to <- Real.Data.Map[f,p]
+            om <- MSElist[[p]][[f]][[mm]]@OM
+            MSElist[[p]][[f]][[mm]] <- new('Data') 
+            MSElist[[p]][[f]][[mm]]@OM <- om
+          } else {
+            if (length(map.stocks)>1) {
+              # assumes real data in cpars is identical for stocks that are mirrored
+              out.dim <- dim(Biomass[,1,,,])
+              b <- agg_data(Biomass, out.dim, map.stocks)
+              b_p <- agg_data(Biomass_P, dim(Biomass_P[,1,,,]), map.stocks)
+              ssb <- agg_data(SSB, dim(SSB[,1,,,]), map.stocks)
+              ssb_p <- agg_data(SSB_P, dim(SSB_P[,1,,,]), map.stocks)
+              vb <- agg_data(VBF[,,f,,,], dim(VBF[,1,1,,,]), map.stocks)
+              vb_p <- agg_data(VBF_P[,,f,,,], dim(VBF_P[,1,1,,,]), map.stocks)
+              n <- agg_data(N, dim(N[,1,,,]), map.stocks)
+              n_p <- agg_data(N_P, dim(N_P[,1,,,]), map.stocks)
+              cbret_p <- agg_data(CBret_P[,,f,,,], dim(CBret_P[,1,1,,,]), map.stocks)
+            } else {
+              b <- Biomass[,p,,,]
+              b_p <- Biomass_P[,p,,,]
+              ssb <- SSB[,p,,,]
+              ssb_p <- SSB_P[,p,,,]
+              vb <- VBF[,p,f,,,]
+              vb_p <- VBF_P[,p,f,,,] 
+              n <- N[,p,,,]
+              n_p <- N_P[,p,,,]
+              cbret_p <- CBret_P[,p,f, ,,]
+            }
+            
+            MSElist[[p]][[f]][[mm]] <- updateData(Data=MSElist[[p]][[f]][[mm]],
+                                                  OM,
+                                                  MPCalcs=MPCalcs_list[[p]][[f]],
+                                                  Effort=Effort[,p,f,, ,drop=FALSE],
+                                                  Biomass=b,
+                                                  N=n,
+                                                  Biomass_P=b_p,
+                                                  CB_Pret=cbret_p,
+                                                  N_P=n_p,
+                                                  SSB=ssb,
+                                                  SSB_P=ssb_p,
+                                                  VBiomass=vb,
+                                                  VBiomass_P=vb_p,
+                                                  RefPoints=StockPars[[p]]$ReferencePoints$ReferencePoints,
+                                                  retA_P=FleetPars[[p]][[f]]$retA_real,
+                                                  retL_P=FleetPars[[p]][[f]]$retL_P,
+                                                  StockPars=StockPars[[p]],
+                                                  FleetPars=FleetPars[[p]][[f]],
+                                                  ObsPars=ObsPars[[p]][[f]],
+                                                  ImpPars=ImpPars[[p]][[f]],
+                                                  V_P=FleetPars[[p]][[f]]$V_P,
+                                                  upyrs=upyrs2,
+                                                  interval=interval,
+                                                  y=y,
+                                                  mm=mm,
+                                                  Misc=MSElist[[p]][[f]][[mm]]@Misc,
+                                                  RealData=multiHist[[p]][[f]]@Data,
+                                                  Sample_Area=ObsPars[[p]][[f]]$Sample_Area)
+          }
+
           # ---- Update true abundance ----
           M_array <- array(0.5*StockPars[[p]]$M_ageArray[,,nyears+y],
                            dim=c(nsim, n_age, nareas))
@@ -2584,12 +2820,11 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
     RefPoint$ByYear[[nm]] <- array(NA, dim=c(nsim, np, nMP, proyears+nyears))
     for (p in 1:np) {
       for(mm in 1:nMP) {
-        RefPoint$ByYear[[nm]][,p,mm,] <- multiHist[[p]][[f]]@Ref$ByYear[[nm]]
+        RefPoint$ByYear[[nm]][,p,mm,] <- multiHist[[p]][[1]]@Ref$ByYear[[nm]]
       }
     }
   }
-
-
+  
   RefPoint$Dynamic_Unfished <- list()
   nms <- names(multiHist[[1]][[1]]@Ref$Dynamic_Unfished)
   # add Dynamic_Unfished
@@ -2602,13 +2837,16 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
   # remove Ref from MultiHist
   for (p in 1:np) {
     for(f in 1:nf) {
-      multiHist[[p]][[f]]@Ref <- list('Now in MMSE@Ref')
+      multiHist[[p]][[f]]@Ref <- list('Now in MMSE@RefPoint')
     }
   }
 
   if (dropHist) {
-    multiHist <- list('multiHist dropped (dropHist=TRUE). Reference points available in MMSE@Ref')
+    multiHist <- list('multiHist dropped (dropHist=TRUE). Reference points available in MMSE@RefPoint')
   }
+  
+
+  
   
   MSEout <- new("MMSE",
                 Name = MOM@Name,
@@ -2662,12 +2900,23 @@ ProjectMOM <- function (multiHist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
 #' @param Hist Should model stop after historical simulations? Returns a list
 #' containing all historical data
 #' @param silent Should messages be printed out to the console?
-#' @param parallel Logical. Should the MSE be run using parallel processing?
+#' @param parallel Logical or a named list. Should MPs be run using parallel processing?  See Details for more information.  
 #' @param checkMPs Logical. Check if the specified MPs exist and can be run on `SimulatedData`?
 #' @param dropHist Logical. Drop the (very large) `multiHist` object from the returned `MMSE` object?
 #' The `multiHist` object can be (re-)created using `SimulateMOM` or kept in `MMSE@multiHist` if
 #' `dropHist=FALSE`
 #' @describeIn multiMSE Run a multi-stock, multi-fleet MSE
+#' 
+#' @details 
+#' ## Running MPs in parallel
+#' 
+#' For most MPs, running in parallel can actually lead to an increase in computation time, due to the overhead in sending the 
+#' information over to the cores. Consequently, by default the MPs will not be run in parallel if `parallel=TRUE` 
+#' (although other internal code will be run in parallel mode).
+#' 
+#' To run MPs in parallel, specify a named list with the name of the MP(s) assigned as TRUE. For example,`parallel=list(AvC=TRUE`)
+#' will run the `AvC` MP in parallel mode.
+#
 #' @return  Functions return objects of class `MMSE` and `multiHist`
 #' #' \itemize{
 #'   \item SimulateMOM - An object of class `multiHist`

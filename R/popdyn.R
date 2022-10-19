@@ -159,6 +159,17 @@ optMSY_eq <- function(x, M_ageArray, Wt_age, Mat_age, Fec_age, V, maxage, R0, SR
   }
 
   boundsF <- c(1E-4, 3)
+  
+  # check for M = 0 in MOMs where maxage isn't the same for each stock
+  if (max(which(M_at_Age!=0)) != (maxage+1)) {
+    ind <- which(M_at_Age>0)
+    M_at_Age <- M_at_Age[ind]
+    Wt_at_Age <- Wt_at_Age[ind]
+    Mat_at_Age <- Mat_at_Age[ind]
+    Fec_at_Age <- Fec_at_Age[ind]
+    V_at_Age <- V_at_Age[ind]
+    maxage <- length(ind)-1
+  }
 
   doopt <- optimise(MSYCalcs, log(boundsF), M_at_Age, Wt_at_Age, Mat_at_Age,
                     Fec_at_Age, V_at_Age, maxage, R0[x], SRrel[x], hs[x], SSBpR[x, 1], opt=1,
@@ -197,6 +208,17 @@ per_recruit_F_calc <- function(x, M_ageArray, Wt_age, Mat_age, Fec_age, V, maxag
     V_at_Age <- apply(V[x,, yr.ind], 1, mean)
   }
 
+  # check for M = 0 in MOMs where maxage isn't the same for each stock
+  if (max(which(M_at_Age!=0)) != (maxage+1)) {
+    ind <- which(M_at_Age>0)
+    M_at_Age <- M_at_Age[ind]
+    Wt_at_Age <- Wt_at_Age[ind]
+    Mat_at_Age <- Mat_at_Age[ind]
+    Fec_at_Age <- Fec_at_Age[ind]
+    V_at_Age <- V_at_Age[ind]
+    maxage <- length(ind)-1
+  }
+  
   boundsF <- c(1E-3, 3)
 
   F_search <- exp(seq(log(min(boundsF)), log(max(boundsF)), length.out = 50))
@@ -764,14 +786,14 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     TACused[is.na(TACused)] <- LastTAC[is.na(TACused)]
     TACusedE <-  TAC_Imp_Error[,y]*TACused   # TAC taken after implementation error
 
-    # Calculate total vulnerable biomass available mid-year accounting for any changes in selectivity &/or spatial closures
-    M_array <- array(0.5*StockPars$M_ageArray[,,nyears+y], dim=c(nsim, n_age, StockPars$nareas))
-    Atemp <- apply(CurrentVB * exp(-M_array), c(1,3), sum) # mid-year before fishing
+    # Calculate total biomass available accounting for any changes in selectivity &/or spatial closures
+    # Note vulnerable biomass is not used. With Baranov equation, catch can exceed VB with high F
+    Atemp <- apply(CurrentB, c(1,3), sum)
     availB <- apply(Atemp * t(Si), 1, sum) # adjust for spatial closures
 
     # Calculate total F (using Steve Martell's approach http://api.admb-project.org/baranov_8cpp_source.html)
     expC <- TACusedE
-    expC[TACusedE> availB] <- availB[TACusedE> availB] * 0.99
+    expC[TACusedE> availB] <- availB[TACusedE> availB] * 0.999
 
     Ftot <- sapply(1:nsim, calcF, expC, V_P, retA_P, Biomass_P, fishdist,
                    StockPars$Asize,
@@ -842,6 +864,8 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   # Update catches after maxF constraint
   CB_P[SAYR] <- FM_P[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR]
   CB_Pret[SAYR] <- FM_Pret[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR]
+  CB_P[!is.finite(CB_P)] <- 0 
+  CB_Pret[!is.finite(CB_Pret)] <- 0 
 
   # Calculate total F (using Steve Martell's approach http://api.admb-project.org/baranov_8cpp_source.html)
   retainedCatch <- apply(CB_Pret[,,y,], 1, sum)
@@ -893,12 +917,19 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
 
 calcF <- function(x, TACusedE, V_P, retA_P, Biomass_P, fishdist, Asize, maxage, nareas,
                   M_ageArray, nyears, y, control) {
+  
+  maxiterF <- 300
+  if(!is.null(control$maxiterF) && is.numeric(control$maxiterF)) maxiterF <- as.integer(control$maxiterF)
+  
+  tolF <- 1e-4
+  if(!is.null(control$tolF) && is.numeric(control$tolF)) tolF <- control$tolF
+  
   ct <- TACusedE[x]
   ft <- ct/sum(Biomass_P[x,,y,] * V_P[x,,y+nyears]) # initial guess
   fishdist[x,] <- fishdist[x,]/sum(fishdist[x,])
 
   if (ft <= 1E-9) return(tiny)
-  for (i in 1:100) {
+  for (i in 1:maxiterF) {
     Fmat <- ft * matrix(V_P[x,,y+nyears], nrow=maxage+1, ncol=nareas) *
       matrix(fishdist[x,], maxage+1, nareas, byrow=TRUE)/
       matrix(Asize[x,], maxage+1, nareas, byrow=TRUE) # distribute F over age and areas
@@ -918,15 +949,18 @@ calcF <- function(x, TACusedE, V_P, retA_P, Biomass_P, fishdist, Asize, maxage, 
         stop('invalid entry for `OM@cpars$control$TAC`. Must be `OM@cpars$control$TAC="removals"`')
       }
     }
+    predC[!is.finite(predC)] <- 0 
     pct <- sum(predC)
     
     Omat <- (1-exp(-Zmat)) * Biomass_P[x,,y,]
+    Zmat[Zmat==0] <- tiny
     # derivative of catch wrt ft
     dct <- sum(Omat/Zmat - ((Fmat * Omat)/Zmat^2) + Fmat/Zmat * exp(-Zmat) * Biomass_P[x,,y,])
-    if (dct<0) break
+    
+    if (dct<1E-15) break
     
     ft <-  ft - (pct - ct)/(0.5*dct)
-    if (abs(pct - ct)/ct<1E-4) break
+    if (abs(pct - ct)/ct < tolF) break
   }
   ft
 }
@@ -1064,6 +1098,18 @@ CalcSPReq <- function(FM, StockPars, n_age, nareas, nyears, proyears, nsim, Hist
   Wt_age <- replicate(nareas, StockPars$Wt_age[, , yind])
   Mat_age <- replicate(nareas, StockPars$Mat_age[, , yind])
   Fec_age <- replicate(nareas, StockPars$Fec_Age[, , yind])
+
+  # check for M == 0 in MOMs with different maxage 
+  ind <- which(M[1,,1,1]==0)
+  if (length(ind)>0) {
+    ind2 <- which(M[1,,1,1]!=0)
+    M <- M[,ind2,,]
+    Wt_age <- Wt_age[,ind2,,]
+    Mat_age <- Mat_age[,ind2,,]
+    Fec_age <-Fec_age[,ind2,,]
+    FM <- FM[,ind2,,]
+    n_age <- dim(M)[2]
+  }
   Z <- FM + M
   
   initdist <- replicate(n_y, StockPars$initdist[, 1, ]) %>% aperm(c(1, 3, 2))
@@ -1093,6 +1139,18 @@ CalcSPRdyn <- function(FM, StockPars, n_age, nareas, nyears, proyears, nsim, His
   Wt_age <- replicate(nareas, StockPars$Wt_age[, , yind])
   Mat_age <- replicate(nareas, StockPars$Mat_age[, , yind])
   Fec_age <- replicate(nareas, StockPars$Fec_Age[, , yind])
+  
+  # check for M == 0 in MOMs with different maxage 
+  ind <- which(M[1,,1,1]==0)
+  if (length(ind)>0) {
+    ind2 <- which(M[1,,1,1]!=0)
+    M <- M[,ind2,,]
+    Wt_age <- Wt_age[,ind2,,]
+    Mat_age <- Mat_age[,ind2,,]
+    Fec_age <-Fec_age[,ind2,,]
+    FM <- FM[,ind2,,]
+    n_age <- dim(M)[2]
+  }
   Z <- FM + M
   
   initdist <- replicate(n_y, StockPars$initdist[, 1, ]) %>% aperm(c(1, 3, 2))

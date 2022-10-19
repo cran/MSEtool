@@ -1,5 +1,29 @@
 The current version of the `MSEtool` package is available for download from [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+# MSEtool 3.6.0
+
+## Major changes
+- By default, MPs are now no longer run in parallel mode when `parallel=TRUE` in `runMSE` and `multiMSE`. To run MPs in parallel, specify a named list with the name of the MP(s) assigned as TRUE. For example,`parallel=list(AvC=TRUE`).
+
+## New additions
+- added `summary.MMSE` generic function
+- added `Lag_Data` function to be used internally in custom MPs to lag all time-series data by specified number of time-steps (or optionally only some data slots). See `?Lag_Data` for more information.
+- added stock and fleet names (if provided in `MOM`) to `(multiHist)`
+- added `Real.Data.Map` to `cpars`. This allows mapping of simulated data across stocks in `MOMs` where the real data
+  is not stock-specific; e.g., cases where `MOM` includes male and female stocks but the real data in `cpars$Data` is not sex-specific 
+- `runMSE` can use the split-apply-combine technique to run projections in parallel with argument `parallel = "sac"`. Implementation details and notable issues are documented in the help doc `?runMSE`. This is the fastest method for running simulations but may not be suitable for all operating models and it may be more difficult to troubleshoot errors.
+
+
+## Minor changes 
+- minor patch to `ASAP2Data` 
+- minor patch in `Assess2OM`
+- removed duplicated information in `multiHist` object (now only returns biological information for fleet=1)
+- patch to `gettaxa` function for species that are found in FishBase database but not in FishLife database
+- update `joinData`, `joinHist`, `joinMSE`, and `addMPs` functions
+- `runMSE` calculates vulnerable biomass from fishery weight at age `cpars$Wt_age_C` if provided.
+- the realized catch from TAC is no longer constrained `0.5 * VBiomass` (a legacy feature which is now removed). The constraint is updated to `0.999 * Biomass`.
+- increase iteration limit to 300 when solving for Baranov F during the MP projections.
+
 # MSEtool 3.5.0
 
 ## New additions

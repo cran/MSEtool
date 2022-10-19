@@ -636,14 +636,15 @@ gettaxa <- function(Class = "predictive", Order = "predictive",
                     ParentChild_gz=MSEtool::LHdatabase$ParentChild_gz,
                     msg=TRUE) {
 
-  if (!requireNamespace("rfishbase", quietly = TRUE)) {
-    stop("Package \"rfishbase\" needed for this function to work. Please install it.",
-         call. = FALSE)
-  }
-  
-  if (msg)
-    message_info('Loading FishBase database')
-  Taxa_Table <- suppressMessages(rfishbase::load_taxa())
+  # if (!requireNamespace("rfishbase", quietly = TRUE)) {
+  #   stop("Package \"rfishbase\" needed for this function to work. Please install it.",
+  #        call. = FALSE)
+  # }
+  # 
+  # if (msg)
+  #   message_info('Loading FishBase database')
+  # # Taxa_Table <- suppressMessages(rfishbase::load_taxa())
+  Taxa_Table <-MSEtool::Taxa_Table
   Species2 <- strsplit(Taxa_Table$Species, " ")
   
   Match = 1:nrow(Taxa_Table)
@@ -704,6 +705,22 @@ gettaxa <- function(Class = "predictive", Order = "predictive",
   
   fam_gen_sp <- tolower(paste(match_taxonomy[3:5], collapse = '_'))
   nm_ind <- which(grepl(fam_gen_sp, tolower(ParentChild_gz$ChildName)))
+  if (length(nm_ind)==0) {
+    # species not found in FishLife
+    temp <- strsplit(fam_gen_sp,'_')[[1]]
+    temp[3] <- 'predictive'
+    fam_gen_sp <- paste0(temp, collapse="_")
+    nm_ind <- which(grepl(fam_gen_sp, tolower(ParentChild_gz$ChildName)))
+  }
+  
+  if (length(nm_ind)==0) {
+    # family & species not found in FishLife
+    temp <- strsplit(fam_gen_sp,'_')[[1]]
+    temp[2] <- 'predictive'
+    fam_gen_sp <- paste0(temp, collapse="_")
+    nm_ind <- which(grepl(fam_gen_sp, tolower(ParentChild_gz$ChildName)))
+  }
+  
   fullname <- gsub("_", " ", ParentChild_gz$ChildName[nm_ind])
   if (length(fullname)>1)
     fullname <- fullname[length(fullname)]

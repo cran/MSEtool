@@ -2,12 +2,15 @@
 % Please edit documentation in R/MSE_functions.R, R/Misc_Exported.R
 \name{checkMSE}
 \alias{checkMSE}
+\alias{addMPs}
 \alias{joinMSE}
 \alias{joinHist}
 \alias{updateMSE}
 \title{Utility functions for MSE objects}
 \usage{
 checkMSE(MSEobj)
+
+addMPs(MSEobjs)
 
 joinMSE(MSEobjs = NULL)
 
@@ -34,21 +37,27 @@ Utility functions for MSE objects
 }
 \section{Functions}{
 \itemize{
-\item \code{checkMSE}: Check that an MSE object includes all slots in the latest version of DLMtool
+\item \code{checkMSE()}: Check that an MSE object includes all slots in the latest version of DLMtool
 
-\item \code{joinMSE}: Joins two or more MSE objects together. MSE objects must have identical
-number of historical years, and projection years. Also works for Hist objects returned
-by \code{runMSE(Hist=TRUE)}
+\item \code{addMPs()}: Adds additional MPs to an MSE object by combining
+multiple MSE objects that have identical historical OM values but different
+MPs.
 
-\item \code{joinHist}: Join objects of class \code{Hist}
+\item \code{joinMSE()}: Joins two or more MSE objects together. MSE objects must have identical
+number of historical years, and projection years.
 
-\item \code{updateMSE}: Updates an existing MSE object (class MSE) from a previous version of the
-DLMtool to include slots new to the latest version. Also works with Stock,
+\item \code{joinHist()}: Join objects of class \code{Hist}. Does not join slot \code{OM}
+
+\item \code{updateMSE()}: Updates an existing MSE object (class MSE) from a previous version of the
+MSEtool to include slots new to the latest version. Also works with Stock,
 Fleet, Obs, Imp, and Data objects. The new slots will be empty,
 but avoids the 'slot doesn't exist' error that sometimes occurs.
 Returns an object of class matching class(MSEobj)
-}}
 
+}}
+\seealso{
+\link{joinData}
+}
 \author{
 A. Hordyk
 }

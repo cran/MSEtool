@@ -1004,7 +1004,7 @@ DLMdiag <- function(Data, command = c("available", "not available", "needed"), r
 #' @author A. Hordyk
 #' @examples
 #' \dontrun{
-#' library(DLMtool)
+#' library(MSEtool)
 #' Input(MSEtool::Cobia)
 #' }
 #'
@@ -1349,7 +1349,7 @@ Sense <- function(Data, MP, nsense = 6, reps = 100, perc = c(0.05, 0.5, 0.95), p
 #' @author T. Carruthers
 #' @examples
 #' \dontrun{
-#' library(DLMtool)
+#' library(MSEtool)
 #' Data <- TAC(MSEtool::Cobia)
 #' plot(Data)
 #' }
@@ -1387,49 +1387,48 @@ TAC <- function(Data, MPs = NA, reps = 100, timelimit = 1, checkMP=TRUE, silent=
 #'
 #' @param DataList A list of data objects of identical dimension (except for simulation)
 #' @author T. Carruthers
+#' @seealso \link{joinMSE} \link{joinHist}
 #' @export
 joinData<-function(DataList){
 
   if (!methods::is(DataList,"list")) stop("DataList must be a list")
   if (length(DataList) < 2) stop("DataList list doesn't contain multiple MSE objects")
 
-  Data<-DataList[[1]]
-  nD<-length(DataList)
+  Data <- new("Data")
+  #Data<-DataList[[1]]
+  nD <- length(DataList)
 
-  slots<-slotNames(Data)
-  slots_identical <- c("Name", "Common_Name", "Species", "Region", "Year", "MaxAge", "Units", "Ref_type", "PosMPs", "MPs", "nareas", "LHYear")
-  #slots <- slots[!slots%in%c("Name","Ref","OM","MaxAge","CAL_bins","Year","Units","Ref","Ref_type","Log","params","PosMPs","MPs","Obs","Misc","nareas","LHYear")]
+  slots <- slotNames(Data)
+  slots_identical <- c("Name", "Common_Name", "Species", "Region", "Year", "MaxAge", "Units", "Ref_type", "PosMPs", "MPs", "nareas", "LHYear",
+                       "AddIunits", "AddIndType")
   slots <- slots[!slots %in% slots_identical]
 
-  nslots<-length(slots)
-  getslot<-function(obj,name)slot(obj,name) # weird issue with namespace conflict and the @Cat slot
-  getslotclass<-function(obj,name)class(slot(obj,name))
-  sclass<-sapply(1:nslots,function(x,obj,slots)getslotclass(obj,slots[x]),obj=DataList[[1]],slots=slots)
-  #getdim<-function(x){
-  #  dim<-dim(x)
-  #  if(is.null(dim))dim=length(x)
-  #  dim
-  #}
-  #sdims<-sapply(1:nslots,function(x,obj,slots)getdim(getslot(obj,slots[x])),obj=DataList[[1]],slots=slots)
-  #nsims<-sapply(1:nD,function(x,DataList)length(DataList[[x]]@Dt),DataList)
+  nslots <- length(slots)
+  getslot <- function(obj, name) slot(obj, name) # weird issue with namespace conflict and the @Cat slot
+  #getslotclass<-function(obj,name)class(slot(obj,name))
+  #sclass<-sapply(1:nslots,function(x,obj,slots) getslotclass(obj,slots[x]),obj=DataList[[1]],slots=slots)
 
-  for (sn in 1:nslots){
-    templist<-lapply(DataList,getslot,name=slots[sn])
+  for (sn in slots) {
+    templist <- lapply(DataList, getslot, name = sn)
     tempval <- templist[[1]]
 
-    if (inherits(tempval,"numeric")| inherits(tempval,"integer")) {
-      if (slots[sn] == "CAL_bins") {
+    if (inherits(tempval, "numeric") || inherits(tempval, "integer")) {
+      
+      if (sn == "CAL_bins" || sn == "CAL_mids") {
         nbin <- vapply(templist, length, numeric(1))
-        attr(Data, slots[sn]) <- templist[[which.max(nbin)]]
-      } else if (slots[sn] == "CAL_mids") {
-        nbin <- vapply(templist, length, numeric(1))
-        attr(Data, slots[sn]) <- templist[[which.max(nbin)]]
+        slot(Data, sn) <- templist[[which.max(nbin)]]
+        
+        if (length(unique(nbin)) > 1) {
+          warning(paste0("joinData() found Data@", sn, " of various lengths. Using the vector in DataList[[", which.max(nbin), "]]."))
+        }
       } else {
-        attr(Data, slots[sn]) <- unlist(templist)
+        slot(Data, sn) <- unlist(templist)
       }
-    } else if (inherits(tempval,"matrix")| inherits(tempval,"array")) {
+      
+    } else if (is.array(tempval) || is.matrix(tempval)) {
 
-      if(slots[sn] == "CAL") {
+      if (sn == "CAL") {
+        
         nbin <- vapply(templist, function(x) dim(x)[3], numeric(1))
         templist2 <- vector("list", nD)
         for (i in 1:nD) {
@@ -1438,30 +1437,35 @@ joinData<-function(DataList){
         }
         if (all(diff(do.call("rbind", lapply(templist2, dim))[,2]) == 0)) {
           # arrays may be different dimensions if MPs fail
-          attr(Data, slots[sn]) <- abind::abind(templist2, along=1)
+          slot(Data, sn) <- abind::abind(templist2, along=1)
         }
+        
       } else {
+        
         if (all(diff(do.call("rbind", lapply(templist, dim))[,2]) == 0)) {
           # arrays may be different dimensions if MPs fail
-          attr(Data, slots[sn]) <- abind::abind(templist, along=1)
+          attr(Data, sn) <- abind::abind(templist, along=1)
         }
       }
 
-    } else if (inherits(tempval,"list")) {
-      attr(Data, slots[sn]) <- do.call(c, templist)
-    } else if (inherits(tempval,"data.frame")) {
-      attr(Data, slots[sn]) <- do.call(rbind, templist)
+    } else if (inherits(tempval, "list")) {
+      if (sn == "Misc") { # Ignore StockPars, FleetPars, ReferencePoints from Hist object
+        slot(Data, sn) <- do.call(c, lapply(templist, function(x) x[names(x) == ""]))
+      } else {
+        slot(Data, sn) <- do.call(c, templist)
+      }
+      
+    } else if (inherits(tempval, "data.frame")) {
+      slot(Data, sn) <- bind_rows(templist)
     }
   }
 
-  for (sn in 1:length(slots_identical)) {
-    templist <- lapply(DataList, getslot, name = slots_identical[sn])
-    attr(Data, slots_identical[sn]) <- unique(do.call(c, templist))
+  for (sn in slots_identical) {
+    templist <- lapply(DataList, slot, name = sn) # debugging
+    slot(Data, sn) <- templist[[1]]
   }
 
-  #checkdims<-sapply(1:nslots,function(x,obj,slots)getdim(getslot(obj,slots[x])),obj=Data,slots=slots)
-  Data
-
+  return(Data)
 }
 
 
@@ -2684,7 +2688,7 @@ applyMP <- function(Data, MPs = NA, reps = 100, nsims=NA, silent=FALSE, parallel
   # if (nMPs < 8 & nsims < 8) runParallel <- FALSE
 
   if (!silent)
-    message('Attempting to run ', length(MPs), ' MPs:')
+    message_info('Attempting to run ', length(MPs), ' MPs:')
 
   for (mp in 1:nMPs) {
     if (!silent)  message(MPs[mp])
@@ -2774,16 +2778,22 @@ SubData_sim <- function(x, Data) {
         if (slts[i] == 'Misc') {
           np <- length(tt)
           nf <- length(tt[[1]])
-          n_sim <- length(tt[[1]][[1]])
-          for (p in 1:np) {
-            newlist[[p]] <- list()
-            for (f in 1:nf) {
-              newlist[[p]][[f]] <- list()  
-              newlist[[p]][[f]][[1]] <- tt[[1]][[1]][[x]]
+          if (nf>0) {
+            # from MMSE
+            n_sim <- length(tt[[1]][[1]])
+            for (p in 1:np) {
+              newlist[[p]] <- list()
+              for (f in 1:nf) {
+                newlist[[p]][[f]] <- list()  
+                newlist[[p]][[f]][[1]] <- tt[[1]][[1]][[x]]
+              }
             }
+          } else {
+            # from MSE
+            # not currently implemented
+            
           }
         }
-        
       }
       slot(subdata, slts[i]) <- newlist
     }
@@ -2799,3 +2809,124 @@ MP_wrapper <- function(x, Data, MP, ...) {
   fun <- get(MP)
   fun(1, subdat, ...)
 }
+
+
+lag_slot <- function(sl, lag, n_yr, Data) {
+  lag_ind <- 1:(n_yr-lag)
+  val <- slot(Data, sl)
+  dd <- dim(val)
+  if (length(dd)==2) {
+    # matrix
+    val <- val[,lag_ind, drop=FALSE]
+  }
+  if (length(dd)==3) {
+    # array
+    ind <- ifelse(sl%in% c('AddInd', 'CV_AddInd'), 3, 2)
+    if (ind ==2) {
+      val <- val[,lag_ind,, drop=FALSE]
+    }
+    if (ind ==3) {
+      val <- val[,,lag_ind, drop=FALSE]
+    }
+  }
+  slot(Data, sl) <- val
+  
+  Data
+}
+
+#' Lag the time-series slots in a `Data` object by a specified number of time-steps
+#' 
+#' 
+#'
+#' @param Data An object of class `Data`
+#' @param Data_Lag Either a numeric vector of length 1 with a positive number 
+#' specifying the number of time-steps to lag all time-series data, or a named 
+#' list with numeric values (length 1). See details for more information.
+#' @param msg Logical. Display the messages?
+#'
+#' @return An object of class `Data` with time-series slots lagged. 
+#' @export
+#' 
+#' @details 
+#' By default, all simulated data in the forward projections are provided up to the
+#' previous time-step. That is, in projection year `t`, the simulated data are up to
+#' and including `t-1`.
+#' This function will lag the time-series values by the specified value. For example, 
+#' `Data_Lag=5` will mean in projection time-step `t` the data will be up to and 
+#' including `t-6`. 
+#' 
+#' *Note*: The `Data@Year` slot is *not* lagged by this function. 
+#' Many built-in MPs use the length of `Data@Year` to determine the number of
+#' years of data for smoothing over recent years etc. This may not be appropriate
+#' so check the MP is behaving as you expect if you use `Lag_Data`.
+#'
+#' @examples
+#' # Lag all time-series slots by 2 time-steps (usually years)
+#' Data <- Example_datafile
+#' Lagged_1 <- Lag_Data(Data, 2)
+#' length(Data@Year)
+#' length(Lagged_1@Year)
+#' length(Data@Cat[1,])
+#' length(Lagged_1@Cat[1,])
+#' length(Data@Ind[1,])
+#' length(Lagged_1@Ind[1,])
+#' 
+#' # Lag CAA by 5 and Ind by 3 time-steps
+#' Lagged_2 <- Lag_Data(Data, Data_Lag=list(CAA=5, Ind=3))
+#' length(Lagged_2@Year)
+#' length(Lagged_2@Cat[1,])
+#' dim(Data@CAA[1,,])
+#' dim(Lagged_2@CAA[1,,])
+#' 
+#' length(Data@Ind[1,])
+#' length(Lagged_2@Ind[1,])
+Lag_Data <- function(Data, Data_Lag=0, msg=FALSE) {
+  if(!inherits(Data, 'Data'))
+    stop('Object must be class `Data`')
+  n_yr <- length(Data@Year)
+  
+  # Data slots with a year index
+  data_slots <- slotNames('Data')
+  slot_vals <- sapply(data_slots, function(x) slot(Data, x))
+  slot_dims <- lapply(slot_vals, dim)
+  slot_yr <- slot_vals[grepl(n_yr, slot_dims)]
+  slot_yr_nms <- names(slot_yr)
+  
+  if (inherits(Data_Lag, 'list')) {
+    slots <- names(Data_Lag)
+  } else {
+    slots <- slotNames('Data')[grepl(n_yr, slot_dims)]
+    if (!inherits(Data_Lag, 'numeric'))
+      stop('`Data_Lag` must be numeric of length 1 or a named list.')
+    List <- vector('list', length(slots))
+    names(List) <- slot_yr_nms
+    List[] <- Data_Lag
+    Data_Lag <- List
+  }
+  
+  slot_dims <- slot_dims[grepl(n_yr, slot_dims)]
+  # check if slots in Data_Lag list have data
+  not_data <- !slots %in% slot_yr_nms
+  if (sum(not_data)) {
+    if (msg)
+      message_info('Data lag specified for slots:',
+                   paste(slots[not_data], collapse=', '),
+                   'but these slots do not have any data. Ignoring.')
+    
+    slots <- slots[!not_data]
+  }
+  
+  for (sl in slots) {
+    if (Data_Lag[[sl]]<0 & msg) 
+        message_info('Data lag specified for slot:', sl, 'is negative. Ignoring.')
+    
+    if (length(Data_Lag[[sl]])>1 & msg) 
+      message_info('`Data_Lag` is numeric vector > length 1. Only using the first value.')
+    
+    if (Data_Lag[[sl]]>0) {
+      Data <- lag_slot(sl, Data_Lag[[sl]], n_yr, Data)
+    }
+  }
+  Data
+}
+

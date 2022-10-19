@@ -94,7 +94,8 @@ SampleCpars <- function(cpars, nsim=48, silent=FALSE) {
   Names <- c('CAL_bins', 'CAL_binsmid', 'binWidth', 'nCALbins',
              'maxage', 'n_age', 'CurrentYr',
              'plusgroup', 'control', 'AddIUnits', 'Data', 'MPA',
-             'nareas', 'Wa', 'Wb', 'maxF', 'Sample_Area', 'Asize')
+             'nareas', 'Wa', 'Wb', 'maxF', 'Sample_Area', 'Asize',
+             'Real.Data.Map')
 
   cpars2 <- cpars
   cpars2[Names] <- NULL
@@ -583,8 +584,14 @@ SampleStockPars <- function(Stock, nsim=48, nyears=80, proyears=50, cpars=NULL, 
         } else {
           oksims <- which(apply(Mat_age[,,yr], 1, max) > 0.95)
         }
+        if (nsim == 1) {
+          oksims2 <- which(max(Mat_age[1,,yr]) <0.95)
+        } else {
+          oksims2 <- which(apply(Mat_age[,,yr], 1, max) < 0.95)
+        }
         
-        if (length(oksims)<1) {
+        
+        if (length(oksims)<1 | length(oksims2)<1) {
           age95array[,yr] <- 1.5 # set to 1.5 if < 1
         } else {
           age95array[,yr] <- unlist(sapply(1:nsim, function(x)
@@ -1075,10 +1082,16 @@ SampleFleetPars <- function(Fleet, Stock=NULL, nsim=NULL, nyears=NULL,
         for (s in 1:nsim) {
           xout <- seq(1, n_age, by=0.1)
           tt <- approx(V[s,,yr], xout=xout)
-          age5 <- tt$x[min(which(tt$y >=0.05))]-1
-          L5_y[s,yr] <- VB(StockPars$Linfarray[s,yr],
-                           StockPars$Karray[s,yr],
-                           StockPars$t0array[s,yr], age5)
+          if (all(tt$y<0.05)) {
+            age5 <- 0
+            L5_y[s,yr] <- tiny
+          } else {
+            age5 <- tt$x[min(which(tt$y >=0.05))]-1
+            L5_y[s,yr] <- VB(StockPars$Linfarray[s,yr],
+                             StockPars$Karray[s,yr],
+                             StockPars$t0array[s,yr], age5)
+          }
+    
           ageFS <- tt$x[which.max(tt$y)]-1
           if (ageFS == age5) ageFS <- age5 + 1
           LFS_y[s, yr] <- VB(StockPars$Linfarray[s,yr],
@@ -1221,10 +1234,16 @@ SampleFleetPars <- function(Fleet, Stock=NULL, nsim=NULL, nyears=NULL,
         for (s in 1:nsim) {
           xout <- seq(1, n_age, by=0.1)
           tt <- approx(retA[s,,yr], xout=xout)
-          age5 <- tt$x[min(which(tt$y >=0.05))]-1
-          LR5_y[s,yr] <- VB(StockPars$Linfarray[s,yr],
-                            StockPars$Karray[s,yr],
-                            StockPars$t0array[s,yr], age5)
+          tt <- approx(V[s,,yr], xout=xout)
+          if (all(tt$y<0.05)) {
+            age5 <- 0
+            LR5_y[s,yr] <- tiny
+          } else {
+            age5 <- tt$x[min(which(tt$y >=0.05))]-1
+            LR5_y[s,yr] <- VB(StockPars$Linfarray[s,yr],
+                             StockPars$Karray[s,yr],
+                             StockPars$t0array[s,yr], age5)
+          }
           ageFS <- tt$x[which.max(tt$y)]-1
           if (ageFS == age5) ageFS <- age5 + 1
           LFR_y[s, yr] <- VB(StockPars$Linfarray[s,yr],
@@ -1296,13 +1315,20 @@ SampleFleetPars <- function(Fleet, Stock=NULL, nsim=NULL, nyears=NULL,
   Fdisc_array2 <- cpars$Fdisc_array2
   if (is.null(Fdisc_array2)) Fdisc_array2 <- array(Fdisc, dim=c(nsim, StockPars$nCALbins, nyears+proyears))
   
-  
   # realized vulnerability schedule - accounting for discard mortality on discards
-  Fleetout$retA_real <- V * retA # realized retention curve (prob of retention x prob of selection)
-  Fleetout$V_real <- Fleetout$retA_real + ((V-Fleetout$retA_real) * Fdisc_array1)
-  
-  Fleetout$retL_real <- SLarray * retL # realized retention-at-length curve (prob of retention x prob of selection)
-  Fleetout$SLarray_real <- Fleetout$retL_real + ((SLarray-Fleetout$retL_real) * Fdisc_array2)
+  Fleetout$retA_real <- cpars$retA_real
+  if (is.null(Fleetout$retA_real)) 
+    Fleetout$retA_real <- V * retA # realized retention curve (prob of retention x prob of selection)
+  Fleetout$V_real <- cpars$V_real
+  if (is.null(Fleetout$V_real)) 
+    Fleetout$V_real <- Fleetout$retA_real + ((V-Fleetout$retA_real) * Fdisc_array1)
+ 
+  Fleetout$retL_real <- cpars$retL_real 
+  if (is.null(Fleetout$retL_real)) 
+    Fleetout$retL_real <- SLarray * retL # realized retention-at-length curve (prob of retention x prob of selection)
+  Fleetout$SLarray_real <- cpars$SLarray_real
+  if (is.null(Fleetout$SLarray_real))
+    Fleetout$SLarray_real <- Fleetout$retL_real + ((SLarray-Fleetout$retL_real) * Fdisc_array2)
   
   # ---- Existing MPA ----
   if (inherits(Fleet@MPA, 'matrix')) {
@@ -1344,8 +1370,7 @@ SampleFleetPars <- function(Fleet, Stock=NULL, nsim=NULL, nyears=NULL,
     fails <- which(maxV < 0.01, arr.ind = TRUE)
     sims <- unique(fails[,1])
     yrs <- unique(fails[,2])
-    warning("Vulnerability (V) is <0.01 for all ages in:\nsims:", sims, "\nyears:", yrs, "\n", call. = FALSE)
-    # warning('Check selectivity parameters. Is Fleet@isRel set correctly?', call.=FALSE)
+    message_info("Vulnerability (V) is <0.01 for all ages in years:", paste0(yrs, collapse=','), 'in some simulations') 
   }
   Fleetout
 }

@@ -30,7 +30,7 @@ multiMSE(
 \arguments{
 \item{MOM}{A multi-fleet multi-stock operating model (class 'MOM')}
 
-\item{parallel}{Logical. Should the MSE be run using parallel processing?}
+\item{parallel}{Logical or a named list. Should MPs be run using parallel processing?  See Details for more information.}
 
 \item{silent}{Should messages be printed out to the console?}
 
@@ -59,15 +59,26 @@ Functions return objects of class \code{MMSE} and \code{multiHist}
 Functions for running a multi-stock and/or multi-fleet Management
 Strategy Evaluation (closed-loop simulation) for a specified operating model
 }
+\details{
+\subsection{Running MPs in parallel}{
+
+For most MPs, running in parallel can actually lead to an increase in computation time, due to the overhead in sending the
+information over to the cores. Consequently, by default the MPs will not be run in parallel if \code{parallel=TRUE}
+(although other internal code will be run in parallel mode).
+
+To run MPs in parallel, specify a named list with the name of the MP(s) assigned as TRUE. For example,\verb{parallel=list(AvC=TRUE})
+will run the \code{AvC} MP in parallel mode.
+}
+}
 \section{Functions}{
 \itemize{
-\item \code{SimulateMOM}: Simulate historical dynamics for multi-OM
+\item \code{SimulateMOM()}: Simulate historical dynamics for multi-OM
 
-\item \code{ProjectMOM}: Run Forward Projections for a \code{MOM} object
+\item \code{ProjectMOM()}: Run Forward Projections for a \code{MOM} object
 
-\item \code{multiMSE}: Run a multi-stock, multi-fleet MSE
+\item \code{multiMSE()}: Run a multi-stock, multi-fleet MSE
+
 }}
-
 \author{
 T. Carruthers and A. Hordyk
 }

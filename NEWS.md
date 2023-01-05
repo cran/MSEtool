@@ -1,5 +1,25 @@
 The current version of the `MSEtool` package is available for download from [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+
+# MSEtool 3.6.1
+
+## New additions
+- added additional indices to `plot.Data`
+- added option for custom stock-recruitment function (in development/testing)
+
+## Minor changes 
+- Add `Misc` information to `PPD` for `MMSE`
+- remove `devtools` from Suggests and replace with `remotes`
+- updates to `SS2MOM_plots` plots
+
+## Fixes
+- fix minor bugs in `SS2Data`
+- fix bug in calculating selectivity/retention in `SSMOM2OM`
+- fix bug in calculating fecundity-at-age for `SS2OM` in `SSinternal`
+- fix minor bug in `SS2MOM_plots`
+- fix calculation of `L95array` when `Mat_age` passed in through `cpars`
+- fix minor bug in `SS2OM` when `report=TRUE`
+
 # MSEtool 3.6.0
 
 ## Major changes

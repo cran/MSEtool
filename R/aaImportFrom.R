@@ -2,13 +2,13 @@
 #' @importFrom dplyr %>%  all_of arrange bind_rows filter group_by left_join mutate pull select summarize
 #' summarise
 #' @importFrom ggplot2 aes element_blank expand_limits facet_wrap geom_boxplot geom_line
-#' ggplot ggplotGrob geom_rect geom_point labs theme theme_bw theme_classic xlim ylim xlab ylab
+#' ggplot ggplotGrob geom_rect geom_point guides guide_legend labs theme theme_bw theme_classic xlim ylim xlab ylab
 #' @importFrom graphics abline arrows axis axTicks barplot boxplot contour hist
 #' identify layout legend
 #'  lines matplot mtext par plot plot.new points polygon segments text title text
-#' @importFrom grDevices col2rgb colorRampPalette dev.off jpeg gray png rainbow rgb xy.coords
+#' @importFrom grDevices col2rgb colorRampPalette dev.new dev.off jpeg gray png rainbow rgb xy.coords
 #' @importFrom grid unit.c unit grid.newpage grid.draw
-#' @importFrom methods getClassDef getSlots .hasSlot is new show slot slot<- slotNames
+#' @importFrom methods formalArgs getClassDef getSlots .hasSlot is new show slot slot<- slotNames
 #' @importFrom parallel detectCores
 #' @importFrom Rcpp evalCpp
 #' @importFrom snowfall sfClusterEval sfInit sfExportAll sfIsRunning sfExport
@@ -51,7 +51,7 @@ Names <- c("maxage", "R0", "Mexp", "Msd", "dep", "D", "Mgrad", "SRrel", "hs", "p
            'true_Age', 'true_Year', 'true_Yr', 'exp_recr', 'pred_recr', 'Z',
            'season_as_years', 'nseas', 'SR', 'ReqData',
            'Bio_all', 'B', 'C', 'Catch', 'Exp', 'Fleet', 'Model', 'N', 'R', 'SB',
-           'SB0', 'Sim', 'age', 'name', 'seas', 'Seas', 'Morph', 'value'
+           'SB0', 'Sim', 'age', 'name', 'seas', 'Seas', 'Morph', 'value', 'Value'
 )
 
 if(getRversion() >= "2.15.1") utils::globalVariables(Names)

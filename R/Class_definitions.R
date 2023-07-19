@@ -1796,3 +1796,38 @@ setMethod("show", signature = (object="Rec"), function(object) {
 })
 
 
+# ---- Internal show methods ----
+#' @importFrom utils capture.output str
+show_int <- function(object, slots_check) {
+  cat(paste0("S4 object of class ", dQuote(class(object)), ".\n"))
+  if (!missing(slots_check)) {
+    for(i in slots_check) {
+      len <- length(slot(object, i))
+      if (len) cat(paste0(len, " items found in slot ", dQuote(i), ".\n"))
+    }
+  }
+  cat("\n")
+  cat("Use str(), slotNames(),", dQuote("@"), "etc. to explore contents:\n\n")
+  
+  txt <- capture.output(utils::str(object))
+  for(i in txt[1:5]) cat(i, "\n")
+  invisible()
+}
+
+#' @name show-MSEtool
+#' @aliases show show,Data-method show,OM-method show,Hist-method show,MSE-method show,MMSE-method
+#' @title Show MSEtool S4 objects
+#' 
+#' @description Briefly prints a couple of lines from \link[utils]{str} to avoid swamping the console with
+#' the contents of very large objects. 
+#' @param object S4 object from MSEtool
+setMethod("show", "Data", function(object) show_int(object))
+
+#' @rdname show-MSEtool
+setMethod("show", "OM", function(object) show_int(object, slots_check = "cpars"))
+
+#' @rdname show-MSEtool
+setMethod("show", "Hist", function(object) show_int(object))
+
+#' @rdname show-MSEtool
+setMethod("show", "MSE", function(object) show_int(object))

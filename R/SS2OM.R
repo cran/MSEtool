@@ -315,6 +315,7 @@ calculate_single_fleet_dynamics <- function(x) {
     retL <- sapply(x, getElement, "retL", simplify = "array")
     V <- sapply(x, getElement, "V", simplify = "array")
     retA <- sapply(x, getElement, "retA", simplify = "array")
+    
     Find <- sapply(x, function(xx) xx$qs * xx$Find, simplify = "array")
     Fdisc1 <- sapply(x, getElement, "Fdisc_array1", simplify = "array")
     Fdisc2 <- sapply(x, getElement, "Fdisc_array2", simplify = "array")
@@ -336,6 +337,11 @@ calculate_single_fleet_dynamics <- function(x) {
     V_avg <- single_fleet_V(F_at_age, retA = retA_avg, Find = Find_out, nsim = nsim)
     
     retA_avg <- retA_avg*V_avg
+    
+    # maxA <- apply(retA_avg, c(1,3), max)
+    # nage <- dim(retA_avg)[2]
+    # maxA <- aperm(replicate(nage, maxA), c(1,3,2))
+    # retA_avg <- retA_avg/maxA 
 
     # Length-based arrays
     F_at_length <- single_fleet_F_at_age(Find, V = SLarray, retA = retL, 
@@ -465,9 +471,11 @@ single_fleet_V <- function(F_at_age, retA, Find, nsim) {
 }
 
 calc_weightedmean_c <- function(l) {
-  W <- fm <- NULL
+  W <- fm <- relF <- NULL
   Wt_age_C <- lapply(l, function(x) x$Wt_age_C)
+  
   Find <- lapply(l, function(x) x$Find)
+  V <- lapply(l, function(x) x$V)
   nyears <- ncol(Find[[1]])
   totyears <- dim(Wt_age_C[[1]])[3]
   if (is.null(totyears)) 
@@ -479,26 +487,55 @@ calc_weightedmean_c <- function(l) {
   
   wtlist <- list()
   for (fl in 1:nfleets) {
-    fmdf <- data.frame(Sim=rep(1:nsim), 
-                       fm=as.vector(Find[[fl]]),
-                       Yr=rep(1:nyears,each=nsim))
     
+    Fdf <- data.frame(Sim=rep(1:nsim), 
+                      Yr=rep(1:nyears,each=nsim),
+                      fm=as.vector(Find[[fl]]))
+    
+    Vdf <- data.frame(Sim=rep(1:nsim), 
+                      Age=rep(0:(nage-1), each=nsim),
+                      Yr=rep(1:nyears,each=nage*nsim),
+                      V=as.vector(V[[fl]][,,1:nyears]))
+                       
+    
+    df <- left_join(Fdf, Vdf, by = c("Sim", "Yr"))
+    df <- df %>% mutate(relF=fm*V)
+    
+    
+  
     wtdf <- data.frame(Sim=rep(1:nsim),
-                       Yr=rep(1:totyears,each=nage*nsim),
-                       W=as.vector(Wt_age_C[[fl]]),
+                       Yr=rep(1:nyears,each=nage*nsim),
+                       W=as.vector(Wt_age_C[[fl]][,,1:nyears]),
                        Fl=fl,
                        Age=rep(0:(nage-1), each=nsim))
-    df <- left_join(wtdf, fmdf, by = c("Sim", "Yr"))
-    df$fm[is.na(df$fm)] <- 1
+    df <- left_join(df, wtdf, by = c("Sim", "Yr", "Age"))
+    df$relF[is.na(df$relF)] <- 1
     wtlist[[fl]] <- df
   }
   df <- do.call('rbind', wtlist)
-  wdf<- df %>% group_by(Sim, Yr, Age) %>% 
-    summarize(W=weighted.mean(x=W, w=fm), .groups='keep')
-  # projection years equal last historical
-  wdf$W[wdf$Yr>nyears] <- wdf$W[wdf$Yr==nyears]
-  wt <- array(wdf$W, dim=c(nage, totyears,nsim))
-  aperm(wt, c(3,1,2))
+  
+  wdf_hist<- df %>% group_by(Sim, Yr, Age) %>% 
+    summarize(W=weighted.mean(x=W, w=relF), .groups='drop')
+  
+  
+  # add projection years 
+  lastYr <- wdf_hist %>% dplyr::ungroup() %>% dplyr::filter(Yr==max(Yr))
+  proj_list <- list()
+  for (y in 1:proyears) {
+    temp <- lastYr
+    temp$Yr <- nyears+y
+    proj_list[[y]] <- temp
+  }
+  proj_array <- do.call('rbind', proj_list)
+  wdf <- bind_rows(wdf_hist, proj_array) %>% 
+    arrange(Sim, Yr, Age)
+  
+  wt <- array(NA, dim=c(nage, totyears, nsim))
+  wt[] <- wdf$W
+
+  out <- aperm(wt, c(3,1,2))
+  out
+  
 }
 
 #' @describeIn SS2MOM Aggregate all fleets in an MOM object.

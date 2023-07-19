@@ -116,13 +116,6 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
                                proyears,
                                cpars=SampCpars,
                                msg=!silent)
-  
-  # Timing of Spawning (fraction of year)
-  if (!is.null(SampCpars$spawn_time_frac)) {
-    StockPars$spawn_time_frac <- SampCpars$spawn_time_frac
-  } else {
-    StockPars$spawn_time_frac <- rep(0, nsim) # default: beginning of year
-  }
 
   # Check for custom stock-recruit function
   StockPars <- Check_custom_SRR(StockPars, SampCpars, nsim)
@@ -425,7 +418,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
               Vuln=FleetPars$V_real[x,,],
               Retc=FleetPars$retA_real[x,,],
               Prec=StockPars$Perr_y[x,],
-              movc=split.along.dim(StockPars$mov[x,,,,],4),
+              movc=split_along_dim(StockPars$mov[x,,,,],4),
               SRrelc=StockPars$SRrel[x],
               Effind=rep(0, nyears+proyears),
               Spat_targc=FleetPars$Spat_targ[x],
@@ -591,7 +584,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
               Vuln=FleetPars$V_real[x,,],
               Retc=FleetPars$retA_real[x,,],
               Prec=StockPars$Perr_y[x,],
-              movc=split.along.dim(StockPars$mov[x,,,,],4),
+              movc=split_along_dim(StockPars$mov[x,,,,],4),
               SRrelc=StockPars$SRrel[x],
               Effind=FleetPars$Find[x,],
               Spat_targc=FleetPars$Spat_targ[x],
@@ -971,8 +964,8 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   Hist <- new("Hist")
   # Data@Misc <- list()
   Hist@Data <- Data
-
-  ind <- which(lapply(ObsPars, length) == nsim)
+  
+  ind <- vapply(ObsPars, function(x) is.atomic(x) && length(x) == nsim, logical(1))
   obs <- data.frame(ObsPars[ind])
   OMPars <- data.frame(OMPars, obs)
 

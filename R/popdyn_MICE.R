@@ -92,7 +92,10 @@ popdynMICE <- function(qsx, qfracx, np, nf, nyears, nareas, maxage, Nx, VFx, Fre
     VBfx[VBfind] <- Bx[VBfind[, c(1,3,4,5)]] * VFx[VBfind[, 1:4]]
     VBcur[] <- VBfx[, , , y-1, ] # array(VBfx[,,,y-1,], c(np, nf, n_age, nareas))
     
-    Fdist[Find] <- VBcur[Find]*MPAthisyr[Find[,c(1,2,4)]]^Spat_targ[Find[, 1:2]]
+    VBcur_a <- apply(VBcur, c(1,2,4), sum)
+   
+    # Fdist[Find] <- VBcur[Find]*MPAthisyr[Find[,c(1,2,4)]]^Spat_targ[Find[, 1:2]]
+    Fdist[Find] <- (VBcur_a[Find[,c(1,2,4)]]*MPAthisyr[Find[,c(1,2,4)]])^Spat_targ[Find[, 1:2]]
     Fdist[Find] <- Fdist[Find]/apply(Fdist,1:3,sum)[Find[,1:3]]
     Fdist[is.na(Fdist)] <- 0 # This is an NA catch for hermaphroditism
     
@@ -102,7 +105,7 @@ popdynMICE <- function(qsx, qfracx, np, nf, nyears, nareas, maxage, Nx, VFx, Fre
     FMx[Find] <- qsx[Find[, 1]] * qfracx[Find[, 1:2]] * Ecur[Find[, 1:2]] * Fdist[Find] *
       Vcur[Find[, 1:3]]/Asizex[Find[, c(1, 4)]]
     FMx[FMx > maxF] <- maxF # apply maxF
-
+    
     Retcur[] <- FretAx[, , , y-1] #array(FretAx[, , , 1], c(np, nf, n_age))
     FMretx[Find] <- qsx[Find[,1]] * qfracx[Find[,1:2]] * Ecur[Find[,1:2]] * Fdist[Find] *
       Retcur[Find[, 1:3]]/Asizex[Find[, c(1, 4)]]
@@ -110,11 +113,11 @@ popdynMICE <- function(qsx, qfracx, np, nf, nyears, nareas, maxage, Nx, VFx, Fre
     
     # Update spawning biomass and recruitment for last year (calculated mid year if spawn_time_frac>0)
     ZMx_all <- array(NA, dim=c(np, n_age, nareas))
-    Foverall <- apply(FMretx, c(1,3,4), sum)
+    Foverall <- apply(FMx, c(1,3,4), sum)
     M_agecur <- array(M_ageArrayx[, , y-1], c(np, n_age))
     M_agecur <- replicate(nareas, M_agecur)
     ZMx_all <- Foverall + M_agecur
-
+    
     SSBx[Nind] <- Nx[Nind] * exp(-ZMx_all[Nind[,c(1,2,4)]] * spawn_time_frac[Nind[,1]]) * Fec_agex[Nind[, 1:3]]
     SSNx[Nind] <- Nx[Nind] * exp(-ZMx_all[Nind[,c(1,2,4)]] * spawn_time_frac[Nind[,1]]) * Mat_agex[Nind[, 1:3]]
   
@@ -244,7 +247,7 @@ popdynMICE <- function(qsx, qfracx, np, nf, nyears, nareas, maxage, Nx, VFx, Fre
 #'
 #' @param np Integer, the number of stocks
 #' @param nf Integer, number of fleets
-#' @param nyears Integer, number of historical years (unfished til today)
+#' @param nareas Integer, number of areas
 #' @param maxage Integer, maximum modelled age
 #' @param Ncur Array `[stock, age, area]` of stock numbers
 #' @param Bcur Array `[stock, age, area]` of stock biomass
@@ -284,6 +287,8 @@ popdynMICE <- function(qsx, qfracx, np, nf, nyears, nareas, maxage, Nx, VFx, Fre
 #' @param B0x Unfished B0, Vector `[stock]` length.
 #' @param Len_agenext Matrix `[stock, age]` of next year's length-at-age
 #' @param Wt_agenext Matrix `[stock, age]` of next year's weight-at-age
+#' @param SRRfun  Optional. A stock-recruit function used if `SRrelc =3` 
+#' @param SRRpars Optional. A named list of arguments for `SRRfun`
 #' @author T.Carruthers
 #' @keywords internal
 popdynOneMICE <- function(np, nf, nareas, maxage, Ncur, Bcur, SSBcur, Vcur, FMretx, FMx, PerrYrp,

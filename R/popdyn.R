@@ -174,6 +174,7 @@ optMSY_eq <- function(x, yr.ind=1, StockPars, V) {
     Mat_at_Age <- Mat_at_Age[ind]
     Fec_at_Age <- Fec_at_Age[ind]
     V_at_Age <- V_at_Age[ind]
+    
     maxage <- length(ind)-1
   }
   
@@ -459,7 +460,7 @@ calcRefYield <- function(x, StockPars, FleetPars, pyears, Ncurr, nyears, proyear
                   WtAge=StockPars$Wt_age[x,,(nyears):(nyears+proyears)],
                   FecAge=StockPars$Fec_Age[x,,(nyears):(nyears+proyears)],
                   WtAgeC=FleetPars$Wt_age_C[x,,(nyears):(nyears+proyears)],
-                  Vuln=FleetPars$V_real[x,,(nyears):(nyears+proyears)],
+                  Vuln=FleetPars$V_real_2[x,,(nyears):(nyears+proyears)],
                   Retc=FleetPars$retA_real[x,,(nyears):(nyears+proyears)],
                   Prec=StockPars$Perr_y[x,(nyears):(nyears+proyears+StockPars$maxage)],
                   movc=split_along_dim(StockPars$mov[x,,,,(nyears):(nyears+proyears)],4),
@@ -548,6 +549,44 @@ optYield <- function(logFa, Asize_c, nareas, maxage, Ncurr, pyears, M_age,
 }
 
 
+calc_recs <- function(MPRecs, y, LastTAE, Effort_Imp_Error, nsim, histTAE, LastSpatial, StockPars, LastAllocat) {
+  # Effort
+  if (length(MPRecs$Effort) == 0) { # no max effort recommendation
+    if (y==1) TAE_err <- LastTAE  *  Effort_Imp_Error[,y] # max effort is unchanged but has implementation error
+    if (y>1) TAE_err <- LastTAE  * Effort_Imp_Error[,y] # max effort is unchanged but has implementation error
+  } else if (length(MPRecs$Effort) != nsim) {
+    stop("Effort recommmendation is not 'nsim' long.\n Does MP return Effort recommendation under all conditions?")
+  } else {
+    # a maximum effort recommendation
+    if (!all(is.na(histTAE))) {
+      TAE_err <- histTAE * MPRecs$Effort * Effort_Imp_Error[,y] # adjust existing TAE adjustment with implementation error
+    } else {
+      TAE_err <- MPRecs$Effort * Effort_Imp_Error[,y] # adjust existing TAE adjustment with implementation error
+    }
+  }
+  
+  # Spatial
+  if (all(is.na(MPRecs$Spatial))) { # no spatial recommendation
+    Si <- LastSpatial # spatial is unchanged
+  } else if (any(is.na(MPRecs$Spatial))) {
+    stop("Spatial recommmendation has some NAs.\n Does MP return Spatial recommendation under all conditions?")
+  } else {
+    Si <- MPRecs$Spatial # change spatial fishing
+  }
+  if (all(dim(Si) != c(StockPars$nareas, nsim))) stop("Spatial recommmendation not nareas long")
+  
+  # Allocation
+  if (length(MPRecs$Allocate) == 0) { # no allocation recommendation
+    Ai <- LastAllocat # allocation is unchanged
+  } else if (length(MPRecs$Allocate) != nsim) {
+    stop("Allocate recommmendation is not 'nsim' long.\n Does MP return Allocate recommendation under all conditions?")
+  } else {
+    Ai <- MPRecs$Allocate # change in spatial allocation
+  }
+  Ai <- as.numeric(Ai)
+  
+  list(TAE_err=TAE_err, Si=Si, Ai=Ai)
+}
 
 #' Calculate population dynamics from MP recommendation
 #'
@@ -576,36 +615,28 @@ optYield <- function(logFa, Asize_c, nareas, maxage, Ncurr, pyears, M_age,
 #' @param Rmaxlen_P A matrix with `nyears+proyears` rows and `nsim` columns with the retention at maximum length.
 #' @param retL_P An array with dimensions `nsim`, `nCALbins` and `nyears+proyears` with retention at length
 #' @param retA_P An array with dimensions `nsim`, `maxage` and `nyears+proyears` with retention at age
+#' @param retA_P_real An array with dimensions `nsim`, `maxage` and `nyears+proyears` with realized  retention at age. May not asymptote at one
+#' @param retA_P_real_2 An array with dimensions `nsim`, `maxage` and `nyears+proyears` `retA_P_real` standardized to max 1
 #' @param L5_P A matrix with `nyears+proyears` rows and `nsim` columns with the first length at 5 percent selectivity
 #' @param LFS_P A matrix with `nyears+proyears` rows and `nsim` columns with the first length at full selectivity
 #' @param Vmaxlen_P A matrix with `nyears+proyears` rows and `nsim` columns with the selectivity at maximum length.
 #' @param SLarray_P An array with dimensions `nsim`, `nCALbins` and `nyears+proyears` with selectivity at length
 #' @param V_P An array with dimensions `nsim`, `maxage` and `nyears+proyears` with selectivity at age
+#' @param V_P_real An array with dimensions `nsim`, `maxage` and `nyears+proyears` with realized selectivity at age. May not asymptote at one
+#' @param V_P_real_2 An array with dimensions `nsim`, `maxage` and `nyears+proyears`. `V_P_real` standardized to max 1
 #' @param Fdisc_P  vector of length `nsim` with discard mortality. From `OM@Fdisc` but can be updated by MP (`Rec@Fdisc`)
 #' @param DR_P A matrix with `nyears+proyears` rows and `nsim` columns with the fraction discarded.
-#' @param M_ageArray An array with dimensions `nsim`, `maxage` and `nyears+proyears` with natural mortality at age
 #' @param FM_P An array with dimensions `nsim`, `maxage`, `proyears`, and `nareas` with total fishing mortality
 #' @param FM_Pret An array with dimensions `nsim`, `maxage`, `proyears`, and `nareas` with fishing mortality of the retained fish
 #' @param Z_P An array with dimensions `nsim`, `maxage`, `proyears`, and `nareas` with total mortality
 #' @param CB_P An array with dimensions `nsim`, `maxage`, `proyears`, and `nareas` with total catch
 #' @param CB_Pret An array with dimensions `nsim`, `maxage`, `proyears`, and `nareas` with retained catch
-#' @param TAC_f A matrix with `nsim` rows and `proyears` columns with the TAC implementation error
-#' @param E_f A matrix with `nsim` rows and `proyears` columns with the effort implementation error
-#' @param SizeLim_f A matrix with `nsim` rows and `proyears` columns with the size limit implementation error
-#' @param FinF A numeric vector of length `nsim` with fishing mortality in the last historical year
-#' @param Spat_targ A numeric vector of length `nsim` with spatial targeting
-#' @param CAL_binsmid A numeric vector of length `nCALbins` with mid-points of the CAL bins
-#' @param Linf A numeric vector of length `nsim` with Linf (from `Stock@Linf`)
-#' @param Len_age An array with dimensions `nsim`, `maxage`, and `nyears+proyears` with length-at-age
-#' @param maxage A numeric value with maximum age from `Stock@maxage`
-#' @param nareas A numeric value with number of areas
-#' @param Asize A matrix with `nsim` rows and `nareas` columns with the relative size of each area
-#' @param nCALbins The number of CAL bins. Should be the same as `length(CAL_binsmid)`
-#' @param qs A numeric vector of length `nsim` with catchability coefficient
-#' @param qvar A matrix with `nsim` rows and `proyears` columns with catchability variability
-#' @param qinc A numeric vector of length `nsim` with average annual change in catchability
 #' @param Effort_pot A numeric vector of potential effort
+#' @param StockPars A list of stock parameters 
+#' @param FleetPars A list of fleet parameters 
+#' @param ImpPars A list of implementation error parameters
 #' @param checks Logical. Run internal checks? Currently not used.
+#' @param control List of control parameters used internally.
 #'
 #' @return A named list with updated population dynamics
 #' @author A. Hordyk
@@ -615,12 +646,14 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
                            VBiomass_P,
                            LastTAE, histTAE, LastSpatial, LastAllocat, LastTAC,
                            TACused, maxF,
-                           LR5_P, LFR_P, Rmaxlen_P, retL_P, retA_P,
-                           L5_P, LFS_P, Vmaxlen_P, SLarray_P, V_P,
+                           LR5_P, LFR_P, Rmaxlen_P, retL_P, 
+                           retA_P, retA_P_real, retA_P_real_2,
+                           L5_P, LFS_P, Vmaxlen_P, SLarray_P, 
+                           V_P, V_P_real, V_P_real_2,
                            Fdisc_P, DR_P,
                            FM_P, FM_Pret, Z_P, CB_P, CB_Pret, Effort_pot,
                            StockPars, FleetPars, ImpPars,
-                           checks=FALSE, control) {
+                           checks=FALSE, control=list()) {
 
   n_age <- StockPars$maxage + 1 # include age-0
 
@@ -628,47 +661,18 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   Effort_Imp_Error <- ImpPars$E_y
   SL_Imp_Error <- ImpPars$SizeLim_y
   TAC_Imp_Error <- ImpPars$TAC_y
-
   if (!is.null(MPRecs$type) && MPRecs$type == 'reference') {
     Effort_Imp_Error[Effort_Imp_Error!=1] <- 1
     SL_Imp_Error[SL_Imp_Error!=1] <- 1
     TAC_Imp_Error[TAC_Imp_Error!=1] <- 1
   }
+  
+  # Calculate MP recs with Imp Error 
+  MPRecs_Imp <- calc_recs(MPRecs, y, LastTAE, Effort_Imp_Error, nsim, histTAE, LastSpatial, StockPars, LastAllocat)
+  TAE_err <- MPRecs_Imp$TAE_err # Total allowable effort recommendation
+  Si <- MPRecs_Imp$Si # spatial 
+  Ai <- MPRecs_Imp$Ai # allocation
 
-  # Effort
-  if (length(MPRecs$Effort) == 0) { # no max effort recommendation
-    if (y==1) TAE_err <- LastTAE  *  Effort_Imp_Error[,y] # max effort is unchanged but has implementation error
-    if (y>1) TAE_err <- LastTAE  * Effort_Imp_Error[,y] # max effort is unchanged but has implementation error
-  } else if (length(MPRecs$Effort) != nsim) {
-    stop("Effort recommmendation is not 'nsim' long.\n Does MP return Effort recommendation under all conditions?")
-  } else {
-    # a maximum effort recommendation
-    if (!all(is.na(histTAE))) {
-      TAE_err <- histTAE * MPRecs$Effort * Effort_Imp_Error[,y] # adjust existing TAE adjustment with implementation error
-    } else {
-      TAE_err <- MPRecs$Effort * Effort_Imp_Error[,y] # adjust existing TAE adjustment with implementation error
-    }
-  }
-
-  # Spatial
-  if (all(is.na(MPRecs$Spatial))) { # no spatial recommendation
-    Si <- LastSpatial # spatial is unchanged
-  } else if (any(is.na(MPRecs$Spatial))) {
-    stop("Spatial recommmendation has some NAs.\n Does MP return Spatial recommendation under all conditions?")
-  } else {
-    Si <- MPRecs$Spatial # change spatial fishing
-  }
-  if (all(dim(Si) != c(StockPars$nareas, nsim))) stop("Spatial recommmendation not nareas long")
-
-  # Allocation
-  if (length(MPRecs$Allocate) == 0) { # no allocation recommendation
-    Ai <- LastAllocat # allocation is unchanged
-  } else if (length(MPRecs$Allocate) != nsim) {
-    stop("Allocate recommmendation is not 'nsim' long.\n Does MP return Allocate recommendation under all conditions?")
-  } else {
-    Ai <- MPRecs$Allocate # change in spatial allocation
-  }
-  Ai <- as.numeric(Ai)
 
   # Retention Curve
   RetentFlag <- FALSE # should retention curve be updated for future years?
@@ -678,7 +682,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     LR5_P[,(y + nyears):(nyears+proyears)] <- matrix(LR5_P[,y + nyears-1],
                                                      ncol=(length((y + nyears):(nyears+proyears))),
                                                      nrow=nsim, byrow=FALSE) # unchanged
-
+    
   } else if (length(MPRecs$LR5) != nsim) {
     stop("LR5 recommmendation is not 'nsim' long.\n Does MP return LR5 recommendation under all conditions?")
   } else {
@@ -704,7 +708,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
       # LFR has changed 
       LFR_P[,(y + nyears):(nyears+proyears)] <- matrix(lrr *  SL_Imp_Error[,y],
                                                        ncol=(length((y + nyears):(nyears+proyears))),
-                                                     nrow=nsim, byrow=FALSE) # recommendation with implementation error
+                                                       nrow=nsim, byrow=FALSE) # recommendation with implementation error
       RetentFlag <- TRUE; RetParsFlag <- TRUE
     }
   }
@@ -713,7 +717,6 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     Rmaxlen_P[,(y + nyears):(nyears+proyears)] <- matrix(Rmaxlen_P[,y + nyears-1],
                                                          ncol=(length((y + nyears):(nyears+proyears))),
                                                          nrow=nsim, byrow=FALSE)   # unchanged
-
   } else if (length(MPRecs$Rmaxlen) != nsim) {
     stop("Rmaxlen recommmendation is not 'nsim' long.\n Does MP return Rmaxlen recommendation under all conditions?")
   } else {
@@ -725,7 +728,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     }
     
   }
-
+  
   # HS - harvest slot
   if (length(MPRecs$HS) == 0) { # no  recommendation
     HS <- rep(1E5, nsim) # no harvest slot
@@ -843,6 +846,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     yr <- y+nyears
     allyrs <- (y+nyears):(nyears+proyears)  # update vulnerability for all future years
 
+
     srs <- (StockPars$Linf - LFR_P[,yr]) / ((-log(Rmaxlen_P[,yr],2))^0.5) # retention parameters are constant for all years
     srs[!is.finite(srs)] <- Inf
     sls <- (LFR_P[,yr] - LR5_P[,yr]) / ((-log(0.05,2))^0.5)
@@ -870,7 +874,6 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     
     newretA <- aperm(array(as.numeric(unlist(VList, use.names=FALSE)), dim=c(n_age, length(allyrs), nsim)), c(3,1,2))
     retA_P[ , , allyrs] <- newretA
-
     
     # upper harvest slot
     aboveHS <- StockPars$Len_age[,,allyrs, drop=FALSE]>array(HS, dim=c(nsim, n_age, length(allyrs)))
@@ -891,8 +894,11 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     Fdisc_array1 <- array(Fdisc_P, dim=c(nsim, n_age, length(allyrs)))
     Fdisc_array2 <- array(Fdisc_P, dim=c(nsim, StockPars$nCALbins, length(allyrs)))
 
-    retA_P[,,allyrs] <- retA_P[,,allyrs, drop=FALSE] * V_P[,,allyrs, drop=FALSE] # realized retention curve (prob of retention x prob of selection)
-    V_P[,,allyrs] <- retA_P[,,allyrs, drop=FALSE] + ((V_P[,,allyrs, drop=FALSE]-retA_P[,,allyrs, drop=FALSE]) * Fdisc_array1)
+    retA_P_real[,,allyrs] <- retA_P[,,allyrs, drop=FALSE] * V_P[,,allyrs, drop=FALSE] # realized retention curve (prob of retention x prob of selection)
+    retA_P_real_2 <- retA_P_real/aperm(replicate(n_age,apply(retA_P_real, c(1,3), max)), c(1,3,2)) # asymptote = 1 
+    
+    V_P_real[,,allyrs] <- retA_P_real[,,allyrs, drop=FALSE] + ((V_P[,,allyrs, drop=FALSE]-retA_P_real[,,allyrs, drop=FALSE]) * Fdisc_array1)
+    V_P_real_2 <- V_P_real/aperm(replicate(n_age,apply(V_P_real, c(1,3), max)), c(1,3,2))
     
     retL_P[,,allyrs] <- retL_P[,,allyrs, drop=FALSE] * SLarray_P[,,allyrs, drop=FALSE]
     SLarray_P[,,allyrs]  <- retL_P[,,allyrs, drop=FALSE]  + ((SLarray_P[,,allyrs, drop=FALSE]-retL_P[,,allyrs, drop=FALSE] ) * Fdisc_array2)
@@ -925,7 +931,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   SA <- SYA[, c(1, 3)]
   S <- SYA[, 1]
 
-  CurrentVB[SAR] <- CurrentB[SAR] * V_P[SAYt] # update available biomass if selectivity has changed
+  CurrentVB[SAR] <- CurrentB[SAR] * V_P_real[SAYt] # update available biomass if selectivity has changed
 
   # Calculate fishing distribution if all areas were open
   newVB <- apply(CurrentVB, c(1,3), sum) # calculate total vuln biomass by area
@@ -941,17 +947,16 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     if (all(is.na(Effort_pot)) & all(is.na(TAE_err))) Effort_pot <- rep(1, nsim) # historical effort
     if (all(is.na(Effort_pot))) Effort_pot <- TAE_err[1,]
     # fishing mortality with bio-economic effort
-    FM_P[SAYR] <- (FleetPars$FinF[S1] * Effort_pot[S1] * V_P[SAYt] * t(Si)[SR] * fishdist[SR] *
+    FM_P[SAYR] <- (FleetPars$FinF[S1] * Effort_pot[S1] * V_P_real[SAYt] * t(Si)[SR] * fishdist[SR] *
                      FleetPars$qvar[SY1] * (FleetPars$qs[S1]*(1 + FleetPars$qinc[S1]/100)^y))/StockPars$Asize[SR]
 
     # retained fishing mortality with bio-economic effort
-    FM_Pret[SAYR] <- (FleetPars$FinF[S1] * Effort_pot[S1] * retA_P[SAYt] * t(Si)[SR] * fishdist[SR] *
+    FM_Pret[SAYR] <- (FleetPars$FinF[S1] * Effort_pot[S1] * retA_P_real[SAYt] * t(Si)[SR] * fishdist[SR] *
                         FleetPars$qvar[SY1] * FleetPars$qs[S1]*(1 + FleetPars$qinc[S1]/100)^y)/StockPars$Asize[SR]
 
     Effort_req <- Effort_pot
-
   }
-
+  
   # ---- calculate required F and effort for TAC recommendation ----
   if (!all(is.na(TACused))) { # a TAC has been set
     # if MP returns NA - TAC is set to TAC from last year
@@ -967,7 +972,7 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     expC <- TACusedE
     expC[TACusedE> availB] <- availB[TACusedE> availB] * 0.999
 
-    Ftot <- sapply(1:nsim, calcF, expC, V_P, retA_P, Biomass_P, fishdist,
+    Ftot <- sapply(1:nsim, calcF, expC, V_P_real_2, retA_P_real, Biomass_P, fishdist,
                    StockPars$Asize,
                    StockPars$maxage,
                    StockPars$nareas,
@@ -980,10 +985,11 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     Ftot[Ftot>maxF] <- maxF
 
     # Calculate F & Z by age class
-    FM_P[SAYR] <- Ftot[S] * V_P[SAYt] * fishdist[SR]/StockPars$Asize[SR]
-    FM_Pret[SAYR] <- Ftot[S] * retA_P[SAYt] * fishdist[SR]/StockPars$Asize[SR]
+    FM_P[SAYR] <- Ftot[S] * V_P_real_2[SAYt] * fishdist[SR]/StockPars$Asize[SR]
+    FM_Pret[SAYR] <- Ftot[S] * retA_P_real[SAYt] * fishdist[SR]/StockPars$Asize[SR]
     Z_P[SAYR] <- FM_P[SAYR] + StockPars$M_ageArray[SAYt] # calculate total mortality
 
+    
     # Calculate total and retained catch
     CB_P[SAYR] <- FM_P[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR] # removals
     CB_Pret[SAYR] <- FM_Pret[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR] # retained
@@ -992,11 +998,12 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
     # actualremovals <- apply(CB_P[,,y,], 1, sum)
     # retained <- apply(CB_Pret[,,y,], 1, sum)
     # ratio <- actualremovals/retained # ratio of actual removals to retained catch
-
+    # 
     # Effort relative to last historical with this catch
     Effort_req <- Ftot/(FleetPars$FinF * FleetPars$qs*FleetPars$qvar[,y]*
                           (1 + FleetPars$qinc/100)^y) * apply(fracE2, 1, sum) # effort required
     Effort_req[Ftot<=tiny] <- tiny
+    
   }
 
   # Effort_req - effort required to catch TAC
@@ -1021,12 +1028,15 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   # --- Re-calculate catch given actual effort ----
   # TODO should really only do this for the sims where Effort_act is different than Effort_req
   # fishing mortality with actual effort
-  FM_P[SAYR] <- (FleetPars$FinF[S1] * Effort_act[S1] * V_P[SAYt] * t(Si)[SR] * fishdist[SR] *
-                 FleetPars$qvar[SY1] * (FleetPars$qs[S1]*(1 + FleetPars$qinc[S1]/100)^y))/StockPars$Asize[SR]
-
-  # retained fishing mortality with actual effort
-  FM_Pret[SAYR] <- (FleetPars$FinF[S1] * Effort_act[S1] * retA_P[SAYt] * t(Si)[SR] * fishdist[SR] *
-                    FleetPars$qvar[SY1] * FleetPars$qs[S1]*(1 + FleetPars$qinc[S1]/100)^y)/StockPars$Asize[SR]
+  
+  # bio-economic model currently not working
+  
+  # FM_P[SAYR] <- (FleetPars$FinF[S1] * Effort_act[S1] * V_P_real_2[SAYt] * t(Si)[SR] * fishdist[SR] *
+  #                FleetPars$qvar[SY1] * (FleetPars$qs[S1]*(1 + FleetPars$qinc[S1]/100)^y))/StockPars$Asize[SR]
+  # 
+  # # retained fishing mortality with actual effort
+  # FM_Pret[SAYR] <- (FleetPars$FinF[S1] * Effort_act[S1] * retA_P_real[SAYt] * t(Si)[SR] * fishdist[SR] *
+  #                   FleetPars$qvar[SY1] * FleetPars$qs[S1]*(1 + FleetPars$qinc[S1]/100)^y)/StockPars$Asize[SR]
 
   # Apply maxF constraint
   FM_P[SAYR][FM_P[SAYR] > maxF] <- maxF
@@ -1038,6 +1048,13 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   CB_Pret[SAYR] <- FM_Pret[SAYR]/Z_P[SAYR] * (1-exp(-Z_P[SAYR])) * Biomass_P[SAYR]
   CB_P[!is.finite(CB_P)] <- 0 
   CB_Pret[!is.finite(CB_Pret)] <- 0 
+
+  # plot(FleetPars[[p]][[f]]$retA_P_real_2[1,,nyears+y])
+  # lines(FleetPars[[p]][[f]]$retA_P_real[1,,nyears+y])
+  # 
+  # actualremovals <- apply(CB_P[,,y,], 1, sum)
+  # retained <- apply(CB_Pret[,,y,], 1, sum)
+  
   
   # Calculate total F (using Steve Martell's approach http://api.admb-project.org/baranov_8cpp_source.html)
   retainedCatch <- apply(CB_Pret[,,y,], 1, sum)
@@ -1048,15 +1065,22 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   #                M_ageArray=StockPars$M_ageArray,nyears, y, control) # update if effort has changed 
 
   control$TAC <- 'removals'
-  Ftot <- sapply(1:nsim, calcF, removedCatch, V_P, retA_P, Biomass_P, fishdist,
+  
+  # total fishing mortality for realized selectivity curve
+  Ftot <- sapply(1:nsim, calcF, removedCatch, V_P_real_2, retA_P_real_2, Biomass_P, fishdist,
+                 Asize=StockPars$Asize, maxage=StockPars$maxage, StockPars$nareas,
+                 M_ageArray=StockPars$M_ageArray,nyears, y, control) # update if effort has changed
+
+  # total fishing mortality (proxy for effort) for realized selectivity curve that doesn't asymptote at 1
+  Ftot2 <- sapply(1:nsim, calcF, removedCatch, V_P_real, retA_P_real, Biomass_P, fishdist,
                  Asize=StockPars$Asize, maxage=StockPars$maxage, StockPars$nareas,
                  M_ageArray=StockPars$M_ageArray,nyears, y, control) # update if effort has changed 
   
   # Effort relative to last historical with this catch
-  Effort_act <- Ftot/(FleetPars$FinF * FleetPars$qs*FleetPars$qvar[,y]*
+  Effort_act <- Ftot2/(FleetPars$FinF * FleetPars$qs*FleetPars$qvar[,y]*
                         (1 + FleetPars$qinc/100)^y)  # effort required - already accounts for effort-by-area
 
-  Effort_act[Ftot<=1E-3] <- tiny
+  Effort_act[Ftot2<=1E-3] <- tiny
 
   # Returns
   TAE <- MPRecs$Effort
@@ -1064,8 +1088,12 @@ CalcMPDynamics <- function(MPRecs, y, nyears, proyears, nsim, Biomass_P,
   out <- list()
   out$TACrec <- TACused
   out$V_P <- V_P
+  out$V_P_real <- V_P_real
+  out$V_P_real_2 <- V_P_real_2
   out$SLarray_P <- SLarray_P
   out$retA_P <- retA_P
+  out$retA_P_real <- retA_P_real
+  out$retA_P_real_2 <- retA_P_real_2
   out$retL_P <- retL_P
   out$Fdisc_P <- Fdisc_P
   out$VBiomass_ <- VBiomass_P
@@ -1137,7 +1165,7 @@ calcF <- function(x, TACusedE, V_P, retA_P, Biomass_P, fishdist, Asize, maxage, 
     
     if (dct<1E-15) break
     
-    ft <-  ft - (pct - ct)/(0.5*dct)
+    ft <-  ft - (pct - ct)/(0.8*dct)
     if (abs(pct - ct)/ct < tolF) break
   }
   ft

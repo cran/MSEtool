@@ -765,6 +765,10 @@ Add_predictive = function(char_vec) {
 #' @examples
 #' testOM <- CheckOM(testOM)
 CheckOM <- function(OM, msg=TRUE, stop_if_missing=TRUE) {
+  if (!methods::is(OM,'OM')) 
+    stop("You must specify an operating model")
+
+    
   if (msg)
     message_info('Checking OM for completeness')
   
@@ -776,7 +780,7 @@ CheckOM <- function(OM, msg=TRUE, stop_if_missing=TRUE) {
   for (slot in nms) {
     OM <- checkSlot(slot, OM, msg=msg, stop_if_missing=stop_if_missing) 
   }
-  OM
+  invisible(OM)
 }
 
 

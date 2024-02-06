@@ -24,11 +24,15 @@ CalcMPDynamics(
   Rmaxlen_P,
   retL_P,
   retA_P,
+  retA_P_real,
+  retA_P_real_2,
   L5_P,
   LFS_P,
   Vmaxlen_P,
   SLarray_P,
   V_P,
+  V_P_real,
+  V_P_real_2,
   Fdisc_P,
   DR_P,
   FM_P,
@@ -41,7 +45,7 @@ CalcMPDynamics(
   FleetPars,
   ImpPars,
   checks = FALSE,
-  control
+  control = list()
 )
 }
 \arguments{
@@ -85,6 +89,10 @@ MPs must either return a recommendation or no recommendation for every simulatio
 
 \item{retA_P}{An array with dimensions \code{nsim}, \code{maxage} and \code{nyears+proyears} with retention at age}
 
+\item{retA_P_real}{An array with dimensions \code{nsim}, \code{maxage} and \code{nyears+proyears} with realized  retention at age. May not asymptote at one}
+
+\item{retA_P_real_2}{An array with dimensions \code{nsim}, \code{maxage} and \code{nyears+proyears} \code{retA_P_real} standardized to max 1}
+
 \item{L5_P}{A matrix with \code{nyears+proyears} rows and \code{nsim} columns with the first length at 5 percent selectivity}
 
 \item{LFS_P}{A matrix with \code{nyears+proyears} rows and \code{nsim} columns with the first length at full selectivity}
@@ -94,6 +102,10 @@ MPs must either return a recommendation or no recommendation for every simulatio
 \item{SLarray_P}{An array with dimensions \code{nsim}, \code{nCALbins} and \code{nyears+proyears} with selectivity at length}
 
 \item{V_P}{An array with dimensions \code{nsim}, \code{maxage} and \code{nyears+proyears} with selectivity at age}
+
+\item{V_P_real}{An array with dimensions \code{nsim}, \code{maxage} and \code{nyears+proyears} with realized selectivity at age. May not asymptote at one}
+
+\item{V_P_real_2}{An array with dimensions \code{nsim}, \code{maxage} and \code{nyears+proyears}. \code{V_P_real} standardized to max 1}
 
 \item{Fdisc_P}{vector of length \code{nsim} with discard mortality. From \code{OM@Fdisc} but can be updated by MP (\code{Rec@Fdisc})}
 
@@ -111,39 +123,15 @@ MPs must either return a recommendation or no recommendation for every simulatio
 
 \item{Effort_pot}{A numeric vector of potential effort}
 
+\item{StockPars}{A list of stock parameters}
+
+\item{FleetPars}{A list of fleet parameters}
+
+\item{ImpPars}{A list of implementation error parameters}
+
 \item{checks}{Logical. Run internal checks? Currently not used.}
 
-\item{M_ageArray}{An array with dimensions \code{nsim}, \code{maxage} and \code{nyears+proyears} with natural mortality at age}
-
-\item{TAC_f}{A matrix with \code{nsim} rows and \code{proyears} columns with the TAC implementation error}
-
-\item{E_f}{A matrix with \code{nsim} rows and \code{proyears} columns with the effort implementation error}
-
-\item{SizeLim_f}{A matrix with \code{nsim} rows and \code{proyears} columns with the size limit implementation error}
-
-\item{FinF}{A numeric vector of length \code{nsim} with fishing mortality in the last historical year}
-
-\item{Spat_targ}{A numeric vector of length \code{nsim} with spatial targeting}
-
-\item{CAL_binsmid}{A numeric vector of length \code{nCALbins} with mid-points of the CAL bins}
-
-\item{Linf}{A numeric vector of length \code{nsim} with Linf (from \code{Stock@Linf})}
-
-\item{Len_age}{An array with dimensions \code{nsim}, \code{maxage}, and \code{nyears+proyears} with length-at-age}
-
-\item{maxage}{A numeric value with maximum age from \code{Stock@maxage}}
-
-\item{nareas}{A numeric value with number of areas}
-
-\item{Asize}{A matrix with \code{nsim} rows and \code{nareas} columns with the relative size of each area}
-
-\item{nCALbins}{The number of CAL bins. Should be the same as \code{length(CAL_binsmid)}}
-
-\item{qs}{A numeric vector of length \code{nsim} with catchability coefficient}
-
-\item{qvar}{A matrix with \code{nsim} rows and \code{proyears} columns with catchability variability}
-
-\item{qinc}{A numeric vector of length \code{nsim} with average annual change in catchability}
+\item{control}{List of control parameters used internally.}
 }
 \value{
 A named list with updated population dynamics

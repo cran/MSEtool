@@ -53,6 +53,8 @@ popdynOneMICE(
 
 \item{nf}{Integer, number of fleets}
 
+\item{nareas}{Integer, number of areas}
+
 \item{maxage}{Integer, maximum modelled age}
 
 \item{Ncur}{Array \verb{[stock, age, area]} of stock numbers}
@@ -128,7 +130,9 @@ relationship (1 = Beverton-Holt, 2= Ricker)}
 
 \item{Wt_agenext}{Matrix \verb{[stock, age]} of next year's weight-at-age}
 
-\item{nyears}{Integer, number of historical years (unfished til today)}
+\item{SRRfun}{Optional. A stock-recruit function used if \code{SRrelc =3}}
+
+\item{SRRpars}{Optional. A named list of arguments for \code{SRRfun}}
 }
 \description{
 Completes a single iteration of recruitment, mortality, fishing and

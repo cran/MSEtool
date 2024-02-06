@@ -152,10 +152,18 @@ makeData <- function(Biomass, CBret, Cret, N, SSB, VBiomass, StockPars,
     # numbers at age in population that would be retained
     vn <- aperm(vn, c(1,3, 2))
 
-    CALdat <- simCAL(nsim, nyears, StockPars$maxage, ObsPars$CAL_ESS,
-                     ObsPars$CAL_nsamp, StockPars$nCALbins, StockPars$CAL_binsmid, StockPars$CAL_bins,
-                     vn, FleetPars$retL_real, StockPars$Linfarray,
-                     StockPars$Karray, StockPars$t0array, StockPars$LenCV)
+    CALdat <- simCAL(nsim, nyears, maxage=StockPars$maxage, 
+                     CAL_ESS=ObsPars$CAL_ESS,
+                     CAL_nsamp=ObsPars$CAL_nsamp, 
+                     nCALbins=StockPars$nCALbins, 
+                     CAL_binsmid=StockPars$CAL_binsmid,
+                     CAL_bins=StockPars$CAL_bins,
+                     vn, 
+                     retL=FleetPars$retL_real, 
+                     Linfarray=StockPars$Linfarray,
+                     Karray=StockPars$Karray, 
+                     t0array=StockPars$t0array, 
+                     LenCV=StockPars$LenCV)
   }
 
   Data@CAL_bins <- StockPars$CAL_bins
@@ -545,9 +553,14 @@ updateData <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_Pret
   } else {
     vn <- (apply(N_P*Sample_Area$CAL[,,(nyears+1):(nyears+proyears),], c(1,2,3), sum) * retA_P[,,(nyears+1):(nyears+proyears)]) # numbers at age that would be retained
     vn <- aperm(vn, c(1,3,2))
-    CALdat <- simCAL(nsim, nyears=length(yind), StockPars$maxage, ObsPars$CAL_ESS,
-                     ObsPars$CAL_nsamp, StockPars$nCALbins, StockPars$CAL_binsmid, StockPars$CAL_bins,
-                     vn=vn[,yind,, drop=FALSE], retL=retL_P[,,nyears+yind, drop=FALSE],
+    CALdat <- simCAL(nsim, nyears=length(yind), maxage=StockPars$maxage,
+                     CAL_ESS=ObsPars$CAL_ESS,
+                     CAL_nsamp=ObsPars$CAL_nsamp, 
+                     nCALbins=StockPars$nCALbins, 
+                     CAL_binsmid=StockPars$CAL_binsmid, 
+                     CAL_bins=StockPars$CAL_bins,
+                     vn=vn[,yind,, drop=FALSE], 
+                     retL=retL_P[,,nyears+yind, drop=FALSE],
                      Linfarray=StockPars$Linfarray[,nyears + yind, drop=FALSE],
                      Karray=StockPars$Karray[,nyears + yind, drop=FALSE],
                      t0array=StockPars$t0array[,nyears + yind,drop=FALSE],
@@ -674,7 +687,6 @@ simCAA <- function(nsim, yrs, n_age, Cret, CAA_ESS, CAA_nsamp) {
 #' @param LenCV CV of length-at-age#'
 #' @return named list with CAL array and LFC, ML, & Lc vectors
 #'
-#'     CALdat <- simCAL(nsim, nyears, StockPars$maxage, ObsPars$CAL_ESS,
 simCAL <- function(nsim, nyears, maxage,  CAL_ESS, CAL_nsamp, nCALbins, CAL_binsmid, CAL_bins,
                    vn, retL, Linfarray, Karray, t0array, LenCV) {
   # a multinomial observation model for catch-at-length data
@@ -702,6 +714,8 @@ simCAL <- function(nsim, nyears, maxage,  CAL_ESS, CAL_nsamp, nCALbins, CAL_bins
     tempSize <- lapply(1:nsim, genSizeCompWrap, vn, CAL_binsmid, CAL_bins, retL, CAL_ESS,
                        CAL_nsamp,
                        Linfarray, Karray, t0array, LenCV, truncSD=2)
+    
+    
   }
   CAL <- aperm(array(as.numeric(unlist(tempSize, use.names=FALSE)),
                      dim=c(nyears, length(CAL_binsmid), nsim)), c(3,1,2))
@@ -798,6 +812,7 @@ genSizeCompWrap <- function(i, vn, CAL_binsmid, CAL_bins, retL,
   lens
 
 }
+
 
 #' @describeIn genSizeCompWrap Internal function to calculate fifth percentile of size composition
 #' @param lenvec Vector of lengths
@@ -1450,9 +1465,8 @@ AddRealData_MS <- function(SimData,
     Data_out@Cat <- matrix(RealData@Cat[1,1:nyears], nrow=nsim, ncol=nyears, byrow=TRUE)
     Data_out@CV_Cat <- matrix(RealData@CV_Cat[1,1:nyears], nrow=nsim, ncol=nyears, byrow=TRUE)
     
-    simcatch <- apply(CBret[,map.stocks,,,, ,drop=FALSE], c(1,5), sum)
+    simcatch <- apply(CBret[,map.stocks,f,,, ,drop=FALSE], c(1,5), sum)
     simcatch[simcatch==0] <- tiny
-    
     Cbias <- matrix(apply(Data_out@Cat, 1, mean)/apply(simcatch, 1, mean),
                     nrow=nsim, ncol=nyears+proyears)
     
@@ -1524,6 +1538,8 @@ AddRealData_MS <- function(SimData,
                             msg=msg) 
     Data_out <- fit_ind$Data_out
     ObsPars <- fit_ind$ObsPars
+    
+    fit_ind$ObsPars[[1]][[1]]$VIerr_y[,1:69]
   }
   
   # ---- Add Additional Indices ----
@@ -1916,7 +1932,6 @@ updateData_MS <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_P
   }
   
   # --- Index of vulnerable abundance ----
-  yr.ind <- max(which(!is.na(ObsPars[[p]][[f]]$VIerr_y[1,1:nyears])))
   I2 <- cbind(apply(VBiomass[,map.stocks,f,,,,drop=FALSE], c(1, 5), sum)[,yr.ind:nyears],
               apply(VBiomass_P[,map.stocks,f,,,,drop=FALSE], c(1, 5), sum)[, 1:(y - 1)])
   
@@ -2140,7 +2155,7 @@ updateData_MS <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_P
     
     
   } else {
-    vn <- (apply(N_P[,p,,,, drop=FALSE], c(1,3,4), sum) * FleetPars[[p]][[f]]$retA_P[,,(nyears+1):(nyears+proyears)]) # numbers at age that would be retained
+    vn <- (apply(N_P[,p,,,, drop=FALSE], c(1,3,4), sum) * FleetPars[[p]][[f]]$retA_P_real[,,(nyears+1):(nyears+proyears)]) # numbers at age that would be retained
     vn <- aperm(vn, c(1,3,2))
     vn <- vn[,yind, ,drop=FALSE]
 
@@ -2152,6 +2167,9 @@ updateData_MS <- function(Data, OM, MPCalcs, Effort, Biomass, N, Biomass_P, CB_P
                      Karray=StockPars[[p]]$Karray[,nyears + yind, drop=FALSE],
                      t0array=StockPars[[p]]$t0array[,nyears + yind,drop=FALSE],
                      LenCV=StockPars[[p]]$LenCV)
+    
+    
+
     
   }
   

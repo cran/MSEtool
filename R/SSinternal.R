@@ -424,11 +424,12 @@ SS_stock <- function(i, replist, mainyrs, nyears, proyears, nsim, single_sex = T
 SS_fleet <- function(ff, i, replist, Stock, mainyrs, nyears, proyears, nsim, single_sex = TRUE,
                      partition = 2, cpars_bio, age_M = NULL) {
 
+  
   if(!requireNamespace("reshape2", quietly = TRUE)) {
     stop("Package `reshape2` is required for this function. Install with `install.packages('reshape2')`", call. = FALSE)
   }
 
-  ret_num <- NULL # dummy for CRAN
+  fleet <- sex <- year <- ret_num <- NULL # dummy for CRAN
   Factor <- Seas <- Morph <- Use <- SE <- Obs <- Nsamp_adj <- NULL # variable declaration for binding check
 
   allyears <- nyears + proyears
@@ -547,7 +548,19 @@ SS_fleet <- function(ff, i, replist, Stock, mainyrs, nyears, proyears, nsim, sin
  
   # ---- empirical weight-at-age for catches ----
   if (!methods::is(replist$wtatage, 'logical')) {
-    wt_at_age_c_df <- replist$wtatage %>% dplyr::filter(abs(Yr) %in% mainyrs, Sex==i, Fleet==ff)
+    if (!is.null(replist$wtatage$Yr)) {
+      wt_at_age_c_df <- replist$wtatage %>% dplyr::filter(abs(Yr) %in% mainyrs, Sex==i, Fleet==ff)
+    } else {
+      if (!is.null(replist$wtatage$sex)) {
+        wt_at_age_c_df <- replist$wtatage %>% 
+          dplyr::filter(abs(year) %in% mainyrs, sex==i, fleet==ff)
+      } else {
+        wt_at_age_c_df <- replist$wtatage %>% 
+          dplyr::filter(abs(year) %in% mainyrs, Sex==i, Fleet==ff)
+      }
+      wt_at_age_c_df <- wt_at_age_c_df |> dplyr::rename(Yr=year)
+    }
+    
     
     if(nrow(wt_at_age_c_df)) {
       

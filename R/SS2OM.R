@@ -14,7 +14,8 @@
 #' @param gender An integer that indexes the sex for importing life history parameters (1 = usually female, 2 = usually male, 1:2 = mean across both sexes).
 #' Only used for \code{SS2OM} only in a 2-sex model.
 #' @export
-SS2OM <- function(SSdir, nsim = 48, proyears = 50, reps = 1, maxF = 3, seed = 1, interval = 1, pstar = 0.5,
+SS2OM <- function(SSdir, nsim = 48, proyears = 50, reps = 1,
+                  maxF = 3, seed = 1, interval = 1, pstar = 0.5,
                   Obs = MSEtool::Generic_Obs, Imp = MSEtool::Perfect_Imp,
                   import_mov = TRUE, gender = 1:2, seasons_to_years = TRUE,
                   model_discards = TRUE, silent = FALSE,
@@ -34,7 +35,7 @@ SS2OM <- function(SSdir, nsim = 48, proyears = 50, reps = 1, maxF = 3, seed = 1,
   MOM <- SS2MOM(replist, nsim = nsim, proyears = proyears, reps = reps, maxF = maxF, seed = seed,
                 interval = interval, pstar = pstar, Obs = Obs, Imp = Imp, silent = silent,
                 Name = Name, Source = Source)
-  
+
   if(!silent) message("Converting MOM to OM...")
   OM <- SSMOM2OM(MOM, replist, gender, import_mov, seed, silent, model_discards)
   
@@ -245,6 +246,8 @@ SSMOM2OM <- function(MOM, SSdir, gender = 1:2, import_mov = TRUE, seed = 1, sile
     cpars_out$V <- cbind(V, Vpro) %>% array(c(Stock@maxage + 1, nyears + proyears, nsim)) %>% aperm(c(3, 1 ,2))
     cpars_out$Find <- matrix(Find, nsim, nyears, byrow = TRUE)
   }
+  
+  cpars_out$qs <- rep(1, nsim)
 
   # Place holders
   Fleet@EffYears <- 1:nyears
@@ -487,7 +490,6 @@ calc_weightedmean_c <- function(l) {
   
   wtlist <- list()
   for (fl in 1:nfleets) {
-    
     Fdf <- data.frame(Sim=rep(1:nsim), 
                       Yr=rep(1:nyears,each=nsim),
                       fm=as.vector(Find[[fl]]))
@@ -497,12 +499,9 @@ calc_weightedmean_c <- function(l) {
                       Yr=rep(1:nyears,each=nage*nsim),
                       V=as.vector(V[[fl]][,,1:nyears]))
                        
-    
     df <- left_join(Fdf, Vdf, by = c("Sim", "Yr"))
     df <- df %>% mutate(relF=fm*V)
     
-    
-  
     wtdf <- data.frame(Sim=rep(1:nsim),
                        Yr=rep(1:nyears,each=nage*nsim),
                        W=as.vector(Wt_age_C[[fl]][,,1:nyears]),

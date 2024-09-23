@@ -1,5 +1,31 @@
 The current version of the `MSEtool` package is available for download from [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+# MSEtool 3.7.2 
+
+## New additions
+- added `nsim` argument to `Simulate` as an override to `OM@nsim`. Useful for generating `Hist` object with 2 sims when all historical values are identical across simulations
+- added `BAM2OM` to create OM from Beaufort Assessment Model (BAM) output
+- add MICE rel for recruitment deviates in `multiMSE` which can be a function of the state dynamics in either the current year or previous year
+- MICE rel for natural mortality can be age-specific in `multiMSE`
+- custom stock-recruit functions available for `multiMSE`
+- allow plusgroup to be turned off in `multiMSE`
+- add `spawn_time_frac` argument to `iSCAM2OM`
+- hermaphroditism in `multiMSE` can be time-varying if entries in the `MOM@SexPars$Herm` list is an array with dimensions `nsim, maxage+1, nyears+proyears`
+- MICE relationship can be specified by reading in the abundance at age and year from the operating model
+- MICE functions can operate as a multiplier on the base value instead of over-writing the base value
+- `MOM@cpars$control <- list(HermEq = FALSE)` sidesteps the first-year equilibrium age and sex distribution calculation from the hermaphroditic age schedule
+- document the various `cpars$control` options in `help("validcpars")`
+
+## Internal
+- projections use `dynGet` then `get` to find the MPs in the R session (see function `getMP`). `dynGet` finds functions that are defined inside the function call stack but not available in the global environment.
+
+## Fixes
+- fix `plot_SS2MOM` for latest version of `r4ss`
+- fix to reported `MMSE@SB_SBMSY` for `MMSE` objects
+- fix to `OMdoc`
+- fixes to simulation of length comp
+- add `cpars$qs` to `OM` produce by `SS2OM`
+- Note: `SS2OM` does not return `cpars$Data`
 
 # MSEtool 3.7.1 
 

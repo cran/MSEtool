@@ -928,7 +928,7 @@ DLMdiag <- function(Data, command = c("available", "not available", "needed"), r
     inMPind <- which(funcs1 %in% builtin)
     cMPind <- which(funcs1 %in% custom)
     repp <- rep('', length(funcs1))
-    # built in MPs (doesn't require 'dependencies' line)
+    # built in MPs (doesn't require 'dependencies' line) 
     reqdata <-  ReqData[match(builtin, ReqData$MP),2]
 
     repp[inMPind] <- vapply(reqdata, match_slots, character(1), Data = Data, internal=TRUE)
@@ -2698,11 +2698,12 @@ applyMP <- function(Data, MPs = NA, reps = 100, nsims=NA, silent=FALSE, parallel
 
   for (mp in 1:nMPs) {
     if (!silent)  message(MPs[mp])
+    fn <- getMP(MPs[mp])
     
     if (runParallel && parallel[mp]) {
-      temp <- try(snowfall::sfLapply(1:nsims, MPs[mp], Data = Data, reps = reps), silent=TRUE)
+      temp <- try(snowfall::sfLapply(1:nsims, fn, Data = Data, reps = reps), silent=TRUE)
     } else {
-      temp <- try(lapply(1:nsims, MPs[mp], Data = Data, reps = reps), silent=TRUE)
+      temp <- try(lapply(1:nsims, fn, Data = Data, reps = reps), silent=TRUE)
     }
    
     if (methods::is(temp, 'try-error')) {
@@ -2710,7 +2711,7 @@ applyMP <- function(Data, MPs = NA, reps = 100, nsims=NA, silent=FALSE, parallel
       returnList[[mp]] <- temp
     } else {
       slots <- slotNames(temp[[1]])
-      for (X in slots) { # sequence along recommendation slots
+      for (X in slots) {# sequence along recommendation slots
         if (X == "Misc") { # convert to a list nsim by nareas
           rec <- lapply(temp, slot, name=X)
         } else {
@@ -2720,7 +2721,8 @@ applyMP <- function(Data, MPs = NA, reps = 100, nsims=NA, silent=FALSE, parallel
           rec <- matrix(rec, nareas, nsims, byrow=FALSE)
         }
         recList[[X]] <- rec
-        for (x in 1:nsims) Dataout@Misc[[x]] <- recList$Misc[[x]]
+        if (!is.null(recList$Misc))
+          for (x in 1:nsims) Dataout@Misc[[x]] <- recList$Misc[[x]]
         recList$Misc <- NULL
 
         if (MPs[mp] %in% refMPs) {

@@ -13,7 +13,7 @@ ProjectMOM(
   MPs = NA,
   parallel = FALSE,
   silent = FALSE,
-  checkMPs = TRUE,
+  checkMPs = FALSE,
   dropHist = FALSE,
   extended = FALSE
 )
@@ -24,13 +24,13 @@ multiMSE(
   Hist = FALSE,
   silent = FALSE,
   parallel = TRUE,
-  checkMPs = TRUE,
+  checkMPs = FALSE,
   dropHist = TRUE,
   extended = FALSE
 )
 }
 \arguments{
-\item{MOM}{A multi-fleet multi-stock operating model (class 'MOM')}
+\item{MOM}{A multi-fleet multi-stock operating model (class \linkS4class{MOM})}
 
 \item{parallel}{Logical or a named list. Should MPs be run using parallel processing?  See Details for more information.}
 

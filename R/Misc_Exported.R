@@ -256,11 +256,15 @@ setMethod("SubCpars", signature(x = "MOM"),
               
               if(length(MOM@cpars)) {
                 yr_diff <- proyears_full - proyears
+                nms <- names(MOM@cpars)
                 for(p in 1:length(MOM@cpars)) {
+                  if (nms[p]=='control')
+                    next()
                   for(f in 1:length(MOM@cpars[[p]])) {
                     cpars_p <- MOM@cpars[[p]][[f]]
                     MOM@cpars[[p]][[f]] <- lapply(names(cpars_p), SubCpars_proyears, yr_diff = yr_diff, cpars = cpars_p) %>% 
                       structure(names = names(cpars_p))
+                  
                   }
                 }
               }
@@ -294,7 +298,7 @@ SubCpars_sim <- function(xx, sims, cpars) {
 
 SubCpars_proyears <- function(xx, yr_diff, cpars) {
   x <- cpars[[xx]]
-  vars_noproyears <-  c("Asize", "Find", "AddIbeta", "Data", "SRR")
+  vars_noproyears <-  c("Asize", "Find", "AddIbeta", "Data", "SRR", "Real.Data.Map")
   if(xx %in% vars_noproyears) { # Matrices or arrays without projection year dimensions
     return(x)
   } else if(xx == "MPA") {
@@ -1565,3 +1569,20 @@ TACfilter <- function(TAC) {
   return(as.numeric(TAC))
 }
 
+#' Select DataList for an MP from `MMSE@PPD`
+#'
+#'
+#' @param PPD `PPD` slot from an MMSE object 
+#' @param MP Numeric value indicating the MP to return DataList
+#' @return A nested list `Data` objects (`nstock` by `nfleet`)
+#' @export
+select_MP <- function(PPD, MP=1) {
+  DataList <- vector('list', length(PPD))
+  for (s in 1:length(DataList)) {
+    DataList[[s]] <- vector('list', length(PPD[[s]]))
+    for (f in 1:length(DataList[[s]])) {
+      DataList[[s]][[f]] <- PPD[[s]][[f]][[MP]]
+    }
+  }
+  DataList
+}

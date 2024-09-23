@@ -27,7 +27,7 @@
 #' @slot maxF Maximum instantaneous fishing mortality rate that may be simulated for any given age class
 #' @slot reps Number of samples of the management recommendation for each method. Note that when this is set to 1, the mean value of
 #' the data inputs is used.
-#' @slot cpars A hierarchical list nstock then nfleet long of custom parameters. Time series are a matrix nsim rows by nyears columns. Single parameters are a vector nsim long
+#' @slot cpars A hierarchical list nstock then nfleet long of custom parameters. Time series are a matrix nsim rows by nyears columns. Single parameters are a vector nsim long. See [validcpars()]
 #' @slot seed A random seed to ensure users can reproduce results exactly
 #' @slot Source A reference to a website or article from which parameters were taken to define the operating model
 #' @slot Stocks List of stock objects
@@ -46,7 +46,7 @@
 #' \item \code{SSBfrom} A nstock x nstock matrix that specifies the proportion of the spawning output of the row p stock for the column p' stock. A diagonal matrix means each stock is
 #' responsible for its own recruitment.
 #' \item \code{Herm} A list with each entry containing a matrix (nsim x maxage + 1) that specifies the proportion at age that moves from stock p to p' (sequential hermaphroditism).
-#' The names of the list should be of the form "H_p'_p" where p and p' are integers that identify the stock. 
+#' The names of the list should be of the form "H_p'_p" where p and p' are integers that identify the stock. Arrays can also be used (nsim x maxage + 1 x nyears + proyears) for time-varying values.
 #' \item \code{share_par} Optional. Logical to indicate whether stock-recruit, depletion, and observation/implementation parameters are mirrored between stocks. By default, TRUE.
 #' }
 #' @seealso Article on \code{MOM} and \code{multiMSE}: \url{https://openmse.com/features-multimse/}

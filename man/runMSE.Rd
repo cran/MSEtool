@@ -6,7 +6,7 @@
 \alias{runMSE}
 \title{Run a Management Strategy Evaluation}
 \usage{
-Simulate(OM = MSEtool::testOM, parallel = FALSE, silent = FALSE)
+Simulate(OM = MSEtool::testOM, parallel = FALSE, silent = FALSE, nsim = NULL)
 
 Project(
   Hist = NULL,
@@ -14,7 +14,7 @@ Project(
   parallel = FALSE,
   silent = FALSE,
   extended = FALSE,
-  checkMPs = TRUE
+  checkMPs = FALSE
 )
 
 runMSE(
@@ -24,17 +24,20 @@ runMSE(
   silent = FALSE,
   parallel = FALSE,
   extended = FALSE,
-  checkMPs = TRUE
+  checkMPs = FALSE
 )
 }
 \arguments{
-\item{OM}{An operating model object (class \code{OM} or class \code{Hist})}
+\item{OM}{An operating model object (class \linkS4class{OM} or class \code{Hist}). Also works for
+\code{MOM} objects, as a wrapper for \code{ProjectMOM}}
 
 \item{parallel}{Logical or a named list. Should MPs be run using parallel processing?
 For \code{runMSE}, can also be \code{"sac"} to run the entire MSE in parallel
 using the split-apply-combine technique. See Details for more information.}
 
 \item{silent}{Should messages be printed out to the console?}
+
+\item{nsim}{Optional. numeric value to override \code{OM@nsim}.}
 
 \item{Hist}{Should model stop after historical simulations? Returns an object of
 class 'Hist' containing all historical data}

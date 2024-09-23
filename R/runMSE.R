@@ -1,7 +1,17 @@
 #' @describeIn runMSE Run the Historical Simulations from an object of class `OM`
 #' @export
 #
-Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
+Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL) {
+  
+  if (!is.null(nsim)) {
+    if (nsim<OM@nsim) 
+      OM@nsim <- nsim
+  }
+  
+  if (inherits(OM, 'MOM')) {
+    hist <- SimulateMOM(OM, parallel, silent)
+    return(hist)
+  }
   
   # ---- Initial Checks and Setup ---
   OM <- CheckOM(OM, !silent)
@@ -240,12 +250,17 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   initD <- SampCpars$initD #
   if (!is.null(initD)) { # initial depletion is not unfished
     if (!silent) message("Optimizing for user-specified depletion in first historical year")
-    Perrmulti <- sapply(1:nsim, optDfunwrap, initD=initD, R0=StockPars$R0,
-                        StockPars$initdist,
-                        Perr_y=StockPars$Perr_y, surv=surv[,,1], Fec_age=StockPars$Fec_Age,
+    Perrmulti <- sapply(1:nsim, optDfunwrap, initD=initD, 
+                        R0=StockPars$R0,
+                        initdist=StockPars$initdist,
+                        Perr_y=StockPars$Perr_y, 
+                        surv=surv[,,1], 
+                        Fec_age=StockPars$Fec_Age,
                         SSB0=SSB0,
-                        StockPars$n_age)
-    StockPars$Perr_y[,1:StockPars$maxage] <- StockPars$Perr_y[, 1:StockPars$maxage] * Perrmulti
+                        n_age=StockPars$n_age)
+    
+    StockPars$Perr_y[,1:StockPars$maxage] <- StockPars$Perr_y[, 1:StockPars$maxage] *
+      matrix(Perrmulti, nrow=nsim, ncol=StockPars$maxage, byrow=FALSE)
   }
 
   # --- Non-equilibrium Initial Year ----
@@ -256,6 +271,11 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
   SSB[SAYR] <- SBsurv[SAY] * StockPars$R0[S] *  StockPars$initdist[SAR]*StockPars$Perr_y[Sa] * StockPars$Fec_Age[SAY]    # Calculate spawning stock biomass
   VBiomass[SAYR] <- N[SAYR] * FleetPars$Wt_age_C[SAY] * FleetPars$V_real[SAY]  # Calculate vulnerable biomass
 
+  
+  SBsurv[1,,1]
+  SSB[1,,1,]
+  sum(SSB[1,,1,])
+  
   StockPars$aR <- aR
   StockPars$bR <- bR
   StockPars$SSB0 <- SSB0
@@ -1037,7 +1057,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE) {
 #'
 #' @export
 Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
-                     extended=FALSE, checkMPs=TRUE) {
+                     extended=FALSE, checkMPs=FALSE) {
 
   # ---- Setup ----
   if (!methods::is(Hist,'Hist'))
@@ -1428,8 +1448,8 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
       if (!silent) setTxtProgressBar(pb, y) # Works with pbapply
 
       SelectChanged <- FALSE
-      if (any(range(retA_P[,,nyears+y] -  FleetPars$retA_real[,,nyears+y]) !=0)) SelectChanged <- TRUE
-      if (any(range(V_P[,,nyears+y] - FleetPars$V_real[,,nyears+y]) !=0))  SelectChanged <- TRUE
+      if (any(range(retA_P[,,nyears+y] -  FleetPars$retA[,,nyears+y]) !=0)) SelectChanged <- TRUE
+      if (any(range(V_P[,,nyears+y] - FleetPars$V[,,nyears+y]) !=0))  SelectChanged <- TRUE
 
       # -- Calculate MSY stats for this year ----
       if (SelectChanged) { #
@@ -1499,7 +1519,8 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
       if (y %in% upyrs) {
         # --- Update Data object ----
         Data_MP <- updateData(Data=Data_MP, OM, MPCalcs, Effort,
-                              Biomass=StockPars$Biomass, StockPars$N,
+                              Biomass=StockPars$Biomass,
+                              N=StockPars$N,
                               Biomass_P, CB_Pret, N_P, SSB=StockPars$SSB,
                               SSB_P, VBiomass=StockPars$VBiomass, VBiomass_P,
                               RefPoints=ReferencePoints,
@@ -1508,6 +1529,8 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
                               upyrs, interval, y, mm,
                               Misc=Data_p@Misc, RealData,
                               Sample_Area=ObsPars$Sample_Area)
+        
+        
         
         Data_MP@Misc$StockPars$CB_Pret <- CB_Pret
         Data_MP@Misc$StockPars$Biomass_P <- Biomass_P
@@ -1794,11 +1817,13 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
 #' Functions to run the Management Strategy Evaluation (closed-loop
 #' simulation) for a specified operating model
 #'
-#' @param OM An operating model object (class `OM` or class `Hist`)
+#' @param OM An operating model object (class [MSEtool::OM-class] or class `Hist`). Also works for
+#' `MOM` objects, as a wrapper for `ProjectMOM`
 #' @param MPs A vector of methods (character string) of class MP
 #' @param Hist Should model stop after historical simulations? Returns an object of
 #' class 'Hist' containing all historical data
 #' @param silent Should messages be printed out to the console?
+#' @param nsim Optional. numeric value to override `OM@nsim`.
 #' @param parallel Logical or a named list. Should MPs be run using parallel processing? 
 #' For \code{runMSE}, can also be \code{"sac"} to run the entire MSE in parallel
 #' using the split-apply-combine technique. See Details for more information. 
@@ -1846,7 +1871,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE, silent=FALSE,
 #' }
 #' @export
 runMSE <- function(OM=MSEtool::testOM, MPs = NA, Hist=FALSE, silent=FALSE,
-                   parallel=FALSE, extended=FALSE, checkMPs=TRUE) {
+                   parallel=FALSE, extended=FALSE, checkMPs=FALSE) {
 
   # ---- Initial Checks and Setup ----
   if (methods::is(OM,'OM')) {

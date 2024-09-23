@@ -36,24 +36,85 @@ NIL<-function(listy,namey,lev1=T){
   out
 }
 
-#' Expand the Herm list in SexPars to a matrix of fractions at age
+#' @name Herm-int 
+#' @aliases expandHerm
+#' @title Internal Herm functions
+#' 
+#' @description - `expandHerm` expands the Herm list in SexPars to a matrix of fractions at age
 #'
-#' @param Herm A list of Hermaphroditic fractions at age (starting age class 1)
+#' @param Herm A list of Hermaphroditic fractions at age
 #' @param maxage The maximum age of stocks being simulated
 #' @param np The total number of stocks being simulated
 #' @param nsim The number of simulations
 #' @author T. Carruthers
-expandHerm<-function(Herm,maxage,np,nsim){
-  HermFrac<-array(1,c(nsim,np,maxage))
-  if(length(Herm)>0){
-    ps<-matrix(as.numeric(sapply(names(Herm),function(x)strsplit(x,"_")[[1]][2:3])),nrow=length(Herm),byrow=T)
-    for(i in 1:length(Herm)){
-      HermFrac[,ps[i,1],1:ncol(Herm[[1]])]<-Herm[[1]]
-      HermFrac[,ps[i,2],]<-0
-      HermFrac[,ps[i,2],1:ncol(Herm[[1]])]<-1-Herm[[1]]
+expandHerm <- function(Herm, maxage, np, nsim) {
+  n_age <- maxage + 1
+  HermFrac <- array(1, c(nsim, np, n_age))
+  if (length(Herm) > 0){
+    ps <- matrix(as.numeric(sapply(names(Herm), function(x) strsplit(x,"_")[[1]][2:3])),
+                 nrow = length(Herm), byrow = TRUE)
+    for(i in 1:length(Herm)) {
+      HermFrac[, ps[i,1], 1:ncol(Herm[[1]])] <- Herm[[1]][, , 1]
+      HermFrac[, ps[i,2], ] <- 0
+      HermFrac[, ps[i,2], 1:ncol(Herm[[1]])] <- 1 - Herm[[1]][, , 1]
     }
   }
   HermFrac
+}
+
+
+#' @rdname Herm-int 
+#' @aliases checkHerm
+#' 
+#' @description - `checkHerm` checks that each array in the list has dimension nsim x maxage+1 x nyears + proyears.
+#' For backwards compatibility, also converts matrices to arrays by adding the year dimension.
+#' 
+#' @param nyears The number of historical years
+#' @param proyears The number of projection years
+#' @author Q. Huynh
+checkHerm <- function(Herm, maxage, nsim, nyears, proyears) {
+  n_age <- maxage + 1
+  
+  if (length(Herm)) {
+    for(i in 1:length(Herm)) {
+      
+      if (is.null(dim(Herm[[i]]))) {
+        stop("Hermaphroditic inputs must be a matrix or array.")
+      }
+      
+      if (is.matrix(Herm[[i]])) {
+        if (!all(dim(Herm[[i]]) == c(nsim, n_age))) {
+          stop("Herm[[", i, "]] must be a matrix with dimensions: nsim, maxage+1 but has dimensions: ",
+               paste(dim(Herm[[i]]), collapse = ","))
+        }
+        Herm[[i]] <- replicate(nyears + proyears, Herm[[i]])
+      }
+      
+      if (is.array(Herm[[i]])) {
+        if (!all(dim(Herm[[i]]) == c(nsim, n_age, proyears + nyears))) {
+          stop("Herm[[", i, "]] must be array with dimensions: nsim, maxage+1, nyears + proyears but has dimensions: ",
+               paste(dim(Herm[[i]]), collapse = ","))
+        }
+      }
+      
+    }
+  }
+  
+  return(Herm)
+}
+
+#' @rdname Herm-int 
+#' @aliases subsetHerm
+#' 
+#' @description - `subsetHerm` returns year-specific Herm values.
+#' 
+#' @param y The year to subset
+#' @author Q. Huynh
+subsetHerm <- function(Herm, y) {
+  if (length(Herm)) {
+    Herm <- lapply(Herm, function(x) x[, , y])
+  }
+  return(Herm)
 }
 
 #' Tom's expand grid
@@ -169,6 +230,9 @@ HistMICE <- function(x, StockPars, FleetPars, np,nf, nareas, maxage, nyears, N, 
     spawn_time_frac[p] <- StockPars[[p]]$spawn_time_frac[x]
   }
   
+  SRRfun_p <- lapply(1:np, function(p) StockPars[[p]]$SRRfun)
+  SRRpars_p <- lapply(1:np, function(p) StockPars[[p]]$SRRpars[[x]])
+  
   popdynMICE(qsx = qsx, qfracx = qfracx, np = np, nf = nf, nyears = nyears, nareas = nareas, maxage = maxage, 
              Nx = Nx, VFx = VFx, FretAx = FretAx, Effind = Effind,
              movx = movx, Spat_targ = Spat_targ, M_ageArrayx = M_ageArrayx, Mat_agex = Mat_agex, Fec_agex = Fec_agex,
@@ -177,7 +241,7 @@ HistMICE <- function(x, StockPars, FleetPars, np,nf, nareas, maxage, nyears, N, 
              R0x = R0x, R0ax = R0ax, SSBpRx = SSBpRx, hsx = hsx, aRx = aRx, bRx = bRx,
              ax = ax, bx = bx, Perrx = Perrx, SRrelx = SRrelx, Rel = Rel, SexPars = SexPars, x = x,
              plusgroup = plusgroup, maxF = maxF, SSB0x = SSB0x, B0x = B0x, MPA,
-             SRRfun=StockPars[[1]]$SRRfun, SRRpars=StockPars[[1]]$SRRpars[[x]],
+             SRRfun=SRRfun_p, SRRpars=SRRpars_p,
              spawn_time_frac=spawn_time_frac)
 
 }

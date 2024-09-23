@@ -243,6 +243,22 @@ class(Yield) <- "PM"
 
 #' @rdname PerformanceMetric
 #' @export
+PGK <- function(MSEobj = NULL, Ref = 1, Yrs = NULL) {
+  Yrs <- ChkYrs(Yrs, MSEobj)
+  PMobj <- new("PMobj")
+  PMobj@Name <- "Probability of Green Kobe"
+  PMobj@Caption <- "Probability of Green Kobe"
+  PMobj@Ref <- Ref
+  PMobj@Stat <- MSEobj@SB_SBMSY[, , Yrs[1]:Yrs[2]] > 1 & MSEobj@F_FMSY[, , Yrs[1]:Yrs[2]]  < 1
+  PMobj@Prob <- calcProb(PMobj@Stat, MSEobj)
+  PMobj@Mean <- calcMean(PMobj@Prob)
+  PMobj@MPs <- MSEobj@MPs
+  PMobj
+}
+class(PGK) <- 'PM'
+
+#' @rdname PerformanceMetric
+#' @export
 AAVY <- function(MSEobj=NULL, Ref=0.2, Yrs=NULL) {
  Yrs <- ChkYrs(Yrs, MSEobj)
  PMobj <- new("PMobj")

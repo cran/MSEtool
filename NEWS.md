@@ -1,5 +1,22 @@
 The current version of the `MSEtool` package is available for download from [CRAN](https://CRAN.R-project.org/package=MSEtool).
 
+# MSEtool 3.7.4
+
+## Fixes
+- Fixed issue where TAC was being applied to landings rather than removals 
+- `updateData` and `updateData_MS` use the Baranov catch equation to simulate `Data@CAA` in the projection. Previously, the catch at age was simulated with only the retention curve.
+- `multiMSE` solves for F from multi-fleet TAC simultaneously with function `CalcMPDynamics_MF`
+- fix check for simulated `Data@VInd` in `multiMSE`
+- turn off check for valid `Data@AddInd` statistics (AC, SD) when `cpars$AddIerr` is provided
+
+## Updates
+- When indices are provided to the operating model, the default value of beta = 1 (hyperstability parameter) if not specified in `cpars`.
+- Add grid to base graphics
+- MSY calculations in `Simulate` use fishery weight at age `FleetPars$Wt_age_C`
+- `multiMSE(extended = TRUE)` returns overall F by stock (and area) and `MMSE@PPD` includes StockPars, FleetPars, ReferencePoints in `Data@Misc`
+- `runMSE(extended = TRUE)` leaves StockPars, FleetPars, ReferencePoints in `Data@Misc` of `MSE@PPD` slot
+- add `addMMPs()` function
+- Internal function `Export_customMPs` allows for MPs defined in more than one namespace, e.g., functions initially defined in a package and modified in the global environment.
 # MSEtool 3.7.3
 
 ## Fixes

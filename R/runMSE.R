@@ -357,7 +357,8 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
       optMSY_eq(x, 
                 yr.ind=y,
                 StockPars,
-                FleetPars$V_real_2) 
+                FleetPars$V_real_2,
+                FleetPars$Wt_age_C) 
     })
   })
 
@@ -670,6 +671,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
       per_recruit_F_calc(x, yr.ind=y, 
                          StockPars=StockPars,
                          V=FleetPars$V_real_2,
+                         Wt_age_C=FleetPars$Wt_age_C,
                          SPR_target=SPR_target)
     })
   })
@@ -695,78 +697,83 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
 
   # --- Calculate B-low ----
   Blow <- rep(NA,nsim)
+  
   HZN=2; Bfrac=0.5
   if (!is.null(control$HZN)) HZN <- control$HZN
   if (!is.null(control$Bfrac)) Bfrac <- control$Bfrac
-  if(!silent) message("Calculating B-low reference points")
-
-  MGThorizon<-floor(HZN*MGT)
-  if (!snowfall::sfIsRunning()) {
-    Blow <- sapply(1:nsim,getBlow,
-                   StockPars$N,
-                   StockPars$Asize,
-                   StockPars$SSBMSY,
-                   StockPars$SSBpR,
-                   FleetPars$MPA,
-                   StockPars$SSB0,
-                   StockPars$nareas,
-                   FleetPars$retA_real,
-                   MGThorizon,
-                   FleetPars$Find,
-                   StockPars$Perr_y,
-                   StockPars$M_ageArray,
-                   StockPars$hs,
-                   StockPars$Mat_age,
-                   StockPars$Wt_age,
-                   StockPars$Fec_Age,
-                   StockPars$R0a,
-                   FleetPars$V_real,
-                   nyears,
-                   StockPars$maxage,
-                   StockPars$mov,
-                   FleetPars$Spat_targ,
-                   StockPars$SRrel,
-                   StockPars$aR,
-                   StockPars$bR,
-                   Bfrac,
-                   maxF,
-                   SRRfun=StockPars$SRRfun, 
-                   SRRpars=StockPars$SRRpars,
-                   spawn_time_frac=StockPars$spawn_time_frac)
-  } else {
-    Blow <- sfSapply(1:nsim,getBlow,
-                   StockPars$N,
-                   StockPars$Asize,
-                   StockPars$SSBMSY,
-                   StockPars$SSBpR,
-                   FleetPars$MPA,
-                   StockPars$SSB0,
-                   StockPars$nareas,
-                   FleetPars$retA_real,
-                   MGThorizon,
-                   FleetPars$Find,
-                   StockPars$Perr_y,
-                   StockPars$M_ageArray,
-                   StockPars$hs,
-                   StockPars$Mat_age,
-                   StockPars$Wt_age,
-                   StockPars$Fec_Age,
-                   StockPars$R0a,
-                   FleetPars$V_real,
-                   nyears,
-                   StockPars$maxage,
-                   StockPars$mov,
-                   FleetPars$Spat_targ,
-                   StockPars$SRrel,
-                   StockPars$aR,
-                   StockPars$bR,
-                   Bfrac,
-                   maxF,
-                   SRRfun=StockPars$SRRfun, 
-                   SRRpars=StockPars$SRRpars,
-                   spawn_time_frac=StockPars$spawn_time_frac)
+  if (!Bfrac==FALSE) {
+    
+    if(!silent) message("Calculating B-low reference points")
+    
+    MGThorizon<-floor(HZN*MGT)
+    if (!snowfall::sfIsRunning()) {
+      Blow <- sapply(1:nsim,getBlow,
+                     StockPars$N,
+                     StockPars$Asize,
+                     StockPars$SSBMSY,
+                     StockPars$SSBpR,
+                     FleetPars$MPA,
+                     StockPars$SSB0,
+                     StockPars$nareas,
+                     FleetPars$retA_real,
+                     MGThorizon,
+                     FleetPars$Find,
+                     StockPars$Perr_y,
+                     StockPars$M_ageArray,
+                     StockPars$hs,
+                     StockPars$Mat_age,
+                     StockPars$Wt_age,
+                     StockPars$Fec_Age,
+                     StockPars$R0a,
+                     FleetPars$V_real,
+                     nyears,
+                     StockPars$maxage,
+                     StockPars$mov,
+                     FleetPars$Spat_targ,
+                     StockPars$SRrel,
+                     StockPars$aR,
+                     StockPars$bR,
+                     Bfrac,
+                     maxF,
+                     SRRfun=StockPars$SRRfun, 
+                     SRRpars=StockPars$SRRpars,
+                     spawn_time_frac=StockPars$spawn_time_frac)
+    } else {
+      Blow <- sfSapply(1:nsim,getBlow,
+                       StockPars$N,
+                       StockPars$Asize,
+                       StockPars$SSBMSY,
+                       StockPars$SSBpR,
+                       FleetPars$MPA,
+                       StockPars$SSB0,
+                       StockPars$nareas,
+                       FleetPars$retA_real,
+                       MGThorizon,
+                       FleetPars$Find,
+                       StockPars$Perr_y,
+                       StockPars$M_ageArray,
+                       StockPars$hs,
+                       StockPars$Mat_age,
+                       StockPars$Wt_age,
+                       StockPars$Fec_Age,
+                       StockPars$R0a,
+                       FleetPars$V_real,
+                       nyears,
+                       StockPars$maxage,
+                       StockPars$mov,
+                       FleetPars$Spat_targ,
+                       StockPars$SRrel,
+                       StockPars$aR,
+                       StockPars$bR,
+                       Bfrac,
+                       maxF,
+                       SRRfun=StockPars$SRRfun, 
+                       SRRpars=StockPars$SRRpars,
+                       spawn_time_frac=StockPars$spawn_time_frac)
+    }
+    
   }
-
+ 
   StockPars$Blow <- Blow
   
   # --- Calculate Reference Yield ----
@@ -917,8 +924,14 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
     shiny::incProgress(0.2, detail = 'Simulating Data')
 
   # --- Populate Data object with Historical Data ----
+  if (!is.null(control$ObsCatch) && control$ObsCatch == "Removals") {
+    CatchBiomass <- CB
+  } else {
+    CatchBiomass <- CBret
+  }
+  
   Data <- makeData(Biomass,
-                   CBret,
+                   CatchBiomass,
                    Cret,
                    N,
                    SSB,
@@ -942,6 +955,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
                    control)
 
   # --- Condition Simulated Data on input Data object (if it exists) & calculate error stats ----
+  StockPars$CB <- CB
   StockPars$CBret <- CBret
   StockPars$Biomass <- Biomass
   StockPars$SSB <- SSB
@@ -1188,7 +1202,6 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE,
   nareas <- StockPars$nareas
 
   RealData <- Hist@OM@cpars$Data
-
   ReferencePoints <- Hist@Ref$ReferencePoints
 
   LatentEff <- Hist@Misc$BioEco$LatentEff
@@ -1457,7 +1470,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE,
         y1 <- nyears + y
         MSYrefsYr <- sapply(1:nsim, optMSY_eq, 
                             yr.ind=y1, StockPars,
-                            V_P)
+                            V_P, FleetPars$Wt_age_C)
         MSY_y[,mm,y1] <- MSYrefsYr[1, ]
         FMSY_y[,mm,y1] <- MSYrefsYr[2,]
         SSBMSY_y[,mm,y1] <- MSYrefsYr[3,]
@@ -1466,6 +1479,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE,
                                 yr.ind=y1,
                                 StockPars=StockPars,
                                 V=V_P,
+                                Wt_age_C=FleetPars$Wt_age_C,
                                 SPR_target=SPR_target)
 
         F_SPR_y[,mm,,y1] <- sapply(per_recruit_F, getElement, 1) %>% t()
@@ -1519,19 +1533,41 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE,
       # --- An update year - update data and run MP ----
       if (y %in% upyrs) {
         # --- Update Data object ----
-        Data_MP <- updateData(Data=Data_MP, OM, MPCalcs, Effort,
+        if (!is.null(control$ObsCatch) && control$ObsCatch == "Removals") {
+          CatchBiomass <- CB_P
+        } else {
+          CatchBiomass <- CB_Pret
+        }
+        
+        Data_MP <- updateData(Data=Data_MP, 
+                              OM, MPCalcs, 
+                              Effort,
                               Biomass=StockPars$Biomass,
                               N=StockPars$N,
-                              Biomass_P, CB_Pret, N_P, SSB=StockPars$SSB,
-                              SSB_P, VBiomass=StockPars$VBiomass, VBiomass_P,
+                              Biomass_P, 
+                              CatchBiomass, 
+                              N_P, 
+                              SSB=StockPars$SSB,
+                              SSB_P, 
+                              VBiomass=StockPars$VBiomass, 
+                              VBiomass_P,
                               RefPoints=ReferencePoints,
-                              retA_P, retL_P, StockPars,
-                              FleetPars, ObsPars, ImpPars, V_P,
-                              upyrs, interval, y, mm,
-                              Misc=Data_p@Misc, RealData,
+                              retA_P, 
+                              retL_P, 
+                              FM_Pret,
+                              Z_P, 
+                              StockPars,
+                              FleetPars,
+                              ObsPars, 
+                              ImpPars, 
+                              V_P,
+                              upyrs, 
+                              interval,
+                              y, 
+                              mm,
+                              Misc=Data_p@Misc,
+                              RealData,
                               Sample_Area=ObsPars$Sample_Area)
-        
-        
         
         Data_MP@Misc$StockPars$CB_Pret <- CB_Pret
         Data_MP@Misc$StockPars$Biomass_P <- Biomass_P
@@ -1661,7 +1697,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE,
                                   Biomass_P, CB_Pret, N_P, StockPars$SSB, SSB_P,
                                   StockPars$VBiomass, VBiomass_P,
                                   RefPoints=ReferencePoints,
-                                  retA_P, retL_P, StockPars,
+                                  retA_P, retL_P, FM_Pret, Z_P, StockPars,
                                   FleetPars, ObsPars, ImpPars, V_P,
                                   upyrs=c(upyrs, proyears),
                                   interval=rep(proyears-max(upyrs), length(interval)), y, mm,
@@ -1705,7 +1741,7 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE,
     FMret_P_mp[,,mm,,] <- FM_Pret
 
     # drop StockPars etc from Data_MP - already reported in Hist object
-    Data_MP@Misc$StockPars <- Data_MP@Misc$FleetPars <- Data_MP@Misc$ReferencePoints <- NULL
+    if (!extended) Data_MP@Misc$StockPars <- Data_MP@Misc$FleetPars <- Data_MP@Misc$ReferencePoints <- NULL
 
     MSElist[[mm]] <- Data_MP # update MSElist with PPD for this MP
   } # end of MP loop
@@ -1830,8 +1866,8 @@ Project <- function (Hist=NULL, MPs=NA, parallel=FALSE,
 #' using the split-apply-combine technique. See Details for more information. 
 #' @param extended Logical. Return extended projection results?
 #' if TRUE, `MSE@Misc$extended` is a named list with extended data
-#' (including historical and projection by area), and extended version of `MSE@Hist`
-#' is returned.
+#' (including historical and projection by area), extended version of `MSE@Hist`
+#' is returned, and returns `MSE@PPD` with StockPars, FleetPars, and ReferencePoints in `MSE@PPD`
 #' @param checkMPs Logical. Check if the specified MPs exist and can be run on `SimulatedData`?
 #'
 #' @describeIn runMSE Run the Historical Simulations and Forward Projections

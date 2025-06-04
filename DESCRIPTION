@@ -1,6 +1,6 @@
 Package: MSEtool
 Title: Management Strategy Evaluation Toolkit
-Version: 3.7.3
+Version: 3.7.4
 Authors@R: c(
   person("Adrian", "Hordyk", email = "adrian@bluematterscience.com", role = c("aut", "cre")),
   person("Quang", "Huynh", email = "quang@bluematterscience.com", role = "aut"), 
@@ -12,7 +12,7 @@ License: GPL-3
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.2
-Depends: R (>= 3.5.0), snowfall
+Depends: R (>= 4.1.0), snowfall
 Imports: abind, dplyr, methods, grDevices, ggplot2, ggrepel, gridExtra,
         parallel, Rcpp, stats, utils
 Suggests: boot, broom, covr, crayon, remotes, DT, fmsb, kableExtra,
@@ -23,11 +23,11 @@ LinkingTo: Rcpp, RcppArmadillo
 BugReports: https://github.com/Blue-Matter/MSEtool/issues
 URL: https://msetool.openmse.com/
 NeedsCompilation: yes
-Packaged: 2024-11-22 16:47:41 UTC; User
+Packaged: 2025-06-04 16:40:39 UTC; Adrian
 Author: Adrian Hordyk [aut, cre],
   Quang Huynh [aut],
   Tom Carruthers [aut],
   Chris Grandin [ctb] (iSCAM functions)
 Maintainer: Adrian Hordyk <adrian@bluematterscience.com>
 Repository: CRAN
-Date/Publication: 2024-11-22 17:20:06 UTC
+Date/Publication: 2025-06-04 17:20:02 UTC

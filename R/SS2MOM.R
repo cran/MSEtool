@@ -48,7 +48,8 @@ SS2MOM <- function(SSdir, nsim = 48, proyears = 50, reps = 1, maxF = 3, seed = 1
   MOM@maxF <- maxF
   MOM@interval <- interval
 
-  if(!silent) message(replist$nsexes, "- sex and ", replist$nfishfleets, "- fleet model detected.")
+  if(!silent) 
+    cli::cli_alert("{.val {replist$nsexes}} - sex and {.val {replist$nfishfleets}} - fleet model detected.")
 
   mainyrs <- replist$startyr:replist$endyr
   nyears <- length(mainyrs)
@@ -162,7 +163,7 @@ plot_SS2MOM <- function(x, SSdir, gender = 1:2,
   
   write(rmd, file = file.path(dir, paste0(filename, ".rmd")))
   
-  if(!silent) message("Rendering markdown file to HTML: ", file.path(dir, paste0(filename, ".html")))
+  if(!silent) cli::cli_alert_info("Rendering markdown file to HTML: {.file {file.path(dir, paste0(filename, '.html'))}}")
   
   out <- rmarkdown::render(file.path(dir, paste0(filename, ".rmd")), "html_document", paste0(filename, ".html"), dir,
                            output_options = list(df_print = "paged"), quiet = TRUE)

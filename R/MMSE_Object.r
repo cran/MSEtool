@@ -1,6 +1,7 @@
 # ---- multiHist class ----
 
 setOldClass("multiHist")
+# setClassUnion(name="multiHist.list", members=c("multiHist", "list"))
 
 # ---- MMSE Class ----
 #' Class \code{'MMSE'}

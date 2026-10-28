@@ -28,8 +28,8 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
     .sapply <- pbapply::pbsapply
     
     # Argument to pass parallel cluster (if running)
-    formals(.lapply)$cl <- formals(.sapply)$cl <- substitute(if (snowfall::sfIsRunning()) snowfall::sfGetCluster() else NULL)
-  } else if (snowfall::sfIsRunning()) {
+    formals(.lapply)$cl <- formals(.sapply)$cl <- substitute(if (requireNamespace('snowfall', quietly = TRUE) && snowfall::sfIsRunning()) snowfall::sfGetCluster() else NULL)
+  } else if (.sfIsRunning()) {
     .lapply <- snowfall::sfLapply
     .sapply <- snowfall::sfSapply
   } else {
@@ -521,7 +521,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
       FleetPars$dFfinal[probQ] <- ResampFleetPars$dFfinal
 
       # Optimize for q
-      if (!snowfall::sfIsRunning()) {
+      if (!.sfIsRunning()) {
         qs[probQ] <- sapply(probQ, CalculateQ, StockPars, FleetPars,
                             pyears=nyears, bounds, control)
       } else {
@@ -711,7 +711,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
       cli::cli_alert("Calculating B-low reference points")
     
     MGThorizon<-floor(HZN*MGT)
-    if (!snowfall::sfIsRunning()) {
+    if (!.sfIsRunning()) {
       Blow <- sapply(1:nsim,getBlow,
                      StockPars$N,
                      StockPars$Asize,
@@ -744,7 +744,7 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
                      SRRpars=StockPars$SRRpars,
                      spawn_time_frac=StockPars$spawn_time_frac)
     } else {
-      Blow <- sfSapply(1:nsim,getBlow,
+      Blow <- snowfall::sfSapply(1:nsim,getBlow,
                        StockPars$N,
                        StockPars$Asize,
                        StockPars$SSBMSY,
@@ -784,11 +784,11 @@ Simulate <- function(OM=MSEtool::testOM, parallel=FALSE, silent=FALSE, nsim=NULL
   # --- Calculate Reference Yield ----
   if(!silent) 
     cli::cli_alert("Calculating reference yield - best fixed F strategy")
-  if (!snowfall::sfIsRunning()) {
+  if (!.sfIsRunning()) {
     RefY <- sapply(1:nsim, calcRefYield, StockPars, FleetPars, proyears,
                    Ncurr=StockPars$N[,,nyears,], nyears, proyears)
   } else {
-    RefY <- sfSapply(1:nsim, calcRefYield, StockPars, FleetPars, proyears,
+    RefY <- snowfall::sfSapply(1:nsim, calcRefYield, StockPars, FleetPars, proyears,
                    Ncurr=StockPars$N[,,nyears,], nyears, proyears)
   }
   
@@ -1117,7 +1117,7 @@ Project <- function (Hist=NULL,
   nMP <- length(MPs)  # the total number of methods used
   if (nMP < 1) stop("No valid MPs found", call.=FALSE)
 
-  isrunning <- snowfall::sfIsRunning()
+  isrunning <- .sfIsRunning()
   if (!runparallel & isrunning) snowfall::sfStop()
 
   # Don't run MPs in parallel unless specified
@@ -1286,6 +1286,7 @@ Project <- function (Hist=NULL,
     retL_P <- FleetPars$retL_real # retention at length array - projections
     Fdisc_P <- FleetPars$Fdisc_array1 # Discard mortality for projections - by age and year
     DR_P <- FleetPars$DR_y # Discard ratio for projections by year
+    SelRetBase <- init_SelRetBase(FleetPars, nsim)
     LatentEff_MP <- LatentEff # Historical latent effort
 
     # projection arrays
@@ -1363,6 +1364,7 @@ Project <- function (Hist=NULL,
                      parallel = parallel_MPs[mm])  # Apply MP
 
     MPRecs <- runMP[[1]][[1]] # MP recommendations
+    MPRecs$Misc <- runMP[[2]]@Misc[seq_len(nsim)] # Rec@Misc by simulation
     Data_p <- runMP[[2]] # Data object object with saved info from MP
     Data_p@TAC <- MPRecs$TAC
 
@@ -1406,7 +1408,7 @@ Project <- function (Hist=NULL,
                               V_P, V_P_real, V_P_real_2,
                               Fdisc_P, DR_P, FM_P,
                               FM_Pret, Z_P, CB_P, CB_Pret, Effort_pot,
-                              StockPars, FleetPars, ImpPars, control=control)
+                              StockPars, FleetPars, ImpPars, control=control, SelRetBase=SelRetBase)
 
     TACa[, mm, y] <- MPCalcs$TACrec # recommended TAC
     LastSpatial <- MPCalcs$Si
@@ -1440,6 +1442,7 @@ Project <- function (Hist=NULL,
     Vmaxlen_P <- MPCalcs$Vmaxlen_P
     Fdisc_P <- MPCalcs$Fdisc_P
     DR_P <- MPCalcs$DR_P
+    SelRetBase <- MPCalcs$SelRetBase
     
     # ---- Account for timing of spawning (if spawn_time_frac >0) ----
     N_Psp <- N_P
@@ -1601,6 +1604,7 @@ Project <- function (Hist=NULL,
         runMP <- applyMP(Data=Data_MP, MPs = MPs[mm], reps = reps, silent=TRUE, 
                          parallel = parallel_MPs[mm])  # Apply MP
         MPRecs <- runMP[[1]][[1]] # MP recommendations
+        MPRecs$Misc <- runMP[[2]]@Misc[seq_len(nsim)] # Rec@Misc by simulation
         Data_p <- runMP[[2]] # Data object object with saved info from MP
         Data_p@TAC <- MPRecs$TAC
       }
@@ -1625,7 +1629,7 @@ Project <- function (Hist=NULL,
                                 V_P, V_P_real, V_P_real_2,
                                 Fdisc_P, DR_P, FM_P,
                                 FM_Pret, Z_P, CB_P, CB_Pret, Effort_pot,
-                                StockPars, FleetPars, ImpPars, control=control)
+                                StockPars, FleetPars, ImpPars, control=control, SelRetBase=SelRetBase)
      
       LastSpatial <- MPCalcs$Si
       LastAllocat <- MPCalcs$Ai
@@ -1657,6 +1661,7 @@ Project <- function (Hist=NULL,
       Vmaxlen_P <- MPCalcs$Vmaxlen_P
       Fdisc_P <- MPCalcs$Fdisc_P
       DR_P <- MPCalcs$DR_P
+      SelRetBase <- MPCalcs$SelRetBase
       
       
       # ---- Account for timing of spawning (if spawn_time_frac >0) ----

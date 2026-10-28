@@ -764,7 +764,7 @@ SampleStockPars <- function(Stock, nsim=48, nyears=80, proyears=50, cpars=NULL, 
         cli::cli_alert("Optimizing for user-specified movement")
     }
     nareas <- 2 # default is a 2 area model
-    if(snowfall::sfIsRunning()) {
+    if(.sfIsRunning()) {
       mov1 <- array(t(snowfall::sfSapply(1:nsim, getmov2, Frac_area_1 = Frac_area_1,
                              Prob_staying = Prob_staying)), dim = c(nsim, nareas, nareas))
     } else {
@@ -1159,7 +1159,7 @@ SampleFleetPars <- function(Fleet, Stock=NULL, nsim=NULL, nyears=NULL,
 
   if (!exists("V", inherits = FALSE)) {
     # calculate selectivity-at-age from selectivity-at-length
-    if (snowfall::sfIsRunning()) {
+    if (.sfIsRunning()) {
       VList <- snowfall::sfLapply(1:nsim, calcV, Len_age=StockPars$Len_age,
                                   LatASD=StockPars$LatASD, SLarray=SLarray,
                                   n_age=n_age, nyears=nyears, proyears=proyears,
@@ -1323,7 +1323,7 @@ SampleFleetPars <- function(Fleet, Stock=NULL, nsim=NULL, nyears=NULL,
 
   if (!exists("retA", inherits = FALSE)) {
     # calculate retention-at-age from retention-at-length
-    if (snowfall::sfIsRunning()) {
+    if (.sfIsRunning()) {
       VList <- snowfall::sfLapply(1:nsim, calcV, Len_age=StockPars$Len_age,
                                   LatASD=StockPars$LatASD, SLarray=retL,
                                   n_age=n_age, nyears=nyears, proyears=proyears,
@@ -1844,10 +1844,10 @@ SampleImpPars <- function(Imp, nsim=NULL, cpars=NULL, nyears=NULL, proyears=NULL
 #' 
 #' @section Control list:
 #' 
-#' A named list for `control`, for example, `OM@cpars$control <- list(TAC = "removals", CAL = "removals")`, can be
+#' A named list for `control`, for example, `OM@cpars$control <- list(TAC = "retained", CAL = "removals")`, can be
 #' specified to override default settings in the MSE simulation. Possible names in the `control` list are:
 #'
-#' - `TAC` Character, set to `"removals"` so that the TAC is applied to the sum of retained + discarded catch. Default only applies the TAC to the retained catch.
+#' - `TAC` Character, the catch that the TAC applies to. `"removals"` (default) applies the TAC to the retained catch plus dead discards. `"retained"` applies the TAC to the retained catch only, so that removals exceed the TAC when there are dead discards.
 #' - `CAL` Character, set to `"removals"` to sample the catch-at-length from retained + discarded catch. Default only samples from retained catch.
 #' - `D` Character, set to `"VB"` so that historical depletion `OM@D` corresponds to vulnerable biomass depletion (only used when `OM@cpars$qs = NULL`).
 #' - `optVB` Logical, set to `TRUE` so that historical depletion `OM@D` corresponds to vulnerable biomass depletion. Default sets depletion according to spawning biomasss when `OM@cpars$qs = NULL`.

@@ -716,7 +716,7 @@ simCAL <- function(nsim, nyears, maxage,  CAL_ESS, CAL_nsamp, nCALbins, CAL_bins
   CAL <- array(NA, dim=c(nsim,  nyears, nCALbins))
  
   # Generate size comp data with variability in age
-  runParallel <- snowfall::sfIsRunning()
+  runParallel <- .sfIsRunning()
   if (runParallel) {
     tempSize <- snowfall::sfLapply(1:nsim, genSizeCompWrap, vn, CAL_binsmid, CAL_bins,
                                    retL, CAL_ESS, CAL_nsamp,
@@ -817,17 +817,21 @@ genSizeCompWrap <- function(i, vn, CAL_binsmid, CAL_bins, retL,
   if (nyrs == 1) VulnN <- t(VulnN)
   retLa <- as.matrix(retL[i,,])
 
-  # assumes lengths sampled throughout years
-  lens <- genSizeComp(VulnN, CAL_binsmid, CAL_bins, retLa,
+  # assumes lengths sampled throughout years - problem - needs to be replaced
+  # lens <- genSizeComp(VulnN, CAL_binsmid, CAL_bins, retLa,
+  #                     CAL_ESS=CAL_ESS[i], 
+  #                     CAL_nsamp=CAL_nsamp[i],
+  #                     Linfs=Linfarray[i,],
+  #                     Ks=Karray[i,],
+  #                     t0s=t0array[i,],
+  #                     LenCV=LenCV[i], 
+  #                     truncSD)
+
+  # snapshot length comp
+  lens <- genSizeComp2(VulnN, CAL_binsmid, CAL_bins, retLa,
                       CAL_ESS=CAL_ESS[i], CAL_nsamp=CAL_nsamp[i],
                       Linfs=Linfarray[i,], Ks=Karray[i,], t0s=t0array[i,],
                       LenCV=LenCV[i], truncSD)
-
-  # snapshot length comp
-  # lens <- genSizeComp2(VulnN, CAL_binsmid, CAL_bins, retLa,
-  #                     CAL_ESS=CAL_ESS[i], CAL_nsamp=CAL_nsamp[i],
-  #                     Linfs=Linfarray[i,], Ks=Karray[i,], t0s=t0array[i,],
-  #                     LenCV=LenCV[i], truncSD)
 
 
   lens[!is.finite(lens)] <- 0
